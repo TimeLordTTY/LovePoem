@@ -6,6 +6,7 @@
     
     <div class="card-content">
       <div class="post-meta">
+        <span class="post-type" v-if="post.postTypeName">{{ post.postTypeName }}</span>
         <time class="post-date">{{ formatDate(post.publishDate) }}</time>
         <span class="reading-time">{{ post.readingTime }}分钟阅读</span>
       </div>
@@ -103,6 +104,17 @@ const navigateToTag = (tagName) => {
   margin-bottom: 12px;
   font-size: 13px;
   color: var(--text-muted);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.post-type {
+  background: var(--accent-gradient);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .post-date {

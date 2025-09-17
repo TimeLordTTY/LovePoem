@@ -3,6 +3,7 @@ package com.herpoem.site.model.dto;
 import com.herpoem.site.model.entity.Post;
 import lombok.Data;
 import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -24,6 +25,9 @@ public class PostCreateDTO {
     
     @NotBlank(message = "内容不能为空")
     private String contentMd;
+    
+    @NotNull(message = "文章类型不能为空")
+    private Long postTypeId;
     
     private Long seriesId;
     

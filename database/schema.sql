@@ -44,6 +44,7 @@ CREATE TABLE post (
     title VARCHAR(300) NOT NULL COMMENT '文章标题',
     content_md LONGTEXT NOT NULL COMMENT 'Markdown内容',
     content_text LONGTEXT NOT NULL COMMENT '纯文本内容（用于搜索）',
+    post_type_id BIGINT NOT NULL COMMENT '文章类型ID',
     series_id BIGINT COMMENT '所属系列ID',
     chapter_no INT COMMENT '章节号（系列文章时使用）',
     cover_asset_id BIGINT COMMENT '封面图片ID',
@@ -56,24 +57,40 @@ CREATE TABLE post (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
+    FOREIGN KEY (post_type_id) REFERENCES post_type(id),
     FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE SET NULL,
     FOREIGN KEY (cover_asset_id) REFERENCES asset(id) ON DELETE SET NULL,
     FOREIGN KEY (created_by) REFERENCES users(id),
     FOREIGN KEY (updated_by) REFERENCES users(id),
     
     INDEX idx_slug (slug),
+    INDEX idx_post_type (post_type_id),
     INDEX idx_series_chapter (series_id, chapter_no),
     INDEX idx_visibility_status (visibility, status),
     INDEX idx_publish_date (publish_date),
     INDEX idx_created_by (created_by)
 ) COMMENT '文章表';
 
+-- 文章类型表
+CREATE TABLE post_type (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '类型ID',
+    name VARCHAR(50) NOT NULL UNIQUE COMMENT '类型名称',
+    description VARCHAR(200) COMMENT '类型描述',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT '排序',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志'
+) COMMENT '文章类型表';
+
 -- 标签表
 CREATE TABLE tag (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '标签ID',
     name VARCHAR(100) NOT NULL UNIQUE COMMENT '标签名称',
+    description VARCHAR(200) COMMENT '标签描述',
+    created_by BIGINT COMMENT '创建者ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志'
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
+    
+    FOREIGN KEY (created_by) REFERENCES users(id)
 ) COMMENT '标签表';
 
 -- 文章标签关联表

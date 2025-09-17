@@ -66,7 +66,8 @@ const loadData = async () => {
       slug: 'first-light',
       excerpt: '晨曦透过窗棂，轻抚沉睡的大地，那是希望的颜色，也是梦想的开始...',
       publishDate: '2024-01-15',
-      tags: ['诗歌', '爱情', '感悟'],
+      postTypeName: '诗歌',
+      tags: ['爱情', '感悟'],
       readingTime: 2
     },
     {
@@ -75,21 +76,24 @@ const loadData = async () => {
       slug: 'night-whisper',
       excerpt: '星星在夜空中眨眼，仿佛在诉说着什么秘密，月光洒在窗台上...',
       publishDate: '2024-01-10',
-      tags: ['诗歌', '生活', '梦境'],
+      postTypeName: '诗歌',
+      tags: ['生活', '梦境'],
       readingTime: 3
     }
   ]
   
   // 模拟热门标签
   popularTags.value = [
-    { id: 1, name: '诗歌', postCount: 15 },
-    { id: 2, name: '爱情', postCount: 8 },
-    { id: 3, name: '生活', postCount: 12 },
-    { id: 4, name: '感悟', postCount: 6 },
-    { id: 5, name: '自然', postCount: 9 },
-    { id: 6, name: '回忆', postCount: 5 },
-    { id: 7, name: '梦境', postCount: 7 },
-    { id: 8, name: '青春', postCount: 4 }
+    { id: 1, name: '爱情', postCount: 8 },
+    { id: 2, name: '生活', postCount: 12 },
+    { id: 3, name: '感悟', postCount: 6 },
+    { id: 4, name: '自然', postCount: 9 },
+    { id: 5, name: '回忆', postCount: 5 },
+    { id: 6, name: '梦境', postCount: 7 },
+    { id: 7, name: '青春', postCount: 4 },
+    { id: 8, name: '同人', postCount: 3 },
+    { id: 9, name: '友情', postCount: 6 },
+    { id: 10, name: '家庭', postCount: 4 }
   ]
   
   // 模拟推荐系列

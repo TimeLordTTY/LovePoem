@@ -28,6 +28,8 @@ public class Post {
     
     private String contentText;
     
+    private Long postTypeId;
+    
     private Long seriesId;
     
     private Integer chapterNo;
@@ -56,6 +58,9 @@ public class Post {
     private Integer deleted;
     
     // 关联数据（不映射到数据库）
+    @TableField(exist = false)
+    private PostType postType;
+    
     @TableField(exist = false)
     private Series series;
     

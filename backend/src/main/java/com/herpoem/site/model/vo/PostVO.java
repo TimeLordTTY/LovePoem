@@ -24,6 +24,10 @@ public class PostVO {
     
     private String contentText;
     
+    private Long postTypeId;
+    
+    private String postTypeName;
+    
     private Long seriesId;
     
     private String seriesName;
