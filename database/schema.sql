@@ -57,12 +57,6 @@ CREATE TABLE post (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
-    FOREIGN KEY (post_type_id) REFERENCES post_type(id),
-    FOREIGN KEY (series_id) REFERENCES series(id) ON DELETE SET NULL,
-    FOREIGN KEY (cover_asset_id) REFERENCES asset(id) ON DELETE SET NULL,
-    FOREIGN KEY (created_by) REFERENCES users(id),
-    FOREIGN KEY (updated_by) REFERENCES users(id),
-    
     INDEX idx_slug (slug),
     INDEX idx_post_type (post_type_id),
     INDEX idx_series_chapter (series_id, chapter_no),
@@ -90,7 +84,7 @@ CREATE TABLE tag (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
-    FOREIGN KEY (created_by) REFERENCES users(id)
+    INDEX idx_created_by (created_by)
 ) COMMENT '标签表';
 
 -- 文章标签关联表
@@ -100,8 +94,8 @@ CREATE TABLE post_tag (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     
     PRIMARY KEY (post_id, tag_id),
-    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_id) REFERENCES tag(id) ON DELETE CASCADE
+    INDEX idx_post_id (post_id),
+    INDEX idx_tag_id (tag_id)
 ) COMMENT '文章标签关联表';
 
 -- 站点配置表
