@@ -1,7 +1,6 @@
 -- 她的诗集网站数据库设计
--- 创建数据库
-CREATE DATABASE IF NOT EXISTS love_poem CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE love_poem;
+-- 使用现有数据库
+USE poem;
 
 -- 用户表
 CREATE TABLE users (

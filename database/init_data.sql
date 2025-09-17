@@ -1,5 +1,5 @@
 -- 初始化数据
-USE love_poem;
+USE poem;
 
 -- 初始化用户（密码都是：123456）
 INSERT INTO users (username, display_name, role, password_hash) VALUES 
