@@ -22,10 +22,10 @@
     <div class="hero-content">
       <div class="container">
         <div class="hero-text">
-          <h1 class="hero-title fade-in-up">她的诗集</h1>
-          <p class="hero-subtitle fade-in-up delay-1">她名中有晓，所以每一首诗都带一点光</p>
+          <h1 class="hero-title fade-in-up">{{ siteSettings.site_title || '我的半截诗' }}</h1>
+          <p class="hero-subtitle fade-in-up delay-1">{{ siteSettings.site_subtitle || '白秦的文字世界' }}</p>
           <p class="hero-description fade-in-up delay-2">
-            在文字的世界里，每一个字都是光，每一句话都是温暖的拥抱
+            {{ siteSettings.hero_banner_text || '在文字的世界里，每一个字都是光' }}
           </p>
           <div class="hero-actions fade-in-up delay-3">
             <router-link to="/posts" class="btn-primary">开始阅读</router-link>
@@ -54,9 +54,26 @@
 </template>
 
 <script setup>
+import { ref, onMounted } from 'vue'
 import { useThemeStore } from '@/store/theme'
 
 const themeStore = useThemeStore()
+const siteSettings = ref({})
+
+// 创建设置API（临时简化版）
+const loadSiteSettings = async () => {
+  // TODO: 实现真实的设置API
+  // 暂时使用默认值，后续需要从后端API获取
+  siteSettings.value = {
+    site_title: '我的半截诗',
+    site_subtitle: '白秦的文字世界',
+    hero_banner_text: '在文字的世界里，每一个字都是光'
+  }
+}
+
+onMounted(() => {
+  loadSiteSettings()
+})
 
 const getParticleStyle = (index) => {
   const delay = Math.random() * 3

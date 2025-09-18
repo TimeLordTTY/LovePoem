@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { authApi } from '@/api/auth'
+import { ref, computed } from 'vue'
+import { login as authLogin, getCurrentUser as getUser } from '@/api/auth'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -12,7 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
   
   const login = async (loginData) => {
     try {
-      const response = await authApi.login(loginData)
+      const response = await authLogin(loginData)
       token.value = response.data
       localStorage.setItem('token', token.value)
       await getCurrentUser()
@@ -33,20 +33,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (!token.value) {
         throw new Error('No token')
       }
-      const response = await authApi.getCurrentUser()
+      const response = await getUser()
       user.value = response.data
-      return response
-    } catch (error) {
-      logout()
-      throw error
-    }
-  }
-  
-  const refreshToken = async () => {
-    try {
-      const response = await authApi.refreshToken()
-      token.value = response.data
-      localStorage.setItem('token', token.value)
       return response
     } catch (error) {
       logout()
@@ -62,7 +50,6 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthor,
     login,
     logout,
-    getCurrentUser,
-    refreshToken
+    getCurrentUser
   }
 })

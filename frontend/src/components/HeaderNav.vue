@@ -5,8 +5,8 @@
         <!-- Logo区域 -->
         <div class="logo-section">
           <router-link to="/" class="logo">
-            <h1>她的诗集</h1>
-            <span class="subtitle">白秦</span>
+            <h1>{{ siteSettings.site_title || '我的半截诗' }}</h1>
+            <span class="subtitle">{{ siteSettings.site_subtitle || '白秦的文字世界' }}</span>
           </router-link>
         </div>
         
@@ -54,6 +54,16 @@ import ThemeToggle from './ThemeToggle.vue'
 
 const authStore = useAuthStore()
 const isScrolled = ref(false)
+const siteSettings = ref({})
+
+// 加载站点设置
+const loadSiteSettings = async () => {
+  // TODO: 实现真实的设置API
+  siteSettings.value = {
+    site_title: '我的半截诗',
+    site_subtitle: '白秦的文字世界'
+  }
+}
 
 const handleScroll = () => {
   isScrolled.value = window.scrollY > 50
@@ -66,6 +76,7 @@ const handleLogout = () => {
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
+  loadSiteSettings()
 })
 
 onUnmounted(() => {

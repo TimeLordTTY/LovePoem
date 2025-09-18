@@ -3,8 +3,8 @@
     <div class="container">
       <div class="footer-content">
         <div class="footer-info">
-          <h3>她的诗集</h3>
-          <p>她名中有晓，所以每一首诗都带一点光</p>
+          <h3>{{ siteSettings.site_title || '我的半截诗' }}</h3>
+          <p>{{ siteSettings.site_subtitle || '白秦的文字世界' }}</p>
         </div>
         
         <div class="footer-links">
@@ -25,7 +25,7 @@
       </div>
       
       <div class="footer-bottom">
-        <p>&copy; 2024 她的诗集. All rights reserved.</p>
+        <p>&copy; 2024 {{ siteSettings.site_title || '我的半截诗' }}. All rights reserved.</p>
         <p>用❤️和代码构建 by TimeLord</p>
       </div>
     </div>
@@ -33,7 +33,22 @@
 </template>
 
 <script setup>
-// 组件逻辑
+import { ref, onMounted } from 'vue'
+
+const siteSettings = ref({})
+
+// 加载站点设置
+const loadSiteSettings = async () => {
+  // TODO: 实现真实的设置API
+  siteSettings.value = {
+    site_title: '我的半截诗',
+    site_subtitle: '白秦的文字世界'
+  }
+}
+
+onMounted(() => {
+  loadSiteSettings()
+})
 </script>
 
 <style scoped>

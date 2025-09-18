@@ -1,7 +1,7 @@
 {
-  "name": "love-poem-frontend",
+  "name": "half-poem-frontend",
   "version": "1.0.0",
-  "description": "她的诗集网站前端",
+  "description": "我的半截诗网站前端",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -30,7 +30,7 @@
     "unplugin-auto-import": "^0.16.6",
     "unplugin-vue-components": "^0.25.2"
   },
-  "keywords": ["vue", "poetry", "blog", "love"],
+  "keywords": ["vue", "poetry", "blog", "half-poem"],
   "author": "TimeLord",
   "license": "MIT"
 }

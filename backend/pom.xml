@@ -20,6 +20,9 @@
 
     <properties>
         <java.version>17</java.version>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mybatis-plus.version>3.5.4</mybatis-plus.version>
         <jwt.version>0.11.5</jwt.version>
         <apache-poi.version>5.2.4</apache-poi.version>

@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herpoem.site.mapper.PostMapper">
+    
+    <!-- 分页查询文章列表 -->
+    <select id="selectPostPage" resultType="com.herpoem.site.model.vo.PostVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title,
+            LEFT(p.content_text, 200) as excerpt,
+            p.visibility,
+            p.status,
+            p.publish_date as publishDate,
+            p.created_at as createdAt,
+            p.updated_at as updatedAt,
+            pt.name as postTypeName,
+            u.display_name as authorName
+        FROM post p
+        LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        LEFT JOIN users u ON p.created_by = u.id
+        WHERE p.deleted = 0 
+        AND p.status = 'PUBLISHED'
+        <if test="visibility != null">
+            AND p.visibility = #{visibility}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (p.title LIKE CONCAT('%', #{keyword}, '%') 
+                 OR p.content_text LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        <if test="tagId != null">
+            AND EXISTS (
+                SELECT 1 FROM post_tag pt2 
+                WHERE pt2.post_id = p.id AND pt2.tag_id = #{tagId}
+            )
+        </if>
+        <if test="seriesId != null">
+            AND p.series_id = #{seriesId}
+        </if>
+        ORDER BY p.publish_date DESC, p.created_at DESC
+    </select>
+    
+    <!-- 根据slug查询文章详情 -->
+    <select id="selectPostBySlug" resultType="com.herpoem.site.model.vo.PostVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title,
+            p.content_md as contentMd,
+            p.content_text as contentText,
+            p.visibility,
+            p.status,
+            p.publish_date as publishDate,
+            p.created_at as createdAt,
+            p.updated_at as updatedAt,
+            pt.name as postTypeName,
+            u.display_name as authorName,
+            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+        FROM post p
+        LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        LEFT JOIN users u ON p.created_by = u.id
+        WHERE p.slug = #{slug} 
+        AND p.deleted = 0
+        AND p.status = 'PUBLISHED'
+        AND p.visibility IN ('PUBLIC', 'UNLISTED')
+    </select>
+    
+    <!-- 查询系列中的文章列表 -->
+    <select id="selectPostsBySeries" resultType="com.herpoem.site.model.vo.PostVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title,
+            LEFT(p.content_text, 200) as excerpt,
+            p.chapter_no as chapterNo,
+            p.publish_date as publishDate,
+            p.created_at as createdAt,
+            pt.name as postTypeName,
+            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+        FROM post p
+        LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        WHERE p.series_id = #{seriesId}
+        AND p.deleted = 0
+        AND p.status = 'PUBLISHED'
+        AND p.visibility = 'PUBLIC'
+        ORDER BY p.chapter_no ASC, p.publish_date ASC
+    </select>
+    
+    <!-- 获取上一篇文章 -->
+    <select id="selectPrevPost" resultType="com.herpoem.site.model.vo.PostVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title
+        FROM post p
+        WHERE p.id &lt; #{currentId}
+        <if test="seriesId != null">
+            AND p.series_id = #{seriesId}
+        </if>
+        AND p.deleted = 0
+        AND p.status = 'PUBLISHED'
+        AND p.visibility = 'PUBLIC'
+        ORDER BY p.id DESC
+        LIMIT 1
+    </select>
+    
+    <!-- 获取下一篇文章 -->
+    <select id="selectNextPost" resultType="com.herpoem.site.model.vo.PostVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title
+        FROM post p
+        WHERE p.id &gt; #{currentId}
+        <if test="seriesId != null">
+            AND p.series_id = #{seriesId}
+        </if>
+        AND p.deleted = 0
+        AND p.status = 'PUBLISHED'
+        AND p.visibility = 'PUBLIC'
+        ORDER BY p.id ASC
+        LIMIT 1
+    </select>
+    
+</mapper>

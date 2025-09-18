@@ -14,7 +14,7 @@ import java.util.List;
  * @author TimeLord
  */
 @RestController
-@RequestMapping("/post-types")
+@RequestMapping("/api/post-types")
 @RequiredArgsConstructor
 public class PostTypeController {
     
