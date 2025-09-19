@@ -6,8 +6,8 @@ export function getPosts(params) {
 }
 
 // 根据slug获取文章详情
-export function getPostBySlug(slug) {
-  return request.get(`/posts/${slug}`)
+export function getPostBySlug(slug, params = {}) {
+  return request.get(`/posts/${slug}`, { params })
 }
 
 // 创建文章

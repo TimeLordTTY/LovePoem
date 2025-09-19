@@ -1,15 +1,18 @@
 package com.herpoem.site.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.herpoem.site.common.PageResult;
 import com.herpoem.site.mapper.PostMapper;
 import com.herpoem.site.mapper.PostTagMapper;
 import com.herpoem.site.model.dto.PostCreateDTO;
 import com.herpoem.site.model.entity.Post;
 import com.herpoem.site.model.entity.PostTag;
-import com.herpoem.site.model.vo.PostVO;
+import com.herpoem.site.model.vo.PostListVO;
+import com.herpoem.site.model.vo.PostDetailVO;
 import com.herpoem.site.service.PostService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,19 +29,18 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
-public class PostServiceImpl implements PostService {
+public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements PostService {
     
     private final PostMapper postMapper;
     private final PostTagMapper postTagMapper;
     
     @Override
-    public PageResult<PostVO> getPostList(Integer page, Integer size, String keyword, 
-                                         Long tagId, Long seriesId) {
-        Page<PostVO> pageParam = new Page<>(page, size);
-        IPage<PostVO> result = postMapper.selectPostPage(pageParam, keyword, tagId, seriesId, 
-                                                         Post.Visibility.PUBLIC);
+    public PageResult<PostListVO> getPostList(Integer page, Integer size, String keyword, 
+                                             Long tagId, Long seriesId, Long postTypeId, Post.Status status, Post.Visibility visibility) {
+        Page<PostListVO> pageParam = new Page<>(page, size);
+        IPage<PostListVO> result = postMapper.selectPostPage(pageParam, keyword, tagId, seriesId, postTypeId, status, visibility);
         
-        return PageResult.<PostVO>builder()
+        return PageResult.<PostListVO>builder()
                 .records(result.getRecords())
                 .total(result.getTotal())
                 .pages(result.getPages())
@@ -48,8 +50,26 @@ public class PostServiceImpl implements PostService {
     }
     
     @Override
-    public PostVO getPostBySlug(String slug) {
-        return postMapper.selectPostBySlug(slug);
+    public PostDetailVO getPostById(Long id) {
+        return postMapper.selectPostById(id);
+    }
+    
+    @Override
+    public PostDetailVO getPostBySlug(String slug, Post.Status status, List<Post.Visibility> visibilityList) {
+        return postMapper.selectPostBySlug(slug, status, visibilityList);
+    }
+    
+    @Override
+    public boolean checkTitleExists(String title, Long excludeId) {
+        LambdaQueryWrapper<Post> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Post::getTitle, title)
+               .eq(Post::getDeleted, 0);
+        
+        if (excludeId != null) {
+            wrapper.ne(Post::getId, excludeId);
+        }
+        
+        return this.count(wrapper) > 0;
     }
     
     @Override
@@ -60,15 +80,28 @@ public class PostServiceImpl implements PostService {
         post.setSlug(generateSlug(postCreateDTO.getSlug(), postCreateDTO.getTitle()));
         post.setContentMd(postCreateDTO.getContentMd());
         post.setContentText(extractTextFromMarkdown(postCreateDTO.getContentMd()));
+        post.setSummary(postCreateDTO.getSummary());
         post.setPostTypeId(postCreateDTO.getPostTypeId());
         post.setSeriesId(postCreateDTO.getSeriesId());
         post.setChapterNo(postCreateDTO.getChapterNo());
         post.setCoverAssetId(postCreateDTO.getCoverAssetId());
         post.setVisibility(postCreateDTO.getVisibility());
         post.setStatus(postCreateDTO.getStatus());
-        post.setPublishDate(postCreateDTO.getPublishDate());
+        
+        // 设置发布日期：如果用户指定了日期就用指定的，否则在发布状态时使用当前时间
+        if (postCreateDTO.getPublishDate() != null) {
+            post.setPublishDate(postCreateDTO.getPublishDate());
+        } else if (postCreateDTO.getStatus() == Post.Status.PUBLISHED) {
+            post.setPublishDate(LocalDateTime.now());
+        }
+        
         post.setCreatedBy(userId);
         post.setUpdatedBy(userId);
+        
+        // 手动设置时间字段，确保不为空
+        LocalDateTime now = LocalDateTime.now();
+        post.setCreatedAt(now);
+        post.setUpdatedAt(now);
         
         postMapper.insert(post);
         
@@ -92,14 +125,23 @@ public class PostServiceImpl implements PostService {
         post.setSlug(generateSlug(postCreateDTO.getSlug(), postCreateDTO.getTitle()));
         post.setContentMd(postCreateDTO.getContentMd());
         post.setContentText(extractTextFromMarkdown(postCreateDTO.getContentMd()));
+        post.setSummary(postCreateDTO.getSummary());
         post.setPostTypeId(postCreateDTO.getPostTypeId());
         post.setSeriesId(postCreateDTO.getSeriesId());
         post.setChapterNo(postCreateDTO.getChapterNo());
         post.setCoverAssetId(postCreateDTO.getCoverAssetId());
         post.setVisibility(postCreateDTO.getVisibility());
         post.setStatus(postCreateDTO.getStatus());
-        post.setPublishDate(postCreateDTO.getPublishDate());
+        
+        // 设置发布日期：如果用户指定了日期就用指定的，否则在发布状态时使用当前时间
+        if (postCreateDTO.getPublishDate() != null) {
+            post.setPublishDate(postCreateDTO.getPublishDate());
+        } else if (postCreateDTO.getStatus() == Post.Status.PUBLISHED && post.getPublishDate() == null) {
+            post.setPublishDate(LocalDateTime.now());
+        }
+        
         post.setUpdatedBy(userId);
+        post.setUpdatedAt(LocalDateTime.now());
         
         postMapper.updateById(post);
         
@@ -159,13 +201,12 @@ public class PostServiceImpl implements PostService {
     
     private String generateSlug(String slug, String title) {
         if (StringUtils.hasText(slug)) {
-            return slug.toLowerCase().replaceAll("[^a-z0-9\\-]", "-");
+            // 如果提供了slug，进行清理但保留中文字符
+            return slug.trim().replaceAll("\\s+", "-");
         }
         
-        // 从标题生成slug
-        return title.toLowerCase()
-                   .replaceAll("[\\s\\p{Punct}]+", "-")
-                   .replaceAll("^-+|-+$", "");
+        // 如果没有提供slug，直接使用标题作为slug
+        return title.trim();
     }
     
     private String extractTextFromMarkdown(String markdown) {
@@ -190,5 +231,10 @@ public class PostServiceImpl implements PostService {
             postTag.setTagId(tagId);
             postTagMapper.insert(postTag);
         }
+    }
+    
+    @Override
+    public List<PostListVO> getPostsBySeries(Long seriesId, Post.Status status, Post.Visibility visibility) {
+        return postMapper.selectPostsBySeries(seriesId, status, visibility);
     }
 }

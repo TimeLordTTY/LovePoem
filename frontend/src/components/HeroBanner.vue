@@ -36,13 +36,24 @@
         <div class="hero-image float">
           <div class="image-container">
             <div class="image-placeholder">
-              <!-- 这里可以放置插画或图片 -->
-              <div class="poem-preview">
-                <div class="poem-lines">
-                  <span class="poem-line">晨曦透过窗棂</span>
-                  <span class="poem-line delay-1">轻抚沉睡的大地</span>
-                  <span class="poem-line delay-2">那是希望的颜色</span>
-                  <span class="poem-line delay-3">也是梦想的开始</span>
+              <!-- 诗句轮播展示 -->
+              <div class="poem-preview" @click="goToCurrentPoem">
+                <div class="poem-lines" v-if="currentPoem">
+                  <div class="poem-title">{{ currentPoem.title }}</div>
+                  <div class="poem-content">
+                    <span 
+                      v-for="(line, index) in currentPoem.lines" 
+                      :key="index"
+                      class="poem-line"
+                      :class="`delay-${index}`"
+                    >
+                      {{ line }}
+                    </span>
+                  </div>
+                  <div class="poem-author">—— {{ currentPoem.author || '白秦' }}</div>
+                </div>
+                <div v-else class="loading-poem">
+                  <span class="poem-line">正在加载诗句...</span>
                 </div>
               </div>
             </div>
@@ -54,25 +65,133 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/store/theme'
+import { getPosts } from '@/api/post'
+import { getPostTypeByName } from '@/api/postType'
 
+const router = useRouter()
 const themeStore = useThemeStore()
 const siteSettings = ref({})
+const currentPoem = ref(null)
+const poemList = ref([])
+const currentPoemIndex = ref(0)
+const rotationTimer = ref(null)
 
-// 创建设置API（临时简化版）
+// 加载站点设置
 const loadSiteSettings = async () => {
-  // TODO: 实现真实的设置API
-  // 暂时使用默认值，后续需要从后端API获取
-  siteSettings.value = {
-    site_title: '我的半截诗',
-    site_subtitle: '白秦的文字世界',
-    hero_banner_text: '在文字的世界里，每一个字都是光'
+  try {
+    // 从后端API获取设置
+    const { getSiteInfo } = await import('@/api/site')
+    const response = await getSiteInfo()
+    const data = response.data || {}
+    
+    siteSettings.value = {
+      site_title: data.siteName || '我的半截诗',
+      site_subtitle: data.siteDescription || '白秦的文字世界',
+      hero_banner_text: data.heroBannerText || '在文字的世界里，每一个字都是光'
+    }
+  } catch (error) {
+    console.error('加载站点设置失败:', error)
+    // 使用默认值
+    siteSettings.value = {
+      site_title: '我的半截诗',
+      site_subtitle: '白秦的文字世界',
+      hero_banner_text: '在文字的世界里，每一个字都是光'
+    }
+  }
+}
+
+// 加载诗歌文章
+const loadPoemArticles = async () => {
+  try {
+    // 先获取诗歌类型的ID
+    const postTypeResponse = await getPostTypeByName('诗歌')
+    const poemTypeId = postTypeResponse.data?.id
+    
+    if (!poemTypeId) {
+      console.warn('未找到诗歌类型，将显示所有文章')
+    }
+    
+    const response = await getPosts({
+      page: 1,
+      size: 20,
+      postTypeId: poemTypeId,
+      status: 'PUBLISHED',
+      visibility: 'PUBLIC'
+    })
+    
+    const posts = response.data.records || []
+    poemList.value = posts.map(post => ({
+      id: post.id,
+      slug: post.slug,
+      title: post.title,
+      author: post.authorName || '白秦',
+      lines: extractPoemLines(post.excerpt || post.contentText || ''),
+      originalPost: post
+    })).filter(poem => poem.lines.length > 0)
+    
+    if (poemList.value.length > 0) {
+      currentPoem.value = poemList.value[0]
+      startPoemRotation()
+    }
+  } catch (error) {
+    console.error('加载诗歌失败:', error)
+    // 使用默认诗句
+    poemList.value = [{
+      id: 'default',
+      title: '默认诗句',
+      author: '白秦',
+      lines: ['晨曦透过窗棂', '轻抚沉睡的大地', '那是希望的颜色', '也是梦想的开始'],
+      slug: null
+    }]
+    currentPoem.value = poemList.value[0]
+  }
+}
+
+// 从文章内容中提取诗句
+const extractPoemLines = (content) => {
+  if (!content) return []
+  
+  // 移除HTML标签
+  const cleanContent = content.replace(/<[^>]*>/g, '').trim()
+  
+  // 按行分割，过滤空行，取前4行作为预览
+  const lines = cleanContent.split(/[\r\n]+/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && line.length < 50) // 过滤过长的行
+    .slice(0, 4)
+  
+  return lines.length >= 2 ? lines : []
+}
+
+// 开始诗句轮播
+const startPoemRotation = () => {
+  if (poemList.value.length <= 1) return
+  
+  rotationTimer.value = setInterval(() => {
+    currentPoemIndex.value = (currentPoemIndex.value + 1) % poemList.value.length
+    currentPoem.value = poemList.value[currentPoemIndex.value]
+  }, 5 * 60 * 1000) // 5分钟 = 300000毫秒
+}
+
+// 跳转到当前诗歌的详情页
+const goToCurrentPoem = () => {
+  if (currentPoem.value && currentPoem.value.slug) {
+    router.push(`/post/${currentPoem.value.slug}`)
   }
 }
 
 onMounted(() => {
   loadSiteSettings()
+  loadPoemArticles()
+})
+
+onUnmounted(() => {
+  if (rotationTimer.value) {
+    clearInterval(rotationTimer.value)
+  }
 })
 
 const getParticleStyle = (index) => {
@@ -237,12 +356,39 @@ const getStarStyle = (index) => {
 .poem-preview {
   text-align: center;
   padding: 40px 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.poem-preview:hover {
+  background: var(--bg-secondary);
+  border-radius: 16px;
 }
 
 .poem-lines {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+.poem-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  margin-bottom: 16px;
+  opacity: 0;
+  animation: fadeInUp 0.8s ease forwards;
+}
+
+.poem-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .poem-line {
@@ -250,13 +396,33 @@ const getStarStyle = (index) => {
   color: var(--text-secondary);
   font-size: 16px;
   font-style: italic;
+  line-height: 1.6;
   opacity: 0;
   animation: fadeInUp 0.8s ease forwards;
 }
 
-.poem-line.delay-1 { animation-delay: 0.2s; }
-.poem-line.delay-2 { animation-delay: 0.4s; }
-.poem-line.delay-3 { animation-delay: 0.6s; }
+.poem-author {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-top: 8px;
+  opacity: 0;
+  animation: fadeInUp 0.8s ease forwards;
+  animation-delay: 0.8s;
+}
+
+.loading-poem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.poem-line.delay-0 { animation-delay: 0.2s; }
+.poem-line.delay-1 { animation-delay: 0.4s; }
+.poem-line.delay-2 { animation-delay: 0.6s; }
+.poem-line.delay-3 { animation-delay: 0.8s; }
 
 @media (max-width: 1024px) {
   .container {

@@ -28,6 +28,11 @@ public class Post {
     
     private String contentText;
     
+    /**
+     * 作者自述（文章摘要）
+     */
+    private String summary;
+    
     private Long postTypeId;
     
     private Long seriesId;

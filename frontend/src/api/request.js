@@ -1,10 +1,11 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/auth'
+import config from '@/config'
 
 // 创建axios实例
 const request = axios.create({
-  baseURL: '/api',
+  baseURL: config.API_BASE_URL,
   timeout: 10000
 })
 

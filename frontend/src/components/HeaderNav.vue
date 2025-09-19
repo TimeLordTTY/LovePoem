@@ -5,18 +5,18 @@
         <!-- Logo区域 -->
         <div class="logo-section">
           <router-link to="/" class="logo">
-            <h1>{{ siteSettings.site_title || '我的半截诗' }}</h1>
-            <span class="subtitle">{{ siteSettings.site_subtitle || '白秦的文字世界' }}</span>
+            <h1>{{ siteInfo.siteName || '我的半截诗' }}</h1>
+            <span class="subtitle">{{ siteInfo.siteDescription || '白秦的文字世界' }}</span>
           </router-link>
         </div>
         
         <!-- 导航菜单 -->
         <nav class="nav-menu">
-          <router-link to="/" class="nav-item">首页</router-link>
-          <router-link to="/posts" class="nav-item">文章</router-link>
-          <router-link to="/series" class="nav-item">系列</router-link>
-          <router-link to="/tags" class="nav-item">标签</router-link>
-          <router-link to="/archive" class="nav-item">归档</router-link>
+          <router-link to="/" class="nav-item">{{ navigation.home || '首页' }}</router-link>
+          <router-link to="/posts" class="nav-item">{{ navigation.posts || '文章' }}</router-link>
+          <router-link to="/series" class="nav-item">{{ navigation.series || '系列' }}</router-link>
+          <router-link to="/tags" class="nav-item">{{ navigation.tags || '标签' }}</router-link>
+          <router-link to="/archive" class="nav-item">{{ navigation.archive || '归档' }}</router-link>
         </nav>
         
         <!-- 右侧操作区 -->
@@ -51,17 +51,36 @@ import { useAuthStore } from '@/store/auth'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import ThemeToggle from './ThemeToggle.vue'
+import { getSiteInfo, getNavigation } from '@/api/site'
 
 const authStore = useAuthStore()
 const isScrolled = ref(false)
-const siteSettings = ref({})
+const siteInfo = ref({})
+const navigation = ref({})
 
-// 加载站点设置
-const loadSiteSettings = async () => {
-  // TODO: 实现真实的设置API
-  siteSettings.value = {
-    site_title: '我的半截诗',
-    site_subtitle: '白秦的文字世界'
+// 加载站点信息
+const loadSiteData = async () => {
+  try {
+    const [siteResponse, navResponse] = await Promise.all([
+      getSiteInfo(),
+      getNavigation()
+    ])
+    siteInfo.value = siteResponse.data || {}
+    navigation.value = navResponse.data || {}
+  } catch (error) {
+    console.error('加载站点数据失败:', error)
+    // 使用默认值
+    siteInfo.value = {
+      siteName: '我的半截诗',
+      siteDescription: '白秦的文字世界'
+    }
+    navigation.value = {
+      home: '首页',
+      posts: '文章',
+      series: '系列',
+      tags: '标签',
+      archive: '归档'
+    }
   }
 }
 
@@ -76,7 +95,7 @@ const handleLogout = () => {
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll)
-  loadSiteSettings()
+  loadSiteData()
 })
 
 onUnmounted(() => {

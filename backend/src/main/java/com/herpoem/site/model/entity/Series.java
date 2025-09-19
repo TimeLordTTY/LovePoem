@@ -5,7 +5,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
  * 系列实体类
@@ -16,32 +15,56 @@ import java.util.List;
 @EqualsAndHashCode(callSuper = false)
 @TableName("series")
 public class Series {
-    
-    @TableId(type = IdType.AUTO)
+
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
-    
+
+    /**
+     * 系列名称
+     */
+    @TableField("name")
     private String name;
-    
+
+    /**
+     * 系列描述
+     */
+    @TableField("description")
     private String description;
-    
-    private Long bannerAssetId;
-    
-    @TableField(fill = FieldFill.INSERT)
+
+    /**
+     * 系列封面图片（暂时不使用，避免数据库字段问题）
+     */
+    @TableField(exist = false)
+    private String coverImage;
+
+    /**
+     * 排序权重
+     */
+    @TableField("sort_order")
+    private Integer sortOrder;
+
+    /**
+     * 创建者ID
+     */
+    @TableField("created_by")
+    private Long createdBy;
+
+    /**
+     * 创建时间
+     */
+    @TableField(value = "created_at", fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
-    
-    @TableField(fill = FieldFill.INSERT_UPDATE)
+
+    /**
+     * 更新时间
+     */
+    @TableField(value = "updated_at", fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
-    
+
+    /**
+     * 逻辑删除
+     */
     @TableLogic
+    @TableField("deleted")
     private Integer deleted;
-    
-    // 关联数据（不映射到数据库）
-    @TableField(exist = false)
-    private Asset bannerAsset;
-    
-    @TableField(exist = false)
-    private List<Post> posts;
-    
-    @TableField(exist = false)
-    private Long postCount;
 }

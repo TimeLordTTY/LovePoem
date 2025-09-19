@@ -1,6 +1,7 @@
 package com.herpoem.site.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.herpoem.site.mapper.PostTypeMapper;
 import com.herpoem.site.model.entity.PostType;
 import com.herpoem.site.model.vo.PostTypeVO;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
-public class PostTypeServiceImpl implements PostTypeService {
+public class PostTypeServiceImpl extends ServiceImpl<PostTypeMapper, PostType> implements PostTypeService {
     
     private final PostTypeMapper postTypeMapper;
     
@@ -33,6 +34,19 @@ public class PostTypeServiceImpl implements PostTypeService {
         return postTypes.stream()
                        .map(this::convertToVO)
                        .collect(Collectors.toList());
+    }
+    
+    @Override
+    public PostTypeVO getPostTypeByName(String name) {
+        QueryWrapper<PostType> wrapper = new QueryWrapper<>();
+        wrapper.eq("name", name);
+        
+        PostType postType = postTypeMapper.selectOne(wrapper);
+        if (postType == null) {
+            return null;
+        }
+        
+        return convertToVO(postType);
     }
     
     @Override

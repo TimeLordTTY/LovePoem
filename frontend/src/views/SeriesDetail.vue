@@ -54,6 +54,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import PoemCard from '@/components/PoemCard.vue'
+import { getSeriesById, getSeriesPosts } from '@/api/series'
 
 const route = useRoute()
 const series = ref(null)
@@ -74,58 +76,21 @@ const loadSeries = async () => {
     loading.value = true
     const seriesId = route.params.id
     
-    // 模拟数据
-    const mockSeries = {
-      1: {
-        id: 1,
-        name: '晨光诗集',
-        description: '关于晨光、希望与美好的诗歌合集，记录每一个美好的清晨时光',
-        postCount: 2
-      },
-      2: {
-        id: 2,
-        name: '星空夜语',
-        description: '夜晚的思考与情感表达，在静谧中感受内心的声音',
-        postCount: 1
-      }
-    }
+    // 获取系列详情
+    const seriesResponse = await getSeriesById(seriesId)
+    series.value = seriesResponse.data
     
-    const mockPosts = {
-      1: [
-        {
-          id: 1,
-          title: '第一缕光',
-          slug: 'first-light',
-          excerpt: '晨曦透过窗棂，轻抚沉睡的大地，那是希望的颜色，也是梦想的开始...',
-          publishDate: '2024-01-15',
-          readingTime: 2
-        },
-        {
-          id: 3,
-          title: '晨光序曲',
-          slug: 'morning-prelude',
-          excerpt: '每一个清晨都是新的开始，每一缕阳光都带着希望的味道...',
-          publishDate: '2024-01-12',
-          readingTime: 3
-        }
-      ],
-      2: [
-        {
-          id: 2,
-          title: '夜的私语',
-          slug: 'night-whisper',
-          excerpt: '星星在夜空中眨眼，仿佛在诉说着什么秘密，月光洒在窗台上...',
-          publishDate: '2024-01-10',
-          readingTime: 3
-        }
-      ]
-    }
-    
-    series.value = mockSeries[seriesId]
-    posts.value = mockPosts[seriesId] || []
+    // 获取系列中的文章
+    const postsResponse = await getSeriesPosts(seriesId, {
+      page: 1,
+      size: 50 // 获取系列中的所有文章
+    })
+    posts.value = postsResponse.data.records || []
     
   } catch (error) {
     console.error('加载系列失败:', error)
+    series.value = null
+    posts.value = []
   } finally {
     loading.value = false
   }

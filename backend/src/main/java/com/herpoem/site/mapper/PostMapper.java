@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.herpoem.site.model.entity.Post;
-import com.herpoem.site.model.vo.PostVO;
+import com.herpoem.site.model.vo.PostListVO;
+import com.herpoem.site.model.vo.PostDetailVO;
+import com.herpoem.site.model.vo.PostNavigationVO;
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
@@ -15,29 +17,38 @@ import java.util.List;
  * 
  * @author TimeLord
  */
-@Repository
+@Mapper
 public interface PostMapper extends BaseMapper<Post> {
     
     /**
-     * 分页查询文章列表（包含关联信息）
+     * 分页查询文章列表（优化性能，不包含完整内容）
      */
-    IPage<PostVO> selectPostPage(Page<PostVO> page, @Param("keyword") String keyword, 
-                                @Param("tagId") Long tagId, @Param("seriesId") Long seriesId,
-                                @Param("visibility") Post.Visibility visibility);
+    IPage<PostListVO> selectPostPage(Page<PostListVO> page, @Param("keyword") String keyword, 
+                                    @Param("tagId") Long tagId, @Param("seriesId") Long seriesId,
+                                    @Param("postTypeId") Long postTypeId, @Param("status") Post.Status status, @Param("visibility") Post.Visibility visibility);
     
     /**
-     * 根据slug查询文章详情（包含关联信息）
+     * 根据ID查询文章详情（包含完整内容，用于编辑）
      */
-    PostVO selectPostBySlug(@Param("slug") String slug);
+    PostDetailVO selectPostById(@Param("id") Long id);
+    
+    /**
+     * 根据slug查询文章详情（包含完整内容）
+     */
+    PostDetailVO selectPostBySlug(@Param("slug") String slug, @Param("status") Post.Status status, 
+                                 @Param("visibilityList") List<Post.Visibility> visibilityList);
     
     /**
      * 查询系列中的文章列表
      */
-    List<PostVO> selectPostsBySeries(@Param("seriesId") Long seriesId);
+    List<PostListVO> selectPostsBySeries(@Param("seriesId") Long seriesId, @Param("status") Post.Status status, 
+                                        @Param("visibility") Post.Visibility visibility);
     
     /**
      * 获取上一篇/下一篇文章
      */
-    PostVO selectPrevPost(@Param("currentId") Long currentId, @Param("seriesId") Long seriesId);
-    PostVO selectNextPost(@Param("currentId") Long currentId, @Param("seriesId") Long seriesId);
+    PostNavigationVO selectPrevPost(@Param("currentId") Long currentId, @Param("seriesId") Long seriesId,
+                                   @Param("status") Post.Status status, @Param("visibility") Post.Visibility visibility);
+    PostNavigationVO selectNextPost(@Param("currentId") Long currentId, @Param("seriesId") Long seriesId,
+                                   @Param("status") Post.Status status, @Param("visibility") Post.Visibility visibility);
 }

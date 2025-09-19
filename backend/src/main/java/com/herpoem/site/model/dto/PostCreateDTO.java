@@ -26,6 +26,9 @@ public class PostCreateDTO {
     @NotBlank(message = "内容不能为空")
     private String contentMd;
     
+    @Size(max = 500, message = "作者自述长度不能超过500字符")
+    private String summary;
+    
     @NotNull(message = "文章类型不能为空")
     private Long postTypeId;
     

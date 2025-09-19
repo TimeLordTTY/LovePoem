@@ -30,46 +30,22 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import SeriesCard from '@/components/SeriesCard.vue'
-// import { seriesApi } from '@/api/series'
+import { getAllSeries } from '@/api/series'
 
 const seriesList = ref([])
+const loading = ref(false)
 
 const loadSeries = async () => {
-  // TODO: 替换为真实的API调用
-  // try {
-  //   const response = await seriesApi.getAllSeries()
-  //   seriesList.value = response.data
-  // } catch (error) {
-  //   console.error('加载系列失败:', error)
-  // }
-  
-  // 模拟数据
-  seriesList.value = [
-    {
-      id: 1,
-      name: '晨光诗集',
-      description: '关于晨光、希望与美好的诗歌合集，记录每一个美好的清晨时光',
-      postCount: 8
-    },
-    {
-      id: 2,
-      name: '星空夜语',
-      description: '夜晚的思考与情感表达，在静谧中感受内心的声音',
-      postCount: 6
-    },
-    {
-      id: 3,
-      name: '四季轮回',
-      description: '记录四季变化中的感悟，感受时间的流逝与生命的美好',
-      postCount: 10
-    },
-    {
-      id: 4,
-      name: '青春记忆',
-      description: '那些年少时光的美好回忆，青春岁月里的点点滴滴',
-      postCount: 5
-    }
-  ]
+  try {
+    loading.value = true
+    const response = await getAllSeries()
+    seriesList.value = response.data || []
+  } catch (error) {
+    console.error('加载系列失败:', error)
+    seriesList.value = []
+  } finally {
+    loading.value = false
+  }
 }
 
 onMounted(() => {

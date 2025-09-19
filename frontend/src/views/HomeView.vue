@@ -54,6 +54,7 @@ import TagCloud from '@/components/TagCloud.vue'
 import SeriesCard from '@/components/SeriesCard.vue'
 import { getPosts } from '@/api/post'
 import { getAllTags } from '@/api/tag'
+import { getAllSeries } from '@/api/series'
 
 const featuredPosts = ref([])
 const popularTags = ref([])
@@ -74,8 +75,9 @@ const loadData = async () => {
     const tagsResponse = await getAllTags()
     popularTags.value = tagsResponse.data || []
     
-    // TODO: 系列功能暂未实现API
-    recommendedSeries.value = []
+    // 加载推荐系列
+    const seriesResponse = await getAllSeries()
+    recommendedSeries.value = (seriesResponse.data || []).slice(0, 3) // 只显示前3个系列
     
   } catch (error) {
     console.error('加载数据失败:', error)

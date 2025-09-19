@@ -3,29 +3,29 @@
     <div class="container">
       <div class="footer-content">
         <div class="footer-info">
-          <h3>{{ siteSettings.site_title || '我的半截诗' }}</h3>
-          <p>{{ siteSettings.site_subtitle || '白秦的文字世界' }}</p>
+          <h3>{{ siteInfo.siteName || '我的半截诗' }}</h3>
+          <p>{{ siteInfo.siteDescription || '白秦的文字世界' }}</p>
         </div>
         
         <div class="footer-links">
           <div class="link-group">
-            <h4>导航</h4>
-            <router-link to="/">首页</router-link>
-            <router-link to="/posts">文章</router-link>
-            <router-link to="/series">系列</router-link>
-            <router-link to="/tags">标签</router-link>
+            <h4>{{ footer.navigation || '导航' }}</h4>
+            <router-link to="/">{{ footer.home || '首页' }}</router-link>
+            <router-link to="/posts">{{ footer.posts || '文章' }}</router-link>
+            <router-link to="/series">{{ footer.series || '系列' }}</router-link>
+            <router-link to="/tags">{{ footer.tags || '标签' }}</router-link>
           </div>
           
           <div class="link-group">
-            <h4>关于</h4>
+            <h4>{{ footer.about || '关于' }}</h4>
             <router-link to="/archive">归档</router-link>
-            <a href="#" @click.prevent>联系我们</a>
+            <a href="#" @click.prevent>{{ footer.contact || '联系我们' }}</a>
           </div>
         </div>
       </div>
       
       <div class="footer-bottom">
-        <p>&copy; 2024 {{ siteSettings.site_title || '我的半截诗' }}. All rights reserved.</p>
+        <p>{{ footer.copyright || '© 2023 我的半截诗. All rights reserved.' }}</p>
         <p>用❤️和代码构建 by TimeLord</p>
       </div>
     </div>
@@ -34,15 +34,37 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { getSiteInfo, getFooter } from '@/api/site'
 
-const siteSettings = ref({})
+const siteInfo = ref({})
+const footer = ref({})
 
 // 加载站点设置
 const loadSiteSettings = async () => {
-  // TODO: 实现真实的设置API
-  siteSettings.value = {
-    site_title: '我的半截诗',
-    site_subtitle: '白秦的文字世界'
+  try {
+    const [siteResponse, footerResponse] = await Promise.all([
+      getSiteInfo(),
+      getFooter()
+    ])
+    siteInfo.value = siteResponse.data || {}
+    footer.value = footerResponse.data || {}
+  } catch (error) {
+    console.error('加载站点数据失败:', error)
+    // 使用默认值
+    siteInfo.value = {
+      siteName: '我的半截诗',
+      siteDescription: '白秦的文字世界'
+    }
+    footer.value = {
+      navigation: '导航',
+      about: '关于',
+      home: '首页',
+      posts: '文章',
+      series: '系列',
+      tags: '标签',
+      contact: '联系我们',
+      copyright: '© 2023 我的半截诗. All rights reserved.'
+    }
   }
 }
 

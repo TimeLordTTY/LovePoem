@@ -57,6 +57,42 @@ const routes = [
     meta: { title: '管理后台', requiresAuth: true }
   },
   {
+    path: '/admin/posts',
+    name: 'AdminPosts',
+    component: () => import('@/views/admin/PostManagement.vue'),
+    meta: { title: '文章管理', requiresAuth: true }
+  },
+  {
+    path: '/admin/tags',
+    name: 'AdminTags',
+    component: () => import('@/views/admin/TagManagement.vue'),
+    meta: { title: '标签管理', requiresAuth: true }
+  },
+  {
+    path: '/admin/series',
+    name: 'AdminSeries',
+    component: () => import('@/views/admin/SeriesManagement.vue'),
+    meta: { title: '系列管理', requiresAuth: true }
+  },
+  {
+    path: '/admin/stats',
+    name: 'AdminStats',
+    component: () => import('@/views/admin/DataStats.vue'),
+    meta: { title: '数据统计', requiresAuth: true }
+  },
+  {
+    path: '/admin/settings',
+    name: 'AdminSettings',
+    component: () => import('@/views/admin/SystemSettings.vue'),
+    meta: { title: '系统设置', requiresAuth: true }
+  },
+  {
+    path: '/admin/backup',
+    name: 'AdminBackup',
+    component: () => import('@/views/admin/BackupRestore.vue'),
+    meta: { title: '备份恢复', requiresAuth: true }
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/LoginView.vue'),

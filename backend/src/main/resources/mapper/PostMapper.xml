@@ -2,31 +2,40 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.herpoem.site.mapper.PostMapper">
     
-    <!-- 分页查询文章列表 -->
-    <select id="selectPostPage" resultType="com.herpoem.site.model.vo.PostVO">
+    <!-- 分页查询文章列表（优化性能，不查询完整内容） -->
+    <select id="selectPostPage" resultType="com.herpoem.site.model.vo.PostListVO">
         SELECT 
             p.id,
             p.slug,
             p.title,
+            p.summary,
             LEFT(p.content_text, 200) as excerpt,
+            p.post_type_id as postTypeId,
+            p.series_id as seriesId,
+            p.chapter_no as chapterNo,
+            p.cover_asset_id as coverAssetId,
             p.visibility,
             p.status,
             p.publish_date as publishDate,
             p.created_at as createdAt,
             p.updated_at as updatedAt,
             pt.name as postTypeName,
-            u.display_name as authorName
+            u.display_name as authorName,
+            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
         FROM post p
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
         LEFT JOIN users u ON p.created_by = u.id
-        WHERE p.deleted = 0 
-        AND p.status = 'PUBLISHED'
+        WHERE p.deleted = 0
+        <if test="status != null">
+            AND p.status = #{status}
+        </if>
         <if test="visibility != null">
             AND p.visibility = #{visibility}
         </if>
         <if test="keyword != null and keyword != ''">
             AND (p.title LIKE CONCAT('%', #{keyword}, '%') 
-                 OR p.content_text LIKE CONCAT('%', #{keyword}, '%'))
+                 OR p.summary LIKE CONCAT('%', #{keyword}, '%')
+                 OR LEFT(p.content_text, 500) LIKE CONCAT('%', #{keyword}, '%'))
         </if>
         <if test="tagId != null">
             AND EXISTS (
@@ -37,17 +46,25 @@
         <if test="seriesId != null">
             AND p.series_id = #{seriesId}
         </if>
+        <if test="postTypeId != null">
+            AND p.post_type_id = #{postTypeId}
+        </if>
         ORDER BY p.publish_date DESC, p.created_at DESC
     </select>
     
     <!-- 根据slug查询文章详情 -->
-    <select id="selectPostBySlug" resultType="com.herpoem.site.model.vo.PostVO">
+    <select id="selectPostBySlug" resultType="com.herpoem.site.model.vo.PostDetailVO">
         SELECT 
             p.id,
             p.slug,
             p.title,
             p.content_md as contentMd,
             p.content_text as contentText,
+            p.summary,
+            p.post_type_id as postTypeId,
+            p.series_id as seriesId,
+            p.chapter_no as chapterNo,
+            p.cover_asset_id as coverAssetId,
             p.visibility,
             p.status,
             p.publish_date as publishDate,
@@ -61,18 +78,60 @@
         LEFT JOIN users u ON p.created_by = u.id
         WHERE p.slug = #{slug} 
         AND p.deleted = 0
-        AND p.status = 'PUBLISHED'
-        AND p.visibility IN ('PUBLIC', 'UNLISTED')
+        <if test="status != null">
+            AND p.status = #{status}
+        </if>
+        <if test="visibilityList != null and visibilityList.size() > 0">
+            AND p.visibility IN 
+            <foreach collection="visibilityList" item="vis" open="(" separator="," close=")">
+                #{vis}
+            </foreach>
+        </if>
     </select>
     
-    <!-- 查询系列中的文章列表 -->
-    <select id="selectPostsBySeries" resultType="com.herpoem.site.model.vo.PostVO">
+    <!-- 根据ID查询文章详情（包含完整内容，用于编辑） -->
+    <select id="selectPostById" resultType="com.herpoem.site.model.vo.PostDetailVO">
         SELECT 
             p.id,
             p.slug,
             p.title,
+            p.content_md as contentMd,
+            p.content_text as contentText,
+            p.summary,
+            p.post_type_id as postTypeId,
+            p.series_id as seriesId,
+            p.chapter_no as chapterNo,
+            p.cover_asset_id as coverAssetId,
+            p.visibility,
+            p.status,
+            p.publish_date as publishDate,
+            p.created_by as createdBy,
+            p.updated_by as updatedBy,
+            p.created_at as createdAt,
+            p.updated_at as updatedAt,
+            pt.name as postTypeName,
+            s.name as seriesName,
+            u.display_name as authorName,
+            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+        FROM post p
+        LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        LEFT JOIN series s ON p.series_id = s.id
+        LEFT JOIN users u ON p.created_by = u.id
+        WHERE p.id = #{id}
+        AND p.deleted = 0
+    </select>
+    
+    <!-- 查询系列中的文章列表 -->
+    <select id="selectPostsBySeries" resultType="com.herpoem.site.model.vo.PostListVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title,
+            p.summary,
             LEFT(p.content_text, 200) as excerpt,
             p.chapter_no as chapterNo,
+            p.post_type_id as postTypeId,
+            p.series_id as seriesId,
             p.publish_date as publishDate,
             p.created_at as createdAt,
             pt.name as postTypeName,
@@ -81,13 +140,17 @@
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
         WHERE p.series_id = #{seriesId}
         AND p.deleted = 0
-        AND p.status = 'PUBLISHED'
-        AND p.visibility = 'PUBLIC'
+        <if test="status != null">
+            AND p.status = #{status}
+        </if>
+        <if test="visibility != null">
+            AND p.visibility = #{visibility}
+        </if>
         ORDER BY p.chapter_no ASC, p.publish_date ASC
     </select>
     
     <!-- 获取上一篇文章 -->
-    <select id="selectPrevPost" resultType="com.herpoem.site.model.vo.PostVO">
+    <select id="selectPrevPost" resultType="com.herpoem.site.model.vo.PostNavigationVO">
         SELECT 
             p.id,
             p.slug,
@@ -98,14 +161,18 @@
             AND p.series_id = #{seriesId}
         </if>
         AND p.deleted = 0
-        AND p.status = 'PUBLISHED'
-        AND p.visibility = 'PUBLIC'
+        <if test="status != null">
+            AND p.status = #{status}
+        </if>
+        <if test="visibility != null">
+            AND p.visibility = #{visibility}
+        </if>
         ORDER BY p.id DESC
         LIMIT 1
     </select>
     
     <!-- 获取下一篇文章 -->
-    <select id="selectNextPost" resultType="com.herpoem.site.model.vo.PostVO">
+    <select id="selectNextPost" resultType="com.herpoem.site.model.vo.PostNavigationVO">
         SELECT 
             p.id,
             p.slug,
@@ -116,8 +183,12 @@
             AND p.series_id = #{seriesId}
         </if>
         AND p.deleted = 0
-        AND p.status = 'PUBLISHED'
-        AND p.visibility = 'PUBLIC'
+        <if test="status != null">
+            AND p.status = #{status}
+        </if>
+        <if test="visibility != null">
+            AND p.visibility = #{visibility}
+        </if>
         ORDER BY p.id ASC
         LIMIT 1
     </select>

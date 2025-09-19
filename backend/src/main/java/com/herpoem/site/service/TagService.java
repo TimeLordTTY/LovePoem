@@ -1,5 +1,6 @@
 package com.herpoem.site.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.herpoem.site.model.entity.Tag;
 import com.herpoem.site.model.vo.TagVO;
 
@@ -10,7 +11,7 @@ import java.util.List;
  * 
  * @author TimeLord
  */
-public interface TagService {
+public interface TagService extends IService<Tag> {
     
     /**
      * 获取所有标签

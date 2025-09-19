@@ -13,42 +13,42 @@
           <div class="card-icon">📝</div>
           <h3>文章管理</h3>
           <p>创建、编辑和管理文章</p>
-          <button class="card-btn" @click="showComingSoon">进入管理</button>
+          <button class="card-btn" @click="$router.push('/admin/posts')">进入管理</button>
         </div>
         
         <div class="admin-card">
           <div class="card-icon">🏷️</div>
           <h3>标签管理</h3>
           <p>管理文章标签和分类</p>
-          <button class="card-btn" @click="showComingSoon">进入管理</button>
+          <button class="card-btn" @click="$router.push('/admin/tags')">进入管理</button>
         </div>
         
         <div class="admin-card">
           <div class="card-icon">📚</div>
           <h3>系列管理</h3>
           <p>创建和管理文章系列</p>
-          <button class="card-btn" @click="showComingSoon">进入管理</button>
+          <button class="card-btn" @click="$router.push('/admin/series')">进入管理</button>
         </div>
         
         <div class="admin-card">
           <div class="card-icon">📊</div>
           <h3>数据统计</h3>
           <p>查看网站访问和内容统计</p>
-          <button class="card-btn" @click="showComingSoon">查看统计</button>
+          <button class="card-btn" @click="$router.push('/admin/stats')">查看统计</button>
         </div>
         
         <div class="admin-card">
           <div class="card-icon">⚙️</div>
           <h3>系统设置</h3>
           <p>网站配置和系统设置</p>
-          <button class="card-btn" @click="showComingSoon">进入设置</button>
+          <button class="card-btn" @click="$router.push('/admin/settings')">进入设置</button>
         </div>
         
         <div class="admin-card">
-          <div class="card-icon">📤</div>
-          <h3>导入工具</h3>
-          <p>导入Markdown和Word文档</p>
-          <button class="card-btn" @click="showComingSoon">使用工具</button>
+          <div class="card-icon">💾</div>
+          <h3>备份恢复</h3>
+          <p>数据备份与恢复管理</p>
+          <button class="card-btn" @click="$router.push('/admin/backup')">备份管理</button>
         </div>
       </div>
       
@@ -81,6 +81,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { getWebsiteStats } from '@/api/admin'
 
 const stats = ref({
   totalPosts: 0,
@@ -94,12 +95,22 @@ const showComingSoon = () => {
 }
 
 const loadStats = async () => {
-  // 模拟统计数据
-  stats.value = {
-    totalPosts: 12,
-    totalTags: 8,
-    totalSeries: 3,
-    totalViews: 1234
+  try {
+    const response = await getWebsiteStats()
+    stats.value = response.data || {
+      totalPosts: 0,
+      totalTags: 0,
+      totalSeries: 0,
+      totalViews: 0
+    }
+  } catch (error) {
+    console.error('加载统计数据失败:', error)
+    stats.value = {
+      totalPosts: 0,
+      totalTags: 0,
+      totalSeries: 0,
+      totalViews: 0
+    }
   }
 }
 

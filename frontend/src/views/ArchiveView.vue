@@ -60,6 +60,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { getPosts } from '@/api/post'
 
 const archiveData = ref([])
 
@@ -69,81 +70,53 @@ const formatDay = (dateString) => {
 }
 
 const loadArchive = async () => {
-  // 模拟归档数据
-  const mockPosts = [
-    {
-      id: 1,
-      title: '第一缕光',
-      slug: 'first-light',
-      publishDate: '2024-01-15',
-      postTypeName: '诗歌',
-      readingTime: 2
-    },
-    {
-      id: 2,
-      title: '夜的私语',
-      slug: 'night-whisper',
-      publishDate: '2024-01-10',
-      postTypeName: '诗歌',
-      readingTime: 3
-    },
-    {
-      id: 3,
-      title: '春天的故事',
-      slug: 'spring-story',
-      publishDate: '2024-01-08',
-      postTypeName: '散文',
-      readingTime: 5
-    },
-    {
-      id: 4,
-      title: '记忆中的那个夏天',
-      slug: 'summer-memory',
-      publishDate: '2023-12-25',
-      postTypeName: '随笔',
-      readingTime: 4
-    },
-    {
-      id: 5,
-      title: '秋日私语',
-      slug: 'autumn-whisper',
-      publishDate: '2023-12-20',
-      postTypeName: '诗歌',
-      readingTime: 3
-    }
-  ]
-  
-  // 按年月分组
-  const grouped = {}
-  mockPosts.forEach(post => {
-    const date = new Date(post.publishDate)
-    const year = date.getFullYear()
-    const month = date.getMonth() + 1
+  try {
+    // 获取所有已发布的文章用于归档
+    const response = await getPosts({
+      page: 1,
+      size: 1000, // 获取所有文章
+      status: 'PUBLISHED',
+      visibility: 'PUBLIC'
+    })
     
-    if (!grouped[year]) {
-      grouped[year] = {}
-    }
-    if (!grouped[year][month]) {
-      grouped[year][month] = []
-    }
-    grouped[year][month].push(post)
-  })
+    const allPosts = response.data.records || []
   
-  // 转换为组件需要的格式
-  archiveData.value = Object.keys(grouped)
-    .sort((a, b) => b - a) // 按年份降序
-    .map(year => ({
-      year: parseInt(year),
-      totalPosts: Object.values(grouped[year]).flat().length,
-      months: Object.keys(grouped[year])
-        .sort((a, b) => b - a) // 按月份降序
-        .map(month => ({
-          month: parseInt(month),
-          posts: grouped[year][month].sort((a, b) => 
-            new Date(b.publishDate) - new Date(a.publishDate)
-          )
-        }))
-    }))
+    // 按年月分组
+    const grouped = {}
+    allPosts.forEach(post => {
+      const date = new Date(post.publishDate)
+      const year = date.getFullYear()
+      const month = date.getMonth() + 1
+      
+      if (!grouped[year]) {
+        grouped[year] = {}
+      }
+      if (!grouped[year][month]) {
+        grouped[year][month] = []
+      }
+      grouped[year][month].push(post)
+    })
+  
+    // 转换为组件需要的格式
+    archiveData.value = Object.keys(grouped)
+      .sort((a, b) => b - a) // 按年份降序
+      .map(year => ({
+        year: parseInt(year),
+        totalPosts: Object.values(grouped[year]).flat().length,
+        months: Object.keys(grouped[year])
+          .sort((a, b) => b - a) // 按月份降序
+          .map(month => ({
+            month: parseInt(month),
+            posts: grouped[year][month].sort((a, b) => 
+              new Date(b.publishDate) - new Date(a.publishDate)
+            )
+          }))
+      }))
+      
+  } catch (error) {
+    console.error('加载归档数据失败:', error)
+    archiveData.value = []
+  }
 }
 
 onMounted(() => {

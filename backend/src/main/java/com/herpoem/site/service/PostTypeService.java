@@ -1,5 +1,7 @@
 package com.herpoem.site.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
+import com.herpoem.site.model.entity.PostType;
 import com.herpoem.site.model.vo.PostTypeVO;
 
 import java.util.List;
@@ -9,12 +11,17 @@ import java.util.List;
  * 
  * @author TimeLord
  */
-public interface PostTypeService {
+public interface PostTypeService extends IService<PostType> {
     
     /**
      * 获取所有文章类型
      */
     List<PostTypeVO> getAllPostTypes();
+    
+    /**
+     * 根据名称获取文章类型
+     */
+    PostTypeVO getPostTypeByName(String name);
     
     /**
      * 创建文章类型（仅管理员）

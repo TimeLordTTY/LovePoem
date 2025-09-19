@@ -13,7 +13,9 @@ CREATE TABLE users (
     last_login_at DATETIME COMMENT '最后登录时间',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志'
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
+    
+    INDEX idx_deleted_status (deleted, status)
 ) COMMENT '用户表';
 
 -- 系列表
@@ -21,10 +23,16 @@ CREATE TABLE series (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '系列ID',
     name VARCHAR(200) NOT NULL COMMENT '系列名称',
     description TEXT COMMENT '系列描述',
-    banner_asset_id BIGINT COMMENT '横幅图片ID',
+    cover_image VARCHAR(500) COMMENT '封面图片URL',
+    sort_order INT NOT NULL DEFAULT 0 COMMENT '排序权重',
+    created_by BIGINT NOT NULL COMMENT '创建者ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志'
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
+    
+    INDEX idx_created_by (created_by),
+    INDEX idx_sort_order (sort_order),
+    INDEX idx_deleted_sort (deleted, sort_order)
 ) COMMENT '系列表';
 
 -- 资源表
@@ -44,6 +52,7 @@ CREATE TABLE post (
     title VARCHAR(300) NOT NULL COMMENT '文章标题',
     content_md LONGTEXT NOT NULL COMMENT 'Markdown内容',
     content_text LONGTEXT NOT NULL COMMENT '纯文本内容（用于搜索）',
+    summary VARCHAR(500) COMMENT '作者自述（文章摘要）',
     post_type_id BIGINT NOT NULL COMMENT '文章类型ID',
     series_id BIGINT COMMENT '所属系列ID',
     chapter_no INT COMMENT '章节号（系列文章时使用）',
@@ -57,12 +66,23 @@ CREATE TABLE post (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
+    -- 原有索引
     INDEX idx_slug (slug),
     INDEX idx_post_type (post_type_id),
     INDEX idx_series_chapter (series_id, chapter_no),
     INDEX idx_visibility_status (visibility, status),
     INDEX idx_publish_date (publish_date),
-    INDEX idx_created_by (created_by)
+    INDEX idx_created_by (created_by),
+    
+    -- 性能优化索引
+    INDEX idx_deleted_status_visibility_publish (deleted, status, visibility, publish_date DESC),
+    INDEX idx_deleted_series_chapter (deleted, series_id, chapter_no),
+    INDEX idx_deleted_slug (deleted, slug),
+    INDEX idx_deleted_type_status (deleted, post_type_id, status),
+    INDEX idx_deleted_created_by_status (deleted, created_by, status),
+    
+    -- 全文搜索索引
+    FULLTEXT INDEX ft_search_content (title, summary, content_text)
 ) COMMENT '文章表';
 
 -- 文章类型表
@@ -84,7 +104,8 @@ CREATE TABLE tag (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
-    INDEX idx_created_by (created_by)
+    INDEX idx_created_by (created_by),
+    INDEX idx_deleted_name (deleted, name)
 ) COMMENT '标签表';
 
 -- 文章标签关联表
@@ -100,8 +121,17 @@ CREATE TABLE post_tag (
 
 -- 站点配置表
 CREATE TABLE settings (
-    k VARCHAR(100) PRIMARY KEY COMMENT '配置键',
-    v TEXT COMMENT '配置值',
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    setting_key VARCHAR(100) NOT NULL UNIQUE COMMENT '配置键',
+    value TEXT COMMENT '配置值',
     description VARCHAR(500) COMMENT '配置描述',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+    group_name VARCHAR(50) DEFAULT '基本设置' COMMENT '设置分组',
+    is_system TINYINT(1) DEFAULT 0 COMMENT '是否为系统设置',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT(1) DEFAULT 0 COMMENT '软删除标记',
+    
+    INDEX idx_group (group_name),
+    INDEX idx_key (setting_key),
+    INDEX idx_deleted_group (deleted, group_name)
 ) COMMENT '站点配置表';

@@ -1,6 +1,7 @@
 package com.herpoem.site.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.herpoem.site.mapper.TagMapper;
 import com.herpoem.site.model.entity.Tag;
 import com.herpoem.site.model.vo.TagVO;
@@ -20,7 +21,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
-public class TagServiceImpl implements TagService {
+public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagService {
     
     private final TagMapper tagMapper;
     

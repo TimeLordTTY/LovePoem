@@ -32,4 +32,20 @@ public class PostTypeController {
             return Result.error(e.getMessage());
         }
     }
+    
+    /**
+     * 根据名称获取文章类型
+     */
+    @GetMapping("/by-name/{name}")
+    public Result<PostTypeVO> getPostTypeByName(@PathVariable String name) {
+        try {
+            PostTypeVO postType = postTypeService.getPostTypeByName(name);
+            if (postType == null) {
+                return Result.error("文章类型不存在");
+            }
+            return Result.success(postType);
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
+        }
+    }
 }

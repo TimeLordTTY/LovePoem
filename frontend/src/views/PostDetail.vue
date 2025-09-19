@@ -104,7 +104,12 @@ const loadPost = async () => {
     loading.value = true
     const slug = route.params.slug
     
-    const response = await getPostBySlug(slug)
+    // 前台只显示已发布的公开和不公开文章
+    const params = {
+      status: 'PUBLISHED',
+      visibilityList: ['PUBLIC', 'UNLISTED']
+    }
+    const response = await getPostBySlug(slug, params)
     post.value = response.data
     
     // TODO: 实现上一篇/下一篇功能
