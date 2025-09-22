@@ -51,4 +51,9 @@ public interface PostMapper extends BaseMapper<Post> {
                                    @Param("status") Post.Status status, @Param("visibility") Post.Visibility visibility);
     PostNavigationVO selectNextPost(@Param("currentId") Long currentId, @Param("seriesId") Long seriesId,
                                    @Param("status") Post.Status status, @Param("visibility") Post.Visibility visibility);
+    
+    /**
+     * 获取系列的章节列表
+     */
+    List<PostListVO> selectChaptersBySeries(@Param("seriesId") Long seriesId);
 }

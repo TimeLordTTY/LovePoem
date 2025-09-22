@@ -23,6 +23,8 @@ public class User {
     
     private String displayName;
     
+    private String email;
+    
     @TableField("role")
     private UserRole role;
     
@@ -45,6 +47,6 @@ public class User {
      * 用户角色枚举
      */
     public enum UserRole {
-        ADMIN, AUTHOR
+        ADMIN, AUTHOR, USER
     }
 }

@@ -234,6 +234,9 @@ onMounted(() => {
 <style scoped>
 .tag-management {
   padding: 20px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
 }
 
 .page-header {
@@ -241,6 +244,17 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+  padding: 20px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: var(--shadow-light);
+}
+
+.page-header h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .pagination {
@@ -250,6 +264,42 @@ onMounted(() => {
 
 .table-container {
   margin-bottom: 20px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: var(--shadow-light);
+}
+
+.table-container .el-table {
+  background: var(--card-bg) !important;
+}
+
+.table-container .el-table__header {
+  background: var(--bg-secondary) !important;
+}
+
+.table-container .el-table__header th {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.table-container .el-table__row td {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.table-container .el-table__row:hover td {
+  background: var(--bg-secondary) !important;
+}
+
+.table-container .el-table__empty-block {
+  background: var(--card-bg) !important;
+}
+
+.table-container .el-table__empty-text {
+  color: var(--text-muted) !important;
 }
 
 .mobile-cards {
@@ -257,12 +307,12 @@ onMounted(() => {
 }
 
 .mobile-card {
-  background: #fff;
+  background: var(--card-bg);
   border-radius: 8px;
   padding: 16px;
   margin-bottom: 12px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e0e0e0;
+  border: 1px solid var(--border-color);
 }
 
 .card-header {

@@ -21,6 +21,9 @@ import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 文章服务实现类
@@ -85,6 +88,13 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         post.setSeriesId(postCreateDTO.getSeriesId());
         post.setChapterNo(postCreateDTO.getChapterNo());
         post.setCoverAssetId(postCreateDTO.getCoverAssetId());
+        post.setSortOrder(postCreateDTO.getSortOrder());
+        post.setWallpaperUrl(postCreateDTO.getWallpaperUrl());
+        post.setWallpaperOpacity(postCreateDTO.getWallpaperOpacity());
+        post.setAnnotations(postCreateDTO.getAnnotations());
+        post.setChapterTitle(postCreateDTO.getChapterTitle());
+        post.setTableOfContents(postCreateDTO.getTableOfContents());
+        post.setAutoGenerateToc(postCreateDTO.getAutoGenerateToc());
         post.setVisibility(postCreateDTO.getVisibility());
         post.setStatus(postCreateDTO.getStatus());
         
@@ -130,6 +140,13 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         post.setSeriesId(postCreateDTO.getSeriesId());
         post.setChapterNo(postCreateDTO.getChapterNo());
         post.setCoverAssetId(postCreateDTO.getCoverAssetId());
+        post.setSortOrder(postCreateDTO.getSortOrder());
+        post.setWallpaperUrl(postCreateDTO.getWallpaperUrl());
+        post.setWallpaperOpacity(postCreateDTO.getWallpaperOpacity());
+        post.setAnnotations(postCreateDTO.getAnnotations());
+        post.setChapterTitle(postCreateDTO.getChapterTitle());
+        post.setTableOfContents(postCreateDTO.getTableOfContents());
+        post.setAutoGenerateToc(postCreateDTO.getAutoGenerateToc());
         post.setVisibility(postCreateDTO.getVisibility());
         post.setStatus(postCreateDTO.getStatus());
         
@@ -236,5 +253,81 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
     @Override
     public List<PostListVO> getPostsBySeries(Long seriesId, Post.Status status, Post.Visibility visibility) {
         return postMapper.selectPostsBySeries(seriesId, status, visibility);
+    }
+    
+    @Override
+    @Transactional
+    public void updatePostSortOrder(Long id, Integer sortOrder, Long userId) {
+        Post post = this.getById(id);
+        if (post == null) {
+            throw new RuntimeException("文章不存在");
+        }
+        
+        post.setSortOrder(sortOrder);
+        post.setUpdatedBy(userId);
+        this.updateById(post);
+    }
+    
+    @Override
+    @Transactional
+    public void batchUpdatePostSortOrder(List<Long> postIds, Long userId) {
+        for (int i = 0; i < postIds.size(); i++) {
+            Long postId = postIds.get(i);
+            // 按照列表顺序，第一个最大排序值
+            int sortOrder = postIds.size() - i;
+            updatePostSortOrder(postId, sortOrder, userId);
+        }
+    }
+    
+    @Override
+    public String generateTableOfContents(String contentMd) {
+        if (!StringUtils.hasText(contentMd)) {
+            return "[]";
+        }
+        
+        List<TocItem> tocItems = new ArrayList<>();
+        Pattern pattern = Pattern.compile("^(#{1,6})\\s+(.+)$", Pattern.MULTILINE);
+        Matcher matcher = pattern.matcher(contentMd);
+        
+        int counter = 1;
+        while (matcher.find()) {
+            String hashes = matcher.group(1);
+            String title = matcher.group(2);
+            int level = hashes.length();
+            String id = "heading-" + counter++;
+            
+            TocItem item = new TocItem();
+            item.id = id;
+            item.title = title;
+            item.level = level;
+            tocItems.add(item);
+        }
+        
+        // 简单的JSON序列化（实际项目中应使用Jackson）
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < tocItems.size(); i++) {
+            if (i > 0) json.append(",");
+            TocItem item = tocItems.get(i);
+            json.append("{")
+                .append("\"id\":\"").append(item.id).append("\",")
+                .append("\"title\":\"").append(item.title.replace("\"", "\\\"")).append("\",")
+                .append("\"level\":").append(item.level)
+                .append("}");
+        }
+        json.append("]");
+        
+        return json.toString();
+    }
+    
+    @Override
+    public List<PostListVO> getChaptersBySeries(Long seriesId) {
+        return postMapper.selectChaptersBySeries(seriesId);
+    }
+    
+    // 内部类用于目录项
+    private static class TocItem {
+        String id;
+        String title;
+        int level;
     }
 }

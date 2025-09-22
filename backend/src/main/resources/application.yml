@@ -7,9 +7,9 @@ spring:
   
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://124.220.229.91:3306/poem?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://124.220.229.91:9009/poem?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
     username: poem
-    password: ${DB_PASSWORD:123456}
+    password: ${DB_PASSWORD:mbRckCN4m5zAR3E2}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 5

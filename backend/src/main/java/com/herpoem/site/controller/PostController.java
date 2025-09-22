@@ -238,4 +238,61 @@ public class PostController {
         return Result.success();
     }
     
+    /**
+     * 更新文章排序
+     */
+    @PostMapping("/{id}/sort-order")
+    public Result<Void> updateSortOrder(@PathVariable Long id, 
+                                       @RequestBody Map<String, Integer> request) {
+        // TODO: 从JWT token中获取用户ID
+        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        
+        Integer sortOrder = request.get("sortOrder");
+        if (sortOrder == null) {
+            return Result.error("排序值不能为空");
+        }
+        
+        postService.updatePostSortOrder(id, sortOrder, userId);
+        return Result.success();
+    }
+    
+    /**
+     * 批量更新文章排序
+     */
+    @PostMapping("/batch-sort")
+    public Result<Void> batchUpdateSortOrder(@RequestBody List<Long> postIds) {
+        // TODO: 从JWT token中获取用户ID
+        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        
+        if (postIds == null || postIds.isEmpty()) {
+            return Result.error("请选择要排序的文章");
+        }
+        
+        postService.batchUpdatePostSortOrder(postIds, userId);
+        return Result.success();
+    }
+    
+    /**
+     * 自动生成文章目录
+     */
+    @PostMapping("/generate-toc")
+    public Result<String> generateTableOfContents(@RequestBody Map<String, String> request) {
+        String contentMd = request.get("contentMd");
+        if (contentMd == null) {
+            return Result.error("文章内容不能为空");
+        }
+        
+        String toc = postService.generateTableOfContents(contentMd);
+        return Result.success(toc);
+    }
+    
+    /**
+     * 获取系列的章节列表
+     */
+    @GetMapping("/series/{seriesId}/chapters")
+    public Result<List<PostListVO>> getChaptersBySeries(@PathVariable Long seriesId) {
+        List<PostListVO> chapters = postService.getChaptersBySeries(seriesId);
+        return Result.success(chapters);
+    }
+    
 }

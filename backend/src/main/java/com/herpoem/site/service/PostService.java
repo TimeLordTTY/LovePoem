@@ -67,4 +67,24 @@ public interface PostService extends IService<Post> {
      * 获取系列中的文章列表
      */
     List<PostListVO> getPostsBySeries(Long seriesId, Post.Status status, Post.Visibility visibility);
+    
+    /**
+     * 更新文章排序
+     */
+    void updatePostSortOrder(Long id, Integer sortOrder, Long userId);
+    
+    /**
+     * 批量更新文章排序
+     */
+    void batchUpdatePostSortOrder(List<Long> postIds, Long userId);
+    
+    /**
+     * 自动生成文章目录
+     */
+    String generateTableOfContents(String contentMd);
+    
+    /**
+     * 获取系列的章节列表
+     */
+    List<PostListVO> getChaptersBySeries(Long seriesId);
 }

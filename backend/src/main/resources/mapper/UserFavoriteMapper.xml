@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herpoem.site.mapper.UserFavoriteMapper">
+    
+    <!-- 分页查询用户收藏的文章 -->
+    <select id="selectUserFavorites" resultType="com.herpoem.site.model.vo.PostListVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title,
+            p.summary,
+            LEFT(p.content_text, 200) as excerpt,
+            p.post_type_id as postTypeId,
+            p.series_id as seriesId,
+            p.chapter_no as chapterNo,
+            p.cover_asset_id as coverAssetId,
+            p.sort_order as sortOrder,
+            p.visibility,
+            p.status,
+            p.publish_date as publishDate,
+            p.created_at as createdAt,
+            p.updated_at as updatedAt,
+            pt.name as postTypeName,
+            u.display_name as authorName,
+            uf.created_at as favoriteTime,
+            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+        FROM user_favorites uf
+        INNER JOIN post p ON uf.post_id = p.id
+        LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        LEFT JOIN users u ON p.created_by = u.id
+        WHERE uf.user_id = #{userId}
+        AND p.deleted = 0
+        AND p.status = 'PUBLISHED'
+        AND p.visibility IN ('PUBLIC', 'UNLISTED')
+        ORDER BY uf.created_at DESC
+    </select>
+    
+    <!-- 检查用户是否收藏了某篇文章 -->
+    <select id="checkUserFavorite" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM user_favorites
+        WHERE user_id = #{userId} AND post_id = #{postId}
+    </select>
+    
+</mapper> 

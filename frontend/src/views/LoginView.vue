@@ -42,6 +42,10 @@
           </button>
         </form>
         
+        <div class="register-link">
+          <p>还没有账号？<router-link to="/register" class="register-btn">立即注册</router-link></p>
+        </div>
+        
       </div>
     </div>
   </div>
@@ -208,6 +212,30 @@ const handleLogin = async () => {
 
 .demo-accounts strong {
   color: var(--text-secondary);
+}
+
+.register-link {
+  text-align: center;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.register-link p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0;
+}
+
+.register-btn {
+  color: var(--accent-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.register-btn:hover {
+  color: var(--accent-secondary);
+  text-decoration: underline;
 }
 
 @media (max-width: 480px) {

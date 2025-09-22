@@ -30,9 +30,13 @@ public class PostListVO {
     
     private Integer chapterNo;
     
+    private String chapterTitle;
+    
     private Long coverAssetId;
     
     private String coverAssetUrl;
+    
+    private Integer sortOrder;
     
     private Post.Visibility visibility;
     

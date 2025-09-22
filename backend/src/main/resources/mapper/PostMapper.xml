@@ -14,6 +14,7 @@
             p.series_id as seriesId,
             p.chapter_no as chapterNo,
             p.cover_asset_id as coverAssetId,
+            p.sort_order as sortOrder,
             p.visibility,
             p.status,
             p.publish_date as publishDate,
@@ -49,7 +50,37 @@
         <if test="postTypeId != null">
             AND p.post_type_id = #{postTypeId}
         </if>
-        ORDER BY p.publish_date DESC, p.created_at DESC
+        ORDER BY p.sort_order DESC, p.publish_date DESC, p.created_at DESC
+    </select>
+    
+    <!-- 获取系列的章节列表 -->
+    <select id="selectChaptersBySeries" resultType="com.herpoem.site.model.vo.PostListVO">
+        SELECT 
+            p.id,
+            p.slug,
+            p.title,
+            p.chapter_no as chapterNo,
+            p.chapter_title as chapterTitle,
+            p.summary,
+            p.post_type_id as postTypeId,
+            p.series_id as seriesId,
+            p.sort_order as sortOrder,
+            p.visibility,
+            p.status,
+            p.publish_date as publishDate,
+            p.created_at as createdAt,
+            p.updated_at as updatedAt,
+            pt.name as postTypeName,
+            u.display_name as authorName,
+            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+        FROM post p
+        LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        LEFT JOIN users u ON p.created_by = u.id
+        WHERE p.series_id = #{seriesId}
+        AND p.deleted = 0
+        AND p.status = 'PUBLISHED'
+        AND p.visibility IN ('PUBLIC', 'UNLISTED')
+        ORDER BY p.chapter_no ASC, p.sort_order DESC, p.created_at ASC
     </select>
     
     <!-- 根据slug查询文章详情 -->

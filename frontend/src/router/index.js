@@ -51,6 +51,18 @@ const routes = [
     meta: { title: '归档' }
   },
   {
+    path: '/register',
+    name: 'Register',
+    component: () => import('@/views/RegisterView.vue'),
+    meta: { title: '用户注册' }
+  },
+  {
+    path: '/favorites',
+    name: 'Favorites',
+    component: () => import('@/views/FavoritesView.vue'),
+    meta: { title: '我的收藏', requiresAuth: true }
+  },
+  {
     path: '/admin',
     name: 'Admin',
     component: () => import('@/views/AdminView.vue'),

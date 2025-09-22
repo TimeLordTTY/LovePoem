@@ -67,10 +67,12 @@ public class SecurityConfig {
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             // 配置请求授权
             .authorizeHttpRequests(auth -> auth
-                // 允许所有人访问登录接口
-                .requestMatchers("/api/auth/login").permitAll()
+                // 允许所有人访问登录和注册接口
+                .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/check-username", "/api/auth/check-email").permitAll()
                 // 允许所有人访问公开的文章接口（游客访问）
                 .requestMatchers("/api/posts/**", "/api/tags/**", "/api/series/**", "/api/post-types/**").permitAll()
+                // 允许所有人访问站点信息接口
+                .requestMatchers("/api/site/**").permitAll()
                 // 其他请求需要认证
                 .anyRequest().authenticated()
             )

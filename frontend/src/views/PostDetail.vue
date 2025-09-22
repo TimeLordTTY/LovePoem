@@ -1,7 +1,49 @@
 <template>
   <div class="post-detail">
+    <!-- 顶部导航栏 -->
+    <div class="top-nav" v-if="post">
+      <div class="nav-left">
+        <el-button @click="goBack" text class="back-btn">
+          <el-icon><ArrowLeft /></el-icon>
+          返回
+        </el-button>
+      </div>
+      <div class="nav-right">
+        <el-button
+          v-if="!isFavorited"
+          type="primary"
+          @click="addToFavorites"
+          :loading="favoriteLoading"
+          class="favorite-btn"
+        >
+          <el-icon><Star /></el-icon>
+          收藏
+        </el-button>
+        <el-button
+          v-else
+          type="warning"
+          @click="removeFromFavorites"
+          :loading="favoriteLoading"
+          class="favorite-btn"
+        >
+          <el-icon><StarFilled /></el-icon>
+          已收藏
+        </el-button>
+      </div>
+    </div>
+    
     <div class="container">
-      <article class="post-content" v-if="post">
+      <div class="post-layout" v-if="post">
+        <!-- 左侧目录 -->
+        <aside class="toc-sidebar" v-if="showToc">
+          <TableOfContents 
+            :table-of-contents="post.tableOfContents"
+            :auto-collapse="false"
+          />
+        </aside>
+        
+        <!-- 主要内容 -->
+        <article class="post-content" :class="{ 'with-toc': showToc }">
         <!-- 文章头部 -->
         <header class="post-header">
           <div class="post-meta">
@@ -12,11 +54,18 @@
           
           <h1 class="post-title">{{ post.title }}</h1>
           
+          <!-- 作者自述 -->
+          <div class="post-summary" v-if="post.summary">
+            <p>{{ post.summary }}</p>
+          </div>
+          
           <div class="post-tags" v-if="post.tags && post.tags.length">
             <span v-for="tag in post.tags" :key="tag" class="tag">
               {{ tag }}
             </span>
           </div>
+
+
         </header>
         
         <!-- 文章内容 -->
@@ -44,7 +93,8 @@
             </router-link>
           </div>
         </footer>
-      </article>
+        </article>
+      </div>
       
       <!-- 加载状态 -->
       <div v-else-if="loading" class="loading">
@@ -64,14 +114,39 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { Star, StarFilled, ArrowLeft } from '@element-plus/icons-vue'
 import { getPostBySlug } from '@/api/post'
+import { addFavorite, removeFavorite, checkFavorite } from '@/api/favorite'
+import { useAuthStore } from '@/store/auth'
+import TableOfContents from '@/components/TableOfContents.vue'
 
 const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
 const post = ref(null)
 const loading = ref(true)
 const prevPost = ref(null)
 const nextPost = ref(null)
+const isFavorited = ref(false)
+const favoriteLoading = ref(false)
+
+// 目录显示控制
+const showToc = computed(() => {
+  if (!post.value?.tableOfContents) return false
+  try {
+    const tocItems = JSON.parse(post.value.tableOfContents)
+    return tocItems.length > 0
+  } catch {
+    return false
+  }
+})
+
+// 返回上一页
+const goBack = () => {
+  router.back()
+}
 
 // 模拟Markdown渲染
 const renderedContent = computed(() => {
@@ -79,12 +154,17 @@ const renderedContent = computed(() => {
   
   // 简单的Markdown渲染（实际项目中应使用markdown-it等库）
   let content = post.value.contentMd
+  let headingCounter = 1
+  
+  content = content
     // 处理图片语法 ![alt](url)
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; display: block; margin: 20px auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />')
-    // 处理标题
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    // 处理标题并添加ID
+    .replace(/^(#{1,6})\s+(.+)$/gm, function(match, hashes, title) {
+      const level = hashes.length
+      const id = `heading-${headingCounter++}`
+      return `<h${level} id="${id}">${title}</h${level}>`
+    })
     // 处理加粗和斜体
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
@@ -129,11 +209,68 @@ const loadPost = async () => {
     prevPost.value = null
     nextPost.value = null
     
+    // 检查收藏状态
+    if (authStore.isLoggedIn && post.value) {
+      checkFavoriteStatus()
+    }
+    
   } catch (error) {
     console.error('加载文章失败:', error)
     post.value = null
   } finally {
     loading.value = false
+  }
+}
+
+// 检查收藏状态
+const checkFavoriteStatus = async () => {
+  if (!post.value || !authStore.isLoggedIn) return
+  
+  try {
+    const response = await checkFavorite(post.value.id)
+    isFavorited.value = response.data.isFavorited
+  } catch (error) {
+    console.error('检查收藏状态失败:', error)
+  }
+}
+
+// 添加收藏
+const addToFavorites = async () => {
+  if (!authStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  
+  try {
+    favoriteLoading.value = true
+    await addFavorite(post.value.id)
+    isFavorited.value = true
+    ElMessage.success('已添加到收藏')
+  } catch (error) {
+    console.error('添加收藏失败:', error)
+    ElMessage.error(error.message || '添加收藏失败')
+  } finally {
+    favoriteLoading.value = false
+  }
+}
+
+// 取消收藏
+const removeFromFavorites = async () => {
+  if (!authStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  
+  try {
+    favoriteLoading.value = true
+    await removeFavorite(post.value.id)
+    isFavorited.value = false
+    ElMessage.success('已取消收藏')
+  } catch (error) {
+    console.error('取消收藏失败:', error)
+    ElMessage.error(error.message || '取消收藏失败')
+  } finally {
+    favoriteLoading.value = false
   }
 }
 
@@ -144,14 +281,73 @@ onMounted(() => {
 
 <style scoped>
 .post-detail {
-  min-height: calc(100vh - 160px);
-  padding: 40px 0;
+  min-height: 100vh;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+/* 顶部导航栏 */
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--header-bg);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border-color);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-left, .nav-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.back-btn {
+  color: var(--text-primary);
+  padding: 8px 16px;
+  transition: all 0.3s ease;
+}
+
+.back-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--accent-primary);
+}
+
+.favorite-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 500;
 }
 
 .container {
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 40px 20px;
+}
+
+.post-layout {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+}
+
+.toc-sidebar {
+  flex: 0 0 280px;
+  position: sticky;
+  top: 20px;
+}
+
+.post-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.post-content.with-toc {
+  max-width: none;
 }
 
 .post-content {
@@ -194,8 +390,21 @@ onMounted(() => {
   font-size: 2.5rem;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   line-height: 1.2;
+}
+
+.post-summary {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.post-summary p {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0;
 }
 
 .post-tags {
@@ -214,6 +423,17 @@ onMounted(() => {
   font-size: 12px;
   font-weight: 500;
   border: 1px solid var(--border-color);
+}
+
+.post-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.post-actions .el-button {
+  padding: 12px 24px;
+  font-size: 16px;
 }
 
 .post-body {
@@ -349,6 +569,36 @@ onMounted(() => {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* 移动端响应式设计 */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 16px;
+  }
+  
+  .post-layout {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .toc-sidebar {
+    flex: none;
+    position: static;
+    order: -1;
+  }
+  
+  .post-header {
+    padding: 20px 16px;
+  }
+  
+  .post-title {
+    font-size: 1.8rem;
+  }
+  
+  .post-body {
+    padding: 0 16px 20px;
+  }
 }
 
 @media (max-width: 768px) {

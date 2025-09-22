@@ -41,6 +41,41 @@ public class Post {
     
     private Long coverAssetId;
     
+    /**
+     * 排序权重，数字越大越靠前
+     */
+    private Integer sortOrder;
+    
+    /**
+     * 文章背景壁纸URL
+     */
+    private String wallpaperUrl;
+    
+    /**
+     * 壁纸透明度(0.0-1.0)
+     */
+    private Double wallpaperOpacity;
+    
+    /**
+     * 文章注解（JSON格式）
+     */
+    private String annotations;
+    
+    /**
+     * 章节标题
+     */
+    private String chapterTitle;
+    
+    /**
+     * 文章目录（JSON格式）
+     */
+    private String tableOfContents;
+    
+    /**
+     * 是否自动生成目录
+     */
+    private Boolean autoGenerateToc;
+    
     @TableField("visibility")
     private Visibility visibility;
     

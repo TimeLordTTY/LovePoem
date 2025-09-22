@@ -2,6 +2,8 @@ package com.herpoem.site.model.dto;
 
 import com.herpoem.site.model.entity.Post;
 import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -14,6 +16,8 @@ import java.util.List;
  * @author TimeLord
  */
 @Data
+@Getter
+@Setter
 public class PostCreateDTO {
     
     @NotBlank(message = "标题不能为空")
@@ -43,6 +47,20 @@ public class PostCreateDTO {
     private Post.Status status = Post.Status.DRAFT;
     
     private LocalDateTime publishDate;
+    
+    private Integer sortOrder = 0;
+    
+    private String wallpaperUrl;
+    
+    private Double wallpaperOpacity = 0.10;
+    
+    private String annotations;
+    
+    private String chapterTitle;
+    
+    private String tableOfContents;
+    
+    private Boolean autoGenerateToc = true;
     
     private List<Long> tagIds;
 }

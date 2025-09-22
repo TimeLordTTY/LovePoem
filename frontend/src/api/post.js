@@ -34,3 +34,23 @@ export function publishPost(id) {
 export function updatePostVisibility(id, visibility) {
   return request.post(`/posts/${id}/visibility`, { visibility })
 }
+
+// 更新文章排序
+export function updatePostSortOrder(id, sortOrder) {
+  return request.post(`/posts/${id}/sort-order`, { sortOrder })
+}
+
+// 批量更新文章排序
+export function batchUpdatePostSortOrder(postIds) {
+  return request.post('/posts/batch-sort', postIds)
+}
+
+// 自动生成文章目录
+export function generateTableOfContents(contentMd) {
+  return request.post('/posts/generate-toc', { contentMd })
+}
+
+// 获取系列的章节列表
+export function getChaptersBySeries(seriesId) {
+  return request.get(`/posts/series/${seriesId}/chapters`)
+}
