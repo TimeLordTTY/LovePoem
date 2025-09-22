@@ -40,3 +40,5 @@ public class StatsVO {
      */
     private Long totalViews;
 }
+
+

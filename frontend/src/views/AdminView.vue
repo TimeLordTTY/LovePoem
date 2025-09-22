@@ -160,6 +160,52 @@ onMounted(() => {
   margin-bottom: 48px;
 }
 
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .admin-view {
+    padding: 15px;
+  }
+  
+  .page-title {
+    font-size: 2rem;
+    margin-bottom: 8px;
+  }
+  
+  .page-subtitle {
+    font-size: 1rem;
+  }
+  
+  .admin-cards {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  
+  .admin-card {
+    padding: 24px 16px;
+  }
+  
+  .card-icon {
+    font-size: 2.5rem;
+    margin-bottom: 12px;
+  }
+  
+  .admin-card h3 {
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+  }
+  
+  .admin-card p {
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+  
+  .card-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+}
+
 .admin-card {
   background: var(--card-bg);
   border-radius: 12px;

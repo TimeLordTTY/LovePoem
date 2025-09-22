@@ -43,7 +43,7 @@ jwt:
 # 应用配置
 app:
   upload:
-    path: ${UPLOAD_PATH:uploads}
+    path: ${UPLOAD_PATH:/www/wwwroot/love-poem/backend/uploads}
     url-prefix: /uploads
     max-size: 5242880 # 5MB
 

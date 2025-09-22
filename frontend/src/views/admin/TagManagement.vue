@@ -9,22 +9,49 @@
     </div>
 
     <!-- 标签列表 -->
-    <el-table :data="tags" v-loading="loading" stripe>
-      <el-table-column prop="name" label="标签名称" min-width="150" />
-      <el-table-column prop="description" label="描述" min-width="200" />
-      <el-table-column prop="createdByName" label="创建者" width="120" />
-      <el-table-column prop="createdAt" label="创建时间" width="180">
-        <template #default="{ row }">
-          {{ formatDate(row.createdAt) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="150" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="editTag(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="deleteTag(row)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="table-container">
+      <!-- 桌面端表格 -->
+      <el-table :data="tags" v-loading="loading" stripe class="desktop-table">
+        <el-table-column prop="name" label="标签名称" min-width="150" />
+        <el-table-column prop="description" label="描述" min-width="200" />
+        <el-table-column prop="createdByName" label="创建者" width="120" />
+        <el-table-column prop="createdAt" label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.createdAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="150" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" @click="editTag(row)">编辑</el-button>
+            <el-button size="small" type="danger" @click="deleteTag(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      
+      <!-- 移动端卡片列表 -->
+      <div class="mobile-cards" v-loading="loading">
+        <div class="mobile-card" v-for="tag in tags" :key="tag.id">
+          <div class="card-header">
+            <h3 class="tag-name">{{ tag.name }}</h3>
+            <div class="tag-meta">
+              <span class="creator">{{ tag.createdByName }}</span>
+            </div>
+          </div>
+          
+          <div class="card-content">
+            <p class="tag-description">{{ tag.description || '暂无描述' }}</p>
+            <div class="tag-info">
+              <span class="create-time">创建时间：{{ formatDate(tag.createdAt) }}</span>
+            </div>
+          </div>
+          
+          <div class="card-actions">
+            <el-button size="small" @click="editTag(tag)">编辑</el-button>
+            <el-button size="small" type="danger" @click="deleteTag(tag)">删除</el-button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 分页 -->
     <div class="pagination">
@@ -220,4 +247,167 @@ onMounted(() => {
   margin-top: 20px;
   text-align: right;
 }
+
+.table-container {
+  margin-bottom: 20px;
+}
+
+.mobile-cards {
+  display: none;
+}
+
+.mobile-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.tag-name {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: #333;
+}
+
+.tag-meta {
+  text-align: right;
+}
+
+.creator {
+  font-size: 12px;
+  color: #666;
+  background: #f0f0f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.card-content {
+  margin-bottom: 12px;
+}
+
+.tag-description {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.tag-info {
+  font-size: 12px;
+  color: #999;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.card-actions .el-button {
+  flex: 0 0 auto;
+  min-width: 60px;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .tag-management {
+    padding: 10px;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .page-header h2 {
+    font-size: 1.5rem;
+    text-align: center;
+    margin: 0;
+  }
+  
+  .page-header .el-button {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 16px;
+    height: auto;
+  }
+  
+  .desktop-table {
+    display: none;
+  }
+  
+  .mobile-cards {
+    display: block;
+  }
+  
+  .pagination {
+    margin-top: 15px;
+    text-align: center;
+  }
+  
+  .pagination :deep(.el-pagination) {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  
+  .pagination :deep(.el-pagination__total),
+  .pagination :deep(.el-pagination__sizes) {
+    margin-bottom: 8px;
+  }
+  
+  /* 对话框移动端适配 */
+  :deep(.el-dialog) {
+    width: 95% !important;
+    margin: 0 auto;
+    max-height: 90vh;
+  }
+  
+  :deep(.el-dialog__header) {
+    padding: 15px;
+  }
+  
+  :deep(.el-dialog__body) {
+    padding: 15px;
+    max-height: calc(90vh - 120px);
+    overflow-y: auto;
+  }
+  
+  :deep(.el-form-item__label) {
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  
+  :deep(.el-form-item__content) {
+    margin-left: 0 !important;
+    margin-top: 8px;
+  }
+  
+  :deep(.el-input__wrapper),
+  :deep(.el-textarea__inner) {
+    font-size: 16px; /* 防止iOS缩放 */
+  }
+  
+  :deep(.el-dialog__footer) {
+    padding: 15px;
+    text-align: center;
+  }
+  
+  :deep(.el-dialog__footer .el-button) {
+    width: 48%;
+    margin: 0 1%;
+  }
+}
 </style>
+
+

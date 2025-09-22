@@ -43,3 +43,5 @@ public interface SettingService extends IService<Setting> {
      */
     Map<String, List<Setting>> getAllGrouped();
 }
+
+

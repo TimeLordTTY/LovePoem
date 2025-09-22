@@ -30,3 +30,13 @@ export function getFooter() {
     method: 'get'
   })
 }
+
+/**
+ * 获取网站设置
+ */
+export function getSiteSettings() {
+  return request({
+    url: '/site/info',
+    method: 'get'
+  })
+}

@@ -10,58 +10,61 @@
 
     <!-- 搜索和筛选 -->
     <div class="filters">
-      <el-row :gutter="16">
-        <el-col :span="6">
-          <el-input
-            v-model="filters.keyword"
-            placeholder="搜索文章标题..."
-            clearable
-            @input="handleSearch"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </el-col>
-        <el-col :span="3">
-          <el-select v-model="filters.status" placeholder="全部状态" clearable>
-            <el-option label="已发布" value="PUBLISHED" />
-            <el-option label="草稿" value="DRAFT" />
-          </el-select>
-        </el-col>
-        <el-col :span="3">
-          <el-select v-model="filters.visibility" placeholder="全部可见性" clearable>
-            <el-option label="公开" value="PUBLIC" />
-            <el-option label="不公开" value="UNLISTED" />
-            <el-option label="私有" value="PRIVATE" />
-          </el-select>
-        </el-col>
-        <el-col :span="6">
-          <div class="action-buttons">
-            <el-button type="primary" @click="loadPosts" :loading="loading" class="action-btn">
-              <el-icon><Search /></el-icon>
-              查询
-            </el-button>
-            <el-button @click="resetFilters" class="action-btn">
-              <el-icon><RefreshLeft /></el-icon>
-              重置
-            </el-button>
-            <el-button type="success" @click="batchPublish" :disabled="selectedPosts.length === 0" class="action-btn">
-              <el-icon><Promotion /></el-icon>
-              批量发布
-            </el-button>
-          </div>
-        </el-col>
-      </el-row>
+      <!-- 搜索框 -->
+      <div class="filter-section">
+        <el-input
+          v-model="filters.keyword"
+          placeholder="搜索文章标题..."
+          clearable
+          @input="handleSearch"
+          class="search-input"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+      
+      <!-- 筛选条件 -->
+      <div class="filter-section filter-selects">
+        <el-select v-model="filters.status" placeholder="全部状态" clearable class="filter-select">
+          <el-option label="已发布" value="PUBLISHED" />
+          <el-option label="草稿" value="DRAFT" />
+        </el-select>
+        <el-select v-model="filters.visibility" placeholder="全部可见性" clearable class="filter-select">
+          <el-option label="公开" value="PUBLIC" />
+          <el-option label="不公开" value="UNLISTED" />
+          <el-option label="私有" value="PRIVATE" />
+        </el-select>
+      </div>
+      
+      <!-- 操作按钮 -->
+      <div class="filter-section filter-actions">
+        <el-button type="primary" @click="loadPosts" :loading="loading" class="action-btn">
+          <el-icon><Search /></el-icon>
+          查询
+        </el-button>
+        <el-button @click="resetFilters" class="action-btn">
+          <el-icon><RefreshLeft /></el-icon>
+          重置
+        </el-button>
+        <el-button type="success" @click="batchPublish" :disabled="selectedPosts.length === 0" class="action-btn">
+          <el-icon><Promotion /></el-icon>
+          批量发布
+        </el-button>
+      </div>
     </div>
 
     <!-- 文章列表 -->
-    <el-table 
-      :data="posts" 
-      v-loading="loading" 
-      stripe
-      @selection-change="handleSelectionChange"
-    >
+    <div class="table-container">
+      <!-- 桌面端表格 -->
+      <el-table 
+        :data="posts" 
+        v-loading="loading" 
+        stripe
+        @selection-change="handleSelectionChange"
+        class="desktop-table"
+      >
       <el-table-column type="selection" width="55" />
       <el-table-column prop="title" label="标题" width="250" show-overflow-tooltip />
       <el-table-column prop="postTypeName" label="类型" width="100" />
@@ -107,7 +110,52 @@
           </div>
         </template>
       </el-table-column>
-    </el-table>
+      </el-table>
+      
+      <!-- 移动端卡片列表 -->
+      <div class="mobile-cards" v-loading="loading">
+        <div class="mobile-card" v-for="post in posts" :key="post.id">
+          <div class="card-header">
+            <h3 class="post-title">{{ post.title }}</h3>
+            <div class="post-meta">
+              <el-tag size="small" :type="post.status === 'PUBLISHED' ? 'success' : 'warning'">
+                {{ post.status === 'PUBLISHED' ? '已发布' : '草稿' }}
+              </el-tag>
+              <el-tag size="small" :type="getVisibilityType(post.visibility)">
+                {{ getVisibilityLabel(post.visibility) }}
+              </el-tag>
+            </div>
+          </div>
+          
+          <div class="card-content">
+            <div class="post-info">
+              <span class="info-item"><strong>类型:</strong> {{ post.postTypeName }}</span>
+              <span class="info-item" v-if="post.seriesName"><strong>系列:</strong> {{ post.seriesName }}</span>
+              <span class="info-item"><strong>发布时间:</strong> {{ formatDate(post.publishDate) }}</span>
+            </div>
+          </div>
+          
+          <div class="card-actions">
+            <el-button size="small" @click="editPost(post)">编辑</el-button>
+            <el-button 
+              size="small" 
+              :type="post.status === 'PUBLISHED' ? 'warning' : 'success'"
+              @click="toggleStatus(post)"
+            >
+              {{ post.status === 'PUBLISHED' ? '转草稿' : '发布' }}
+            </el-button>
+            <el-button 
+              size="small" 
+              :type="post.visibility === 'PUBLIC' ? 'info' : 'primary'"
+              @click="toggleVisibility(post)"
+            >
+              {{ post.visibility === 'PUBLIC' ? '设私有' : '设公开' }}
+            </el-button>
+            <el-button size="small" type="danger" @click="deletePost(post)">删除</el-button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 分页 -->
     <div class="pagination">
@@ -148,23 +196,24 @@
           <p>支持 .doc 和 .docx 格式，上传后将自动填充文章内容</p>
         </div>
       </div>
-      <el-form :model="postForm" :rules="postRules" ref="postFormRef" label-width="100px">
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item label="文章标题" prop="title">
+      <el-form :model="postForm" :rules="postRules" ref="postFormRef" label-width="100px" class="post-form">
+        <div class="form-section">
+          <div class="form-row">
+            <el-form-item label="文章标题" prop="title" class="form-item-full">
               <el-input v-model="postForm.title" placeholder="请输入文章标题" />
             </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="文章别名" prop="slug">
+          </div>
+          
+          <div class="form-row">
+            <el-form-item label="文章别名" prop="slug" class="form-item-full">
               <el-input v-model="postForm.slug" placeholder="URL友好的别名" />
             </el-form-item>
-          </el-col>
-        </el-row>
-        
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="文章类型" prop="postTypeId">
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-row form-row-multi">
+            <el-form-item label="文章类型" prop="postTypeId" class="form-item">
               <el-select v-model="postForm.postTypeId" placeholder="选择文章类型">
                 <el-option
                   v-for="type in postTypes"
@@ -174,9 +223,17 @@
                 />
               </el-select>
             </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="所属系列">
+            <el-form-item label="可见性" prop="visibility" class="form-item">
+              <el-select v-model="postForm.visibility" placeholder="选择可见性">
+                <el-option label="公开" value="PUBLIC" />
+                <el-option label="不公开" value="UNLISTED" />
+                <el-option label="私有" value="PRIVATE" />
+              </el-select>
+            </el-form-item>
+          </div>
+          
+          <div class="form-row">
+            <el-form-item label="所属系列" class="form-item-full">
               <el-select v-model="postForm.seriesId" placeholder="选择系列（可选）" clearable>
                 <el-option
                   v-for="series in seriesList"
@@ -186,17 +243,8 @@
                 />
               </el-select>
             </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="可见性" prop="visibility">
-              <el-select v-model="postForm.visibility" placeholder="选择可见性">
-                <el-option label="公开" value="PUBLIC" />
-                <el-option label="不公开" value="UNLISTED" />
-                <el-option label="私有" value="PRIVATE" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-        </el-row>
+          </div>
+        </div>
 
         <el-form-item label="作者自述">
           <el-input
@@ -234,7 +282,7 @@
               v-model="postForm.contentMd"
               type="textarea"
               :rows="15"
-              placeholder="请输入Markdown格式的文章内容&#10;&#10;图片语法示例：![图片描述](图片URL)&#10;&#10;您也可以使用上方的"插入图片"按钮上传图片"
+              placeholder="请输入Markdown格式的文章内容&#10;&#10;图片语法示例：![图片描述](图片URL)&#10;&#10;您也可以使用上方的插入图片按钮上传图片"
               class="markdown-editor"
             />
           </div>
@@ -756,11 +804,31 @@ onMounted(() => {
   padding: 20px;
 }
 
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .post-management {
+    padding: 10px;
+  }
+}
+
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    gap: 15px;
+    align-items: stretch;
+  }
+  
+  .page-header h2 {
+    text-align: center;
+    margin: 0;
+  }
 }
 
 .filters {
@@ -771,10 +839,77 @@ onMounted(() => {
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
 }
 
+.filter-section {
+  margin-bottom: 16px;
+}
+
+.filter-section:last-child {
+  margin-bottom: 0;
+}
+
+.search-input {
+  width: 100%;
+}
+
+.filter-selects {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-select {
+  flex: 1;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* 表单样式 */
+.post-form {
+  width: 100%;
+}
+
+.form-section {
+  margin-bottom: 20px;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-row-multi {
+  flex-wrap: wrap;
+}
+
+.form-item {
+  flex: 1;
+  min-width: 200px;
+}
+
+.form-item-full {
+  flex: 1;
+  width: 100%;
+}
+
+.form-item .el-select,
+.form-item-full .el-select {
+  width: 100%;
+}
+
 .action-buttons {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .action-buttons {
+    justify-content: center;
+  }
 }
 
 .action-btn {
@@ -851,5 +986,262 @@ onMounted(() => {
   border-radius: 0;
   box-shadow: none;
   resize: vertical;
+}
+
+/* 表格容器 */
+.table-container {
+  position: relative;
+}
+
+/* 桌面端显示表格，移动端隐藏 */
+.desktop-table {
+  display: table;
+}
+
+.mobile-cards {
+  display: none;
+}
+
+/* 移动端样式 */
+@media (max-width: 768px) {
+  .desktop-table {
+    display: none !important;
+  }
+  
+  .mobile-cards {
+    display: block;
+  }
+  
+  .mobile-card {
+    background: white;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+    gap: 12px;
+  }
+  
+  .post-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #303133;
+    flex: 1;
+    line-height: 1.4;
+  }
+  
+  .post-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  
+  .card-content {
+    margin-bottom: 16px;
+  }
+  
+  .post-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .info-item {
+    font-size: 14px;
+    color: #606266;
+  }
+  
+  .card-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  
+  .card-actions .el-button {
+    flex: 1;
+    min-width: 60px;
+  }
+  
+  /* 编辑对话框移动端适配 */
+  .el-dialog {
+    width: 95% !important;
+    margin: 0 auto;
+    max-height: 95vh;
+    margin-top: 2.5vh !important;
+  }
+  
+  .el-dialog__header {
+    padding: 15px;
+    text-align: center;
+  }
+  
+  .el-dialog__header .el-dialog__title {
+    font-size: 18px;
+  }
+  
+  .el-dialog__body {
+    padding: 15px;
+    max-height: calc(95vh - 140px);
+    overflow-y: auto;
+  }
+  
+  /* 表单移动端样式 */
+  .post-form {
+    width: 100%;
+  }
+  
+  .form-section {
+    margin-bottom: 16px;
+  }
+  
+  .form-row {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  
+  .form-row-multi {
+    flex-direction: column;
+  }
+  
+  .form-item,
+  .form-item-full {
+    min-width: auto;
+    width: 100%;
+  }
+  
+  .el-form-item {
+    margin-bottom: 16px;
+  }
+  
+  .el-form-item__label {
+    font-size: 14px;
+    line-height: 1.4;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #333;
+  }
+  
+  .el-form-item__content {
+    margin-left: 0 !important;
+    margin-top: 0;
+  }
+  
+  .el-input__wrapper,
+  .el-textarea__inner,
+  .el-select .el-input__wrapper {
+    font-size: 16px; /* 防止iOS缩放 */
+    min-height: 44px; /* 触摸友好的最小高度 */
+  }
+  
+  .el-select {
+    width: 100%;
+  }
+  
+  /* Word上传区域 */
+  .word-upload-section {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
+  
+  .word-upload-section .el-button {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 16px;
+    height: auto;
+  }
+  
+  .upload-tips {
+    margin-top: 8px;
+    text-align: center;
+  }
+  
+  .upload-tips p {
+    font-size: 12px;
+    color: #666;
+    margin: 0;
+  }
+  
+  /* 图片上传区域 */
+  .image-upload-section {
+    margin-bottom: 15px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+  }
+  
+  .image-upload-section .el-button {
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 12px 16px;
+    font-size: 16px;
+    height: auto;
+  }
+  
+  .upload-tip {
+    display: block;
+    text-align: center;
+    font-size: 12px;
+    color: #909399;
+  }
+  
+  /* Markdown编辑器 */
+  .markdown-editor .el-textarea__inner {
+    min-height: 250px !important;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  
+  /* 对话框底部按钮 */
+  .el-dialog__footer {
+    padding: 15px;
+    text-align: center;
+    border-top: 1px solid #e0e0e0;
+    background: #f8f9fa;
+  }
+  
+  .el-dialog__footer .el-button {
+    width: 48%;
+    margin: 0 1%;
+    padding: 12px 16px;
+    font-size: 16px;
+    height: auto;
+  }
+  
+  /* 筛选区域移动端适配 */
+  .filters {
+    padding: 15px;
+  }
+  
+  .filter-section {
+    margin-bottom: 12px;
+  }
+  
+  .filter-selects {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .filter-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .action-btn {
+    width: 100%;
+    padding: 12px 16px;
+    font-size: 16px;
+    height: auto;
+  }
 }
 </style>

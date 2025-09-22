@@ -71,6 +71,9 @@ INSERT INTO settings (setting_key, value, description, group_name, is_system) VA
 ('enable_comments', '1', '是否开启评论', '功能设置', 1),
 ('enable_registration', '0', '是否开启注册', '功能设置', 1),
 
+-- 外观设置
+('site_wallpaper', '', '网站背景壁纸URL', '外观设置', 1),
+
 -- 系统版本记录
 ('db_version_001', 'completed', '数据库版本001：管理员功能', '系统设置', 1),
 ('db_version_002', 'completed', '数据库版本002：文章摘要字段', '系统设置', 1),

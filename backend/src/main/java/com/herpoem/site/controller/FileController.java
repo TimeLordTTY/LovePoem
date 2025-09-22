@@ -16,7 +16,7 @@ import java.util.UUID;
 
 /**
  * 文件上传控制器
- * 
+ *
  * @author TimeLord
  */
 @RestController
@@ -56,7 +56,10 @@ public class FileController {
             String uploadDir = uploadPath + File.separator + dateFolder;
             File dir = new File(uploadDir);
             if (!dir.exists()) {
-                dir.mkdirs();
+                boolean created = dir.mkdirs();
+                if (!created) {
+                    return Result.error("无法创建上传目录: " + uploadDir);
+                }
             }
             
             // 生成唯一文件名

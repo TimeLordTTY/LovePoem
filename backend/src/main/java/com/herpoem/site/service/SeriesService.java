@@ -50,3 +50,5 @@ public interface SeriesService extends IService<Series> {
      */
     Long getPostCountBySeriesId(Long seriesId);
 }
+
+

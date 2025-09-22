@@ -1,5 +1,5 @@
 <template>
-  <div id="app" :class="['app', themeStore.currentTheme]">
+  <div id="app" :class="['app', themeStore.currentTheme]" :style="appStyle">
     <HeaderNav />
     <main class="main-content">
       <router-view />
@@ -9,16 +9,45 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useThemeStore } from '@/store/theme'
 import HeaderNav from '@/components/HeaderNav.vue'
 import FooterNav from '@/components/FooterNav.vue'
+import { getSiteSettings } from '@/api/site'
 
 const themeStore = useThemeStore()
+const wallpaperUrl = ref('')
+
+// 计算应用样式
+const appStyle = computed(() => {
+  if (wallpaperUrl.value) {
+    return {
+      backgroundImage: `url(${wallpaperUrl.value})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      backgroundAttachment: 'fixed'
+    }
+  }
+  return {}
+})
+
+// 加载网站设置
+const loadSiteSettings = async () => {
+  try {
+    const response = await getSiteSettings()
+    const settings = response.data || {}
+    wallpaperUrl.value = settings.site_wallpaper || ''
+  } catch (error) {
+    console.error('加载网站设置失败:', error)
+  }
+}
 
 onMounted(() => {
   // 初始化主题
   themeStore.initTheme()
+  // 加载网站设置
+  loadSiteSettings()
 })
 </script>
 
@@ -46,6 +75,16 @@ body {
 .main-content {
   flex: 1;
   padding-top: 80px; /* 为固定header留出空间 */
+}
+
+/* 有壁纸时的内容背景 */
+.app[style*="background-image"] .main-content {
+  background-color: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(5px);
+}
+
+.app.dark[style*="background-image"] .main-content {
+  background-color: rgba(31, 41, 55, 0.9);
 }
 
 /* 滚动条样式 */

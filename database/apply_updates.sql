@@ -38,3 +38,5 @@ executed_at = NOW(),
 error_message = CONCAT('最后检查时间: ', NOW());
 
 SELECT '数据库更新检查完成，请按照提示执行相应的更新脚本' as message;
+
+

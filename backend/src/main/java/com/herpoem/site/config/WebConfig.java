@@ -21,8 +21,8 @@ public class WebConfig implements WebMvcConfigurer {
     
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 配置上传文件的访问路径
-        registry.addResourceHandler(urlPrefix + "/**")
-                .addResourceLocations("file:" + uploadPath + "/");
+        // 静态文件现在由Nginx处理，这里不需要配置
+        // registry.addResourceHandler(urlPrefix + "/**")
+        //         .addResourceLocations(resourceLocation);
     }
 }

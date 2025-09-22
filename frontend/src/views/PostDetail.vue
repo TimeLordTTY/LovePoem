@@ -78,16 +78,29 @@ const renderedContent = computed(() => {
   if (!post.value?.contentMd) return ''
   
   // 简单的Markdown渲染（实际项目中应使用markdown-it等库）
-  return post.value.contentMd
+  let content = post.value.contentMd
+    // 处理图片语法 ![alt](url)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; display: block; margin: 20px auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />')
+    // 处理标题
     .replace(/^# (.+)$/gm, '<h1>$1</h1>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    // 处理加粗和斜体
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // 处理换行和段落
     .replace(/\n\n/g, '</p><p>')
     .replace(/^(.+)$/gm, '<p>$1</p>')
+    // 修复标题被包在p标签里的问题
     .replace(/<p><h/g, '<h')
-    .replace(/<\/h[1-6]><\/p>/g, '</h1>')
+    .replace(/<\/h[1-6]><\/p>/g, function(match) {
+      return match.replace('<p>', '').replace('</p>', '')
+    })
+    // 修复图片被包在p标签里的问题
+    .replace(/<p><img/g, '<img')
+    .replace(/\/><\/p>/g, '/>')
+    
+  return content
 })
 
 const formatDate = (dateString) => {
