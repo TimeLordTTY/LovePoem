@@ -1,10 +1,11 @@
 package com.herpoem.site.model.vo;
 
-import com.herpoem.site.model.entity.Post;
-import lombok.Data;
-
 import java.time.LocalDateTime;
 import java.util.List;
+
+import com.herpoem.site.model.entity.Post;
+
+import lombok.Data;
 
 /**
  * 文章详情返回VO（包含完整内容）
@@ -37,6 +38,12 @@ public class PostDetailVO {
     private Long coverAssetId;
     
     private String coverAssetUrl;
+    
+    // 是否有章节
+    private Boolean hasChapters;
+    
+    // 章节前内容
+    private String preChapterContent;
     
     private Post.Visibility visibility;
     

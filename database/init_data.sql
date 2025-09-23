@@ -79,4 +79,11 @@ INSERT INTO settings (setting_key, value, description, group_name, is_system) VA
 ('db_version_002', 'completed', '数据库版本002：文章摘要字段', '系统设置', 1),
 ('db_version_003', 'completed', '数据库版本003：动态内容设置', '系统设置', 1),
 ('db_version_004', 'completed', '数据库版本004：修复设置数据', '系统设置', 1),
-('db_version_005', 'completed', '数据库版本005：性能优化索引', '系统设置', 1);
+('db_version_005', 'completed', '数据库版本005：性能优化索引', '系统设置', 1),
+('db_version_006', 'completed', '数据库版本006：壁纸设置', '系统设置', 1),
+('db_version_007', 'completed', '数据库版本007：文章排序', '系统设置', 1),
+('db_version_008', 'completed', '数据库版本008：用户收藏', '系统设置', 1),
+('db_version_009', 'completed', '数据库版本009：文章壁纸', '系统设置', 1),
+('db_version_010', 'completed', '数据库版本010：文章注解', '系统设置', 1),
+('db_version_011', 'completed', '数据库版本011：章节和目录', '系统设置', 1),
+('db_version_012', 'completed', '数据库版本012：章节体系', '系统设置', 1);

@@ -33,11 +33,15 @@ export function deleteAdminPost(id) {
 }
 
 export function publishPost(id) {
-  return request.put(`/posts/${id}/publish`)
+  return request.post(`/posts/${id}/publish`)
 }
 
 export function updatePostVisibility(id, visibility) {
-  return request.put(`/posts/${id}/visibility`, { visibility })
+  return request.post(`/posts/${id}/visibility`, `"${visibility}"`, {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
 }
 
 // 标签管理相关API

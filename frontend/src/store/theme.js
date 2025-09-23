@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 export const useThemeStore = defineStore('theme', () => {
   const currentTheme = ref('light')
@@ -32,6 +32,15 @@ export const useThemeStore = defineStore('theme', () => {
   
   const applyTheme = () => {
     const root = document.documentElement
+    
+    // 添加或移除主题类
+    if (currentTheme.value === 'dark') {
+      root.classList.add('dark')
+      root.classList.remove('light')
+    } else {
+      root.classList.add('light')
+      root.classList.remove('dark')
+    }
     
     if (currentTheme.value === 'light') {
       // 白天主题（晓）- 晨光、飞鸟、浅粉/金色渐变

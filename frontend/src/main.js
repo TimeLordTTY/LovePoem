@@ -6,6 +6,7 @@ import App from './App.vue'
 // 样式
 import 'element-plus/dist/index.css'
 import '@/styles/theme.css'
+import '@/styles/element-dark.css'
 import '@/styles/motion.css'
 
 const app = createApp(App)

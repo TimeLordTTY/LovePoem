@@ -7,15 +7,20 @@ spring:
   
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://124.220.229.91:9009/poem?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://124.220.229.91:9009/poem?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&autoReconnect=true&failOverReadOnly=false&maxReconnects=10&initialTimeout=1&connectTimeout=30000&socketTimeout=30000&useLocalSessionState=true&elideSetAutoCommits=true&alwaysSendSetIsolation=false&enableQueryTimeouts=false&cacheDefaultTimezone=false&cacheServerConfiguration=true&maintainTimeStats=false&netTimeoutForStreamingResults=0&tcpKeepAlive=true
     username: poem
     password: ${DB_PASSWORD:mbRckCN4m5zAR3E2}
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      connection-timeout: 20000
-      idle-timeout: 300000
-      max-lifetime: 1200000
+      maximum-pool-size: 15
+      minimum-idle: 8
+      connection-timeout: 20000          # 连接超时：20秒
+      idle-timeout: 300000               # 空闲超时：5分钟
+      max-lifetime: 600000               # 最大生命周期：10分钟
+      validation-timeout: 3000           # 连接验证超时：3秒
+      connection-test-query: SELECT 1    # 连接测试查询
+      leak-detection-threshold: 60000    # 连接泄漏检测：60秒
+      keepalive-time: 60000              # 保活时间：60秒
+      connection-init-sql: SELECT 1      # 连接初始化SQL
 
   servlet:
     multipart:

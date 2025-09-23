@@ -20,8 +20,11 @@ export class WordParser {
     }
 
     try {
+      // 将文件转换为ArrayBuffer
+      const arrayBuffer = await file.arrayBuffer()
+      
       // 使用 mammoth 解析 Word 文档
-      const result = await mammoth.convertToMarkdown(file)
+      const result = await mammoth.convertToMarkdown({ arrayBuffer })
       
       // 提取标题和别名
       const title = this.extractTitleFromFilename(file.name)
@@ -99,4 +102,9 @@ export class WordParser {
   }
 }
 
-
+// 导出便捷函数
+export const parseWordDocument = WordParser.parseWordDocument.bind(WordParser)
+export const isWordDocument = WordParser.isWordDocument.bind(WordParser)
+export const extractTitleFromFilename = WordParser.extractTitleFromFilename.bind(WordParser)
+export const generateSlug = WordParser.generateSlug.bind(WordParser)
+export const formatFileSize = WordParser.formatFileSize.bind(WordParser)

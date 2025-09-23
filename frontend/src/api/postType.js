@@ -5,6 +5,11 @@ export function getAllPostTypes() {
   return request.get('/post-types')
 }
 
+// 获取文章类型（别名）
+export function getPostTypes() {
+  return request.get('/post-types')
+}
+
 // 根据名称获取文章类型
 export function getPostTypeByName(name) {
   return request.get(`/post-types/by-name/${name}`)

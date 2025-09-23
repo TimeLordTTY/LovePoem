@@ -85,6 +85,12 @@ public class PostController {
      */
     @PostMapping
     public Result<Long> createPost(@Valid @RequestBody PostCreateDTO postCreateDTO) {
+        // 自定义验证：如果没有启用章节，内容不能为空
+        if (!Boolean.TRUE.equals(postCreateDTO.getHasChapters()) && 
+            (postCreateDTO.getContentMd() == null || postCreateDTO.getContentMd().trim().isEmpty())) {
+            return Result.error("文章内容不能为空");
+        }
+        
         // TODO: 从JWT token中获取用户ID
         Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
         
@@ -96,13 +102,19 @@ public class PostController {
      * 更新文章
      */
     @PutMapping("/{id}")
-    public Result<Void> updatePost(@PathVariable Long id, 
+    public Result<Long> updatePost(@PathVariable Long id, 
                                   @Valid @RequestBody PostCreateDTO postCreateDTO) {
+        // 自定义验证：如果没有启用章节，内容不能为空
+        if (!Boolean.TRUE.equals(postCreateDTO.getHasChapters()) && 
+            (postCreateDTO.getContentMd() == null || postCreateDTO.getContentMd().trim().isEmpty())) {
+            return Result.error("文章内容不能为空");
+        }
+        
         // TODO: 从JWT token中获取用户ID
         Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
         
         postService.updatePost(id, postCreateDTO, userId);
-        return Result.success();
+        return Result.success(id);
     }
     
     /**

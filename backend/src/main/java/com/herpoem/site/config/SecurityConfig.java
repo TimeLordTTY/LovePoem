@@ -16,6 +16,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import lombok.Data;
 
 import java.util.List;
+import org.springframework.http.HttpMethod;
 
 /**
  * Spring Security配置类
@@ -69,10 +70,16 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 允许所有人访问登录和注册接口
                 .requestMatchers("/api/auth/login", "/api/auth/register", "/api/auth/check-username", "/api/auth/check-email").permitAll()
-                // 允许所有人访问公开的文章接口（游客访问）
-                .requestMatchers("/api/posts/**", "/api/tags/**", "/api/series/**", "/api/post-types/**").permitAll()
+                // 允许所有人访问公开的文章接口（游客访问，只读）
+                .requestMatchers(HttpMethod.GET, "/api/posts/**", "/api/tags/**", "/api/series/**", "/api/post-types/**").permitAll()
                 // 允许所有人访问站点信息接口
                 .requestMatchers("/api/site/**").permitAll()
+                // 管理员接口需要认证
+                .requestMatchers("/api/admin/**", "/api/files/**", "/api/post-chapters/**").authenticated()
+                // POST、PUT、DELETE请求需要认证
+                .requestMatchers(HttpMethod.POST, "/api/posts/**").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/posts/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/posts/**").authenticated()
                 // 其他请求需要认证
                 .anyRequest().authenticated()
             )

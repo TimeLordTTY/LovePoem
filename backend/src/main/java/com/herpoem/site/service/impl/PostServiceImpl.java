@@ -149,6 +149,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         post.setAutoGenerateToc(postCreateDTO.getAutoGenerateToc());
         post.setVisibility(postCreateDTO.getVisibility());
         post.setStatus(postCreateDTO.getStatus());
+        post.setHasChapters(postCreateDTO.getHasChapters());
+        post.setPreChapterContent(postCreateDTO.getPreChapterContent());
         
         // 设置发布日期：如果用户指定了日期就用指定的，否则在发布状态时使用当前时间
         if (postCreateDTO.getPublishDate() != null) {

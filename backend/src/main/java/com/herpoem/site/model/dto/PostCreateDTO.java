@@ -27,7 +27,7 @@ public class PostCreateDTO {
     @Size(max = 200, message = "别名长度不能超过200字符")
     private String slug;
     
-    @NotBlank(message = "内容不能为空")
+    // 当hasChapters为false时，contentMd不能为空
     private String contentMd;
     
     @Size(max = 500, message = "作者自述长度不能超过500字符")
@@ -61,6 +61,16 @@ public class PostCreateDTO {
     private String tableOfContents;
     
     private Boolean autoGenerateToc = true;
+    
+    /**
+     * 是否有章节
+     */
+    private Boolean hasChapters = false;
+    
+    /**
+     * 章节前内容（引言、背景等）
+     */
+    private String preChapterContent;
     
     private List<Long> tagIds;
 }

@@ -5,6 +5,11 @@ export function getAllSeries() {
   return request.get('/series/all')
 }
 
+// 获取系列（别名）
+export function getSeries() {
+  return request.get('/series/all')
+}
+
 // 分页获取系列列表
 export function getSeriesList(params) {
   return request.get('/series', { params })

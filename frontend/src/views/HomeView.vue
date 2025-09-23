@@ -69,15 +69,26 @@ const loadData = async () => {
       status: 'PUBLISHED',
       visibility: 'PUBLIC' 
     })
-    featuredPosts.value = postsResponse.data.records || []
+    
+    featuredPosts.value = postsResponse.data?.records || []
     
     // 加载所有标签
-    const tagsResponse = await getAllTags()
-    popularTags.value = tagsResponse.data || []
+    try {
+      const tagsResponse = await getAllTags()
+      popularTags.value = tagsResponse.data || []
+    } catch (tagError) {
+      console.warn('加载标签失败:', tagError)
+      popularTags.value = []
+    }
     
     // 加载推荐系列
-    const seriesResponse = await getAllSeries()
-    recommendedSeries.value = (seriesResponse.data || []).slice(0, 3) // 只显示前3个系列
+    try {
+      const seriesResponse = await getAllSeries()
+      recommendedSeries.value = (seriesResponse.data || []).slice(0, 3) // 只显示前3个系列
+    } catch (seriesError) {
+      console.warn('加载系列失败:', seriesError)
+      recommendedSeries.value = []
+    }
     
   } catch (error) {
     console.error('加载数据失败:', error)

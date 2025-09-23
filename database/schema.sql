@@ -24,6 +24,7 @@ CREATE TABLE series (
     name VARCHAR(200) NOT NULL COMMENT '系列名称',
     description TEXT COMMENT '系列描述',
     cover_image VARCHAR(500) COMMENT '封面图片URL',
+    background_text TEXT COMMENT '系列背景说明',
     sort_order INT NOT NULL DEFAULT 0 COMMENT '排序权重',
     created_by BIGINT NOT NULL COMMENT '创建者ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -118,6 +119,31 @@ CREATE TABLE post_tag (
     INDEX idx_post_id (post_id),
     INDEX idx_tag_id (tag_id)
 ) COMMENT '文章标签关联表';
+
+-- 章节表
+CREATE TABLE chapter (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '章节ID',
+    series_id BIGINT NOT NULL COMMENT '所属系列ID',
+    parent_id BIGINT DEFAULT NULL COMMENT '父章节ID（用于卷/分卷，NULL表示顶层章/卷）',
+    title VARCHAR(200) NOT NULL COMMENT '章节标题',
+    order_no INT NOT NULL DEFAULT 0 COMMENT '排序号（同层内从小到大）',
+    post_id BIGINT COMMENT '关联文章ID（正文存放在post表）',
+    background_text TEXT COMMENT '章节背景说明',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
+    
+    INDEX idx_series_order (series_id, order_no),
+    INDEX idx_parent (parent_id),
+    INDEX idx_series_parent (series_id, parent_id, order_no),
+    INDEX idx_post (post_id),
+    INDEX idx_chapter_series_parent_order (series_id, parent_id, order_no),
+    INDEX idx_chapter_post_deleted (post_id, deleted),
+    
+    FOREIGN KEY (series_id) REFERENCES series(id),
+    FOREIGN KEY (parent_id) REFERENCES chapter(id),
+    FOREIGN KEY (post_id) REFERENCES post(id)
+) COMMENT '章节表';
 
 -- 站点配置表
 CREATE TABLE settings (

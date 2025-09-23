@@ -104,6 +104,7 @@ const routes = [
     component: () => import('@/views/admin/BackupRestore.vue'),
     meta: { title: '备份恢复', requiresAuth: true }
   },
+
   {
     path: '/login',
     name: 'Login',

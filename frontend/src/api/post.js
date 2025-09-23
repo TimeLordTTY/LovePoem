@@ -10,6 +10,11 @@ export function getPostBySlug(slug, params = {}) {
   return request.get(`/posts/${slug}`, { params })
 }
 
+// 根据ID获取文章详情
+export function getPostById(id, params = {}) {
+  return request.get(`/posts/id/${id}`, { params })
+}
+
 // 创建文章
 export function createPost(data) {
   return request.post('/posts', data)

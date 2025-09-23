@@ -76,6 +76,16 @@ public class Post {
      */
     private Boolean autoGenerateToc;
     
+    /**
+     * 是否有章节
+     */
+    private Boolean hasChapters;
+    
+    /**
+     * 章节前内容（引言、背景等）
+     */
+    private String preChapterContent;
+    
     @TableField("visibility")
     private Visibility visibility;
     

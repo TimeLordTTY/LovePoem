@@ -5,6 +5,11 @@ export function getAllTags() {
   return request.get('/tags')
 }
 
+// 获取标签（别名）
+export function getTags() {
+  return request.get('/tags')
+}
+
 // 创建标签
 export function createTag(data) {
   return request.post('/tags', data)

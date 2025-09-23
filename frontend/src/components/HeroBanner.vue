@@ -70,9 +70,11 @@ import { useRouter } from 'vue-router'
 import { useThemeStore } from '@/store/theme'
 import { getPosts } from '@/api/post'
 import { getPostTypeByName } from '@/api/postType'
+import { useAuthStore } from '@/store/auth'
 
 const router = useRouter()
 const themeStore = useThemeStore()
+const authStore = useAuthStore()
 const siteSettings = ref({})
 const currentPoem = ref(null)
 const poemList = ref([])
@@ -103,50 +105,70 @@ const loadSiteSettings = async () => {
   }
 }
 
+// 获取诗歌类型ID
+const getPoemTypeId = async () => {
+  try {
+    const postTypeResponse = await getPostTypeByName('诗歌')
+    return postTypeResponse.data?.id
+  } catch (error) {
+    console.warn('获取诗歌类型失败，将显示所有文章:', error)
+    return null
+  }
+}
+
 // 加载诗歌文章
 const loadPoemArticles = async () => {
   try {
-    // 先获取诗歌类型的ID
-    const postTypeResponse = await getPostTypeByName('诗歌')
-    const poemTypeId = postTypeResponse.data?.id
+    // 获取诗歌类型ID
+    const poemTypeId = await getPoemTypeId()
     
-    if (!poemTypeId) {
-      console.warn('未找到诗歌类型，将显示所有文章')
-    }
-    
-    const response = await getPosts({
+    const queryParams = {
       page: 1,
       size: 20,
-      postTypeId: poemTypeId,
-      status: 'PUBLISHED',
-      visibility: 'PUBLIC'
-    })
+      status: 'PUBLISHED'
+    }
     
-    const posts = response.data.records || []
+    // 根据用户权限设置可见性
+    if (authStore.isAuthor) {
+      // 作者和管理员可以看到所有可见性的文章（不设置visibility参数）
+      console.log('用户是作者/管理员，加载所有可见性的文章')
+    } else {
+      // 游客只能看到公开的文章
+      queryParams.visibility = 'PUBLIC'
+      console.log('用户是游客，只加载公开文章')
+    }
+    
+    // 如果有诗歌类型ID，则添加到查询参数中
+    if (poemTypeId) {
+      queryParams.postTypeId = poemTypeId
+    }
+    
+    console.log('诗歌查询参数:', queryParams)
+    
+    const response = await getPosts(queryParams)
+    
+    const posts = response.data?.records || []
+    
     poemList.value = posts.map(post => ({
       id: post.id,
       slug: post.slug,
       title: post.title,
       author: post.authorName || '白秦',
-      lines: extractPoemLines(post.excerpt || post.contentText || ''),
+      lines: extractPoemLines(post.excerpt || post.contentText || post.content || ''),
       originalPost: post
     })).filter(poem => poem.lines.length > 0)
     
     if (poemList.value.length > 0) {
       currentPoem.value = poemList.value[0]
       startPoemRotation()
+    } else {
+      // 如果没有找到合适的诗歌，显示空状态
+      currentPoem.value = null
     }
   } catch (error) {
     console.error('加载诗歌失败:', error)
-    // 使用默认诗句
-    poemList.value = [{
-      id: 'default',
-      title: '默认诗句',
-      author: '白秦',
-      lines: ['晨曦透过窗棂', '轻抚沉睡的大地', '那是希望的颜色', '也是梦想的开始'],
-      slug: null
-    }]
-    currentPoem.value = poemList.value[0]
+    // 出现错误时也显示空状态，不使用默认内容
+    currentPoem.value = null
   }
 }
 
@@ -160,10 +182,21 @@ const extractPoemLines = (content) => {
   // 按行分割，过滤空行，取前4行作为预览
   const lines = cleanContent.split(/[\r\n]+/)
     .map(line => line.trim())
-    .filter(line => line.length > 0 && line.length < 50) // 过滤过长的行
+    .filter(line => line.length > 0 && line.length < 100) // 增加行长度限制
     .slice(0, 4)
   
-  return lines.length >= 2 ? lines : []
+  // 如果只有一行内容，尝试按句号分割
+  if (lines.length === 1 && lines[0].length > 20) {
+    const sentences = lines[0].split(/[。！？；]/g)
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && s.length < 50)
+      .slice(0, 4)
+    if (sentences.length >= 2) {
+      return sentences
+    }
+  }
+  
+  return lines.length >= 1 ? lines : []
 }
 
 // 开始诗句轮播
@@ -173,7 +206,7 @@ const startPoemRotation = () => {
   rotationTimer.value = setInterval(() => {
     currentPoemIndex.value = (currentPoemIndex.value + 1) % poemList.value.length
     currentPoem.value = poemList.value[currentPoemIndex.value]
-  }, 5 * 60 * 1000) // 5分钟 = 300000毫秒
+  }, 8000) // 8秒切换一次，方便查看效果
 }
 
 // 跳转到当前诗歌的详情页

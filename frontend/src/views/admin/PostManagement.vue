@@ -51,447 +51,629 @@
 
     <!-- 文章列表 -->
     <div class="posts-container">
-      <!-- 桌面端表格 -->
-      <div class="desktop-view">
-        <el-table 
-          :data="posts" 
-          v-loading="loading"
-          class="posts-table"
-          row-key="id"
-          ref="sortableTable"
-        >
-          <el-table-column label="序号" width="80" align="center">
-            <template #default="{ $index }">
-              <div class="sort-indicator">
-                <el-icon class="drag-handle"><Rank /></el-icon>
-                <span>{{ $index + 1 }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="title" label="标题" width="300" show-overflow-tooltip>
-            <template #default="{ row }">
-              <div class="post-title-cell">
-                <h4>{{ row.title }}</h4>
-                <p v-if="row.summary" class="post-summary">{{ row.summary }}</p>
-              </div>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="postTypeName" label="类型" width="100" />
-          <el-table-column prop="seriesName" label="系列" width="120" />
-          
-          <el-table-column label="章节" width="120">
-            <template #default="{ row }">
-              <div v-if="row.chapterNo || row.chapterTitle" class="chapter-info">
-                <span v-if="row.chapterNo" class="chapter-no">第{{ row.chapterNo }}章</span>
-                <span v-if="row.chapterTitle" class="chapter-title">{{ row.chapterTitle }}</span>
-              </div>
-              <span v-else class="no-chapter">-</span>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="status" label="状态" width="80">
-            <template #default="{ row }">
-              <el-tag :type="row.status === 'PUBLISHED' ? 'success' : 'warning'">
-                {{ row.status === 'PUBLISHED' ? '已发布' : '草稿' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="visibility" label="可见性" width="80">
-            <template #default="{ row }">
-              <el-tag :type="getVisibilityType(row.visibility)">
-                {{ getVisibilityLabel(row.visibility) }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          
-          <el-table-column prop="publishDate" label="发布时间" width="180">
-            <template #default="{ row }">
-              {{ formatDate(row.publishDate) }}
-            </template>
-          </el-table-column>
-          
-          <el-table-column label="操作" width="250" fixed="right">
-            <template #default="{ row }">
-              <div class="action-buttons">
-                <el-button size="small" @click="editPost(row)">编辑</el-button>
-                <el-button 
-                  size="small" 
-                  :type="row.status === 'PUBLISHED' ? 'warning' : 'success'"
-                  @click="toggleStatus(row)"
-                >
-                  {{ row.status === 'PUBLISHED' ? '转草稿' : '发布' }}
-                </el-button>
-                <el-button size="small" type="danger" @click="deletePost(row)">删除</el-button>
-              </div>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-
-      <!-- 移动端卡片列表 -->
-      <div class="mobile-view">
-        <draggable 
-          v-model="posts" 
-          item-key="id"
-          @end="updatePostsOrder"
-          class="mobile-posts-list"
-        >
-          <template #item="{ element: post, index }">
-            <div class="mobile-post-card" :key="post.id">
-              <!-- 卡片头部 -->
-              <div class="card-header">
-                <div class="drag-area">
-                  <el-icon class="mobile-drag-handle"><Rank /></el-icon>
-                  <span class="post-index">{{ index + 1 }}</span>
-                </div>
-                <div class="post-status">
-                  <el-tag size="small" :type="post.status === 'PUBLISHED' ? 'success' : 'warning'">
-                    {{ post.status === 'PUBLISHED' ? '已发布' : '草稿' }}
-                  </el-tag>
-                  <el-tag size="small" :type="getVisibilityType(post.visibility)">
-                    {{ getVisibilityLabel(post.visibility) }}
-                  </el-tag>
-                </div>
-              </div>
-              
-              <!-- 文章信息 -->
-              <div class="card-content">
-                <h3 class="post-title">{{ post.title }}</h3>
-                <p v-if="post.summary" class="post-summary">{{ post.summary }}</p>
-                
-                <div class="post-meta">
-                  <span class="meta-item">{{ post.postTypeName }}</span>
-                  <span v-if="post.seriesName" class="meta-item">{{ post.seriesName }}</span>
-                  <span v-if="post.chapterNo" class="meta-item">第{{ post.chapterNo }}章</span>
-                </div>
-                
-                <div class="post-date">{{ formatDate(post.publishDate) }}</div>
-              </div>
-              
-              <!-- 操作按钮 -->
-              <div class="card-actions">
-                <el-button size="small" @click="editPost(post)">编辑</el-button>
-                <el-button 
-                  size="small" 
-                  :type="post.status === 'PUBLISHED' ? 'warning' : 'success'"
-                  @click="toggleStatus(post)"
-                >
-                  {{ post.status === 'PUBLISHED' ? '转草稿' : '发布' }}
-                </el-button>
-                <el-button size="small" type="danger" @click="deletePost(post)">删除</el-button>
+            <el-table 
+        :data="posts" 
+        v-loading="loading"
+        class="posts-table"
+        row-key="id"
+        ref="sortableTable"
+        @selection-change="handleSelectionChange"
+        :row-style="{ height: '60px' }"
+        :cell-style="{ padding: '16px 8px' }"
+        style="width: 100%"
+        table-layout="auto"
+      >
+        <el-table-column type="selection" width="55" />
+        
+        <el-table-column label="序号" width="80" align="center">
+          <template #default="{ $index }">
+            <div class="sort-indicator">
+              <span class="drag-handle" style="cursor: move; font-size: 16px; color: #909399; margin-right: 8px;">⋮⋮</span>
+              <span>{{ $index + 1 }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="title" label="标题" min-width="300" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div class="post-title-cell">
+              <h4>{{ row.title }}</h4>
+              <p v-if="row.summary" class="post-summary">{{ row.summary }}</p>
+              <div v-if="row.hasChapters" class="chapter-indicator">
+                <el-icon><Document /></el-icon>
+                <span>有章节</span>
               </div>
             </div>
           </template>
-        </draggable>
+        </el-table-column>
+        
+        <el-table-column prop="postTypeName" label="类型" min-width="100" />
+        <el-table-column prop="seriesName" label="系列" min-width="120" />
+        
+        <el-table-column prop="visibility" label="可见性" min-width="80">
+          <template #default="{ row }">
+            <el-tag 
+              :type="row.visibility === 'PUBLIC' ? 'success' : row.visibility === 'UNLISTED' ? 'warning' : 'info'"
+              size="small"
+            >
+              {{ row.visibility === 'PUBLIC' ? '公开' : row.visibility === 'UNLISTED' ? '不公开' : '私有' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="status" label="状态" min-width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'PUBLISHED' ? 'success' : 'warning'">
+              {{ row.status === 'PUBLISHED' ? '已发布' : '草稿' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        
+        <el-table-column prop="publishDate" label="发布时间" min-width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.publishDate) }}
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="操作" min-width="280" fixed="right" align="center">
+          <template #default="{ row }">
+            <div class="action-buttons">
+              <el-button size="small" @click="editPost(row.id)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              
+              <el-button 
+                v-if="row.status === 'DRAFT'" 
+                size="small" 
+                type="success" 
+                @click="publishSinglePost(row.id)"
+              >
+                <el-icon><Upload /></el-icon>
+                发布
+              </el-button>
+              <el-button 
+                v-else 
+                size="small" 
+                type="warning" 
+                @click="draftSinglePost(row.id)"
+              >
+                <el-icon><DocumentCopy /></el-icon>
+                转草稿
+              </el-button>
+              
+              <el-button 
+                v-if="row.visibility === 'PUBLIC'" 
+                size="small" 
+                type="info" 
+                @click="setPrivate(row.id)"
+              >
+                <el-icon><Lock /></el-icon>
+                设私人
+              </el-button>
+              <el-button 
+                v-else 
+                size="small" 
+                type="success" 
+                @click="setPublic(row.id)"
+              >
+                <el-icon><Unlock /></el-icon>
+                设公开
+              </el-button>
+              
+              <el-button size="small" type="danger" @click="deletePost(row.id)">
+                <el-icon><Delete /></el-icon>
+                删除
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </div>
+
+    <!-- 批量操作 -->
+    <div v-if="selectedPosts.length > 0" class="batch-operations">
+      <div class="batch-info">
+        已选择 {{ selectedPosts.length }} 篇文章
+      </div>
+      <div class="batch-actions">
+        <el-button size="small" type="success" @click="batchPublish">
+          <el-icon><Upload /></el-icon>
+          批量发布
+        </el-button>
+        <el-button size="small" type="warning" @click="batchDraft">
+          <el-icon><DocumentCopy /></el-icon>
+          批量转草稿
+        </el-button>
+        <el-button size="small" @click="showBatchVisibilityDialog">
+          <el-icon><Setting /></el-icon>
+          设置可见性
+        </el-button>
+        <el-button size="small" type="danger" @click="batchDelete">
+          <el-icon><Delete /></el-icon>
+          批量删除
+        </el-button>
       </div>
     </div>
 
     <!-- 分页 -->
-    <div class="pagination-container">
+    <div class="pagination-section">
       <el-pagination
         v-model:current-page="pagination.page"
         v-model:page-size="pagination.size"
-        :total="pagination.total"
         :page-sizes="[10, 20, 50, 100]"
+        :total="pagination.total"
         layout="total, sizes, prev, pager, next, jumper"
         @size-change="loadPosts"
         @current-change="loadPosts"
+        class="pagination"
       />
     </div>
 
-    <!-- 编辑/创建对话框 -->
+    <!-- 文章编辑对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEditing ? '编辑文章' : '新建文章'"
-      :width="dialogWidth"
-      :fullscreen="isMobile"
+      width="90%"
+      top="5vh"
+      :close-on-click-modal="false"
       class="post-dialog"
-      destroy-on-close
     >
-      <div class="dialog-content">
-        <el-form :model="postForm" label-width="120px" class="post-form">
-          <!-- 标签页导航 -->
-          <el-tabs v-model="activeTab" class="form-tabs">
-            <!-- 基本信息 -->
-            <el-tab-pane label="基本信息" name="basic">
-              <div class="form-section">
-                <el-form-item label="文章标题" required>
-                  <el-input v-model="postForm.title" placeholder="请输入文章标题" maxlength="300" show-word-limit />
+      <div class="editor-container">
+        <!-- 左侧：文章信息和章节管理 -->
+        <div class="left-panel" :class="{ 'with-chapters': postForm.hasChapters }">
+          <div class="left-content" :class="{ 'scrollable': postForm.hasChapters }">
+          <!-- 基本信息 -->
+          <el-card class="info-card">
+            <template #header>
+              <div class="card-header">
+                <span>基本信息</span>
+              </div>
+            </template>
+            
+            <el-form :model="postForm" label-width="80px">
+              <el-form-item label="文章标题" required>
+                <el-input v-model="postForm.title" placeholder="请输入文章标题" />
+              </el-form-item>
+              
+              <el-form-item label="文章摘要">
+                <el-input
+                  v-model="postForm.summary"
+                  type="textarea"
+                  :rows="3"
+                  placeholder="请输入文章摘要"
+                />
+              </el-form-item>
+              
+              <el-form-item label="文章类型">
+                <el-select v-model="postForm.postTypeId" placeholder="选择类型">
+                  <el-option
+                    v-for="type in postTypes"
+                    :key="type.id"
+                    :label="type.name"
+                    :value="type.id"
+                  />
+                </el-select>
+              </el-form-item>
+              
+              <el-form-item label="所属系列">
+                <el-select v-model="postForm.seriesId" placeholder="选择系列" clearable>
+                  <el-option
+                    v-for="series in seriesList"
+                    :key="series.id"
+                    :label="series.name"
+                    :value="series.id"
+                  />
+                </el-select>
+              </el-form-item>
+              
+              <el-form-item label="状态">
+                <el-select v-model="postForm.status">
+                  <el-option label="草稿" value="DRAFT" />
+                  <el-option label="已发布" value="PUBLISHED" />
+                </el-select>
+              </el-form-item>
+              
+              <el-form-item label="可见性">
+                <el-select v-model="postForm.visibility">
+                  <el-option label="公开" value="PUBLIC" />
+                  <el-option label="不公开" value="UNLISTED" />
+                  <el-option label="私有" value="PRIVATE" />
+                </el-select>
+              </el-form-item>
+              
+              <el-form-item label="发布时间">
+                <el-date-picker
+                  v-model="postForm.publishDate"
+                  type="datetime"
+                  placeholder="选择发布时间"
+                  format="YYYY-MM-DD HH:mm:ss"
+                  value-format="YYYY-MM-DD HH:mm:ss"
+                />
+                <div class="form-tip">不选择则使用当前时间</div>
+              </el-form-item>
+              
+              <el-form-item label="文章标签">
+                <el-select
+                  v-model="postForm.tags"
+                  multiple
+                  filterable
+                  allow-create
+                  default-first-option
+                  placeholder="选择或输入标签"
+                  style="width: 100%"
+                >
+                  <el-option
+                    v-for="tag in availableTags"
+                    :key="tag.id"
+                    :label="tag.name"
+                    :value="tag.name"
+                  />
+                </el-select>
+              </el-form-item>
+              
+              <el-form-item label="封面图片">
+                <el-upload
+                  ref="coverUploadRef"
+                  :show-file-list="false"
+                  :before-upload="() => false"
+                  :on-change="handleCoverUpload"
+                  accept="image/*"
+                  class="cover-upload"
+                >
+                  <div v-if="postForm.coverUrl" class="cover-preview">
+                    <img :src="postForm.coverUrl" alt="封面预览" />
+                    <div class="cover-overlay">
+                      <el-button size="small" @click.stop="removeCover">删除</el-button>
+                    </div>
+                  </div>
+                  <div v-else class="upload-placeholder">
+                    <el-icon><Plus /></el-icon>
+                    <div>上传封面</div>
+                  </div>
+                </el-upload>
+              </el-form-item>
+            </el-form>
+          </el-card>
+
+          <!-- 章节管理 -->
+          <el-card class="chapters-card" :class="{ 'chapters-expanded': postForm.hasChapters }">
+            <template #header>
+              <div class="card-header">
+                <span>章节管理</span>
+                <div class="header-actions">
+                  <el-switch
+                    v-model="postForm.hasChapters"
+                    active-text="启用章节"
+                    @change="toggleChapters"
+                  />
+                </div>
+              </div>
+            </template>
+            
+            <!-- 章节前内容 -->
+            <div v-if="postForm.hasChapters" class="pre-chapter-section">
+              <el-form-item label="章节前内容">
+                <el-input
+                  v-model="postForm.preChapterContent"
+                  type="textarea"
+                  :rows="4"
+                  placeholder="引言、背景、作者的话等（可选）"
+                />
+                <div class="form-tip">此内容将显示在所有章节之前</div>
+              </el-form-item>
+            </div>
+            
+            <!-- 章节列表 -->
+            <div v-if="postForm.hasChapters" class="chapters-list">
+              <div class="chapters-toolbar">
+                <el-button size="small" type="primary" @click="addChapter">
+                  <el-icon><Plus /></el-icon>
+                  添加章节
+                </el-button>
+                <el-upload
+                  ref="wordUploadRef"
+                  :show-file-list="false"
+                  :before-upload="() => false"
+                  :on-change="handleWordUpload"
+                  accept=".doc,.docx"
+                  style="display: inline-block; margin-left: 8px;"
+                >
+                  <el-button size="small">
+                    <el-icon><DocumentAdd /></el-icon>
+                    导入Word
+                  </el-button>
+                </el-upload>
+              </div>
+              
+              <div class="chapters-tree" style="max-height: 400px; overflow-y: auto;">
+                <draggable
+                  v-model="chapters"
+                  group="chapters"
+                  item-key="id"
+                  handle=".drag-handle"
+                  @end="handleChapterReorder"
+                >
+                  <template #item="{ element: chapter, index }">
+                    <div class="chapter-item">
+                      <div class="chapter-header">
+                        <div class="chapter-info">
+                          <el-icon class="drag-handle"><Rank /></el-icon>
+                          <span class="chapter-title">{{ getChapterDisplayTitle(chapter, index) }}</span>
+                          <el-tag v-if="chapter.parentId" size="small">节</el-tag>
+                          <el-tag v-else size="small" type="success">章</el-tag>
+                        </div>
+                        <div class="chapter-actions">
+                          <el-button size="small" @click="editChapter(chapter)">编辑</el-button>
+                          <el-button size="small" @click="addSection(chapter)">添加节</el-button>
+                          <el-button size="small" type="danger" @click="deleteChapter(chapter)">删除</el-button>
+                        </div>
+                      </div>
+                      
+                      <!-- 子节 -->
+                      <div v-if="chapter.children && chapter.children.length > 0" class="sections-list">
+                        <draggable
+                          v-model="chapter.children"
+                          group="sections"
+                          item-key="id"
+                          handle=".drag-handle"
+                        >
+                          <template #item="{ element: section }">
+                            <div class="section-item">
+                              <div class="section-header">
+                                <div class="section-info">
+                                  <el-icon class="drag-handle"><Rank /></el-icon>
+                                  <span class="section-title">{{ getSectionDisplayTitle(section, chapter, index) }}</span>
+                                </div>
+                                <div class="section-actions">
+                                  <el-button size="small" @click="editChapter(section)">编辑</el-button>
+                                  <el-button size="small" type="danger" @click="deleteChapter(section)">删除</el-button>
+                                </div>
+                              </div>
+                            </div>
+                          </template>
+                        </draggable>
+                      </div>
+                    </div>
+                  </template>
+                </draggable>
+              </div>
+            </div>
+          </el-card>
+          </div>
+        </div>
+
+        <!-- 右侧：内容编辑 -->
+        <div class="right-panel">
+          <el-card class="content-card">
+            <template #header>
+              <div class="card-header">
+                <span>{{ currentEditingChapter ? `编辑: ${currentEditingChapter.title}` : '文章内容' }}</span>
+                <div class="header-actions" v-if="currentEditingChapter">
+                  <el-button size="small" @click="saveCurrentChapter">保存章节</el-button>
+                  <el-button size="small" @click="cancelChapterEdit">取消</el-button>
+                </div>
+              </div>
+            </template>
+            
+            <!-- 章节编辑模式 -->
+            <div v-if="currentEditingChapter" class="chapter-editor">
+              <el-form :model="chapterForm" label-width="80px">
+                <el-form-item label="章节标题" required>
+                  <el-input v-model="chapterForm.title" placeholder="请输入章节标题" />
                 </el-form-item>
                 
-                <el-form-item label="文章别名">
-                  <el-input v-model="postForm.slug" placeholder="用于URL，留空自动生成" maxlength="200" />
-                </el-form-item>
-                
-                <el-form-item label="文章类型" required>
-                  <el-select v-model="postForm.postTypeId" placeholder="选择文章类型" style="width: 100%">
-                    <el-option 
-                      v-for="type in postTypes" 
-                      :key="type.id" 
-                      :label="type.name" 
-                      :value="type.id" 
-                    />
-                  </el-select>
-                </el-form-item>
-                
-                <el-form-item label="所属系列">
-                  <el-select v-model="postForm.seriesId" placeholder="选择系列" clearable style="width: 100%">
-                    <el-option 
-                      v-for="series in seriesList" 
-                      :key="series.id" 
-                      :label="series.name" 
-                      :value="series.id" 
-                    />
-                  </el-select>
-                </el-form-item>
-                
-                <el-form-item label="作者自述">
-                  <el-input 
-                    v-model="postForm.summary" 
-                    type="textarea" 
+                <el-form-item label="背景说明">
+                  <el-input
+                    v-model="chapterForm.backgroundText"
+                    type="textarea"
                     :rows="3"
-                    placeholder="文章摘要或作者自述，将显示在文章标题下方"
-                    maxlength="500" 
-                    show-word-limit 
+                    placeholder="章节背景说明（可选）"
                   />
                 </el-form-item>
                 
-                <el-form-item label="文章内容" required class="content-form-item">
-                  <el-input 
-                    v-model="postForm.contentMd" 
-                    type="textarea" 
-                    :rows="isMobile ? 15 : 30"
-                    placeholder="请输入文章内容（支持Markdown格式）"
+                <el-form-item label="章节内容" required>
+                  <div class="chapter-editor-toolbar">
+                    <el-upload
+                      ref="chapterImageUploadRef"
+                      :show-file-list="false"
+                      :before-upload="() => false"
+                      :on-change="handleChapterImageUpload"
+                      accept="image/*"
+                      style="display: inline-block;"
+                    >
+                      <el-button size="small">
+                        <el-icon><Picture /></el-icon>
+                        插入图片
+                      </el-button>
+                    </el-upload>
+                  </div>
+                  
+                  <el-input
+                    v-model="chapterForm.content"
+                    type="textarea"
+                    :rows="18"
+                    placeholder="请输入章节内容"
                     class="content-textarea"
                   />
                 </el-form-item>
-                
-                <el-form-item label="发布状态">
-                  <el-radio-group v-model="postForm.status">
-                    <el-radio label="DRAFT">草稿</el-radio>
-                    <el-radio label="PUBLISHED">发布</el-radio>
-                  </el-radio-group>
-                </el-form-item>
-                
-                <el-form-item label="可见性">
-                  <el-radio-group v-model="postForm.visibility">
-                    <el-radio label="PUBLIC">公开</el-radio>
-                    <el-radio label="UNLISTED">不公开</el-radio>
-                    <el-radio label="PRIVATE">私有</el-radio>
-                  </el-radio-group>
-                </el-form-item>
-                
-                <el-form-item label="发布时间">
-                  <el-date-picker
-                    v-model="postForm.publishDate"
-                    type="datetime"
-                    placeholder="选择发布时间"
-                    format="YYYY-MM-DD HH:mm:ss"
-                    value-format="YYYY-MM-DD HH:mm:ss"
-                    style="width: 100%"
-                  />
-                </el-form-item>
-                
-                <el-form-item label="标签">
-                  <el-select 
-                    v-model="postForm.tagIds" 
-                    multiple 
-                    placeholder="选择标签" 
-                    style="width: 100%"
-                  >
-                    <el-option 
-                      v-for="tag in tags" 
-                      :key="tag.id" 
-                      :label="tag.name" 
-                      :value="tag.id" 
-                    />
-                  </el-select>
-                </el-form-item>
-              </div>
-            </el-tab-pane>
+              </el-form>
+            </div>
             
-            <!-- 章节与目录 -->
-            <el-tab-pane label="章节目录" name="chapter">
-              <div class="form-section">
-                <el-form-item label="章节编号">
-                  <el-input-number 
-                    v-model="postForm.chapterNo" 
-                    :min="1" 
-                    :max="9999" 
-                    placeholder="章节编号"
-                    style="width: 100%"
-                  />
-                </el-form-item>
+            <!-- 普通文章编辑模式 -->
+            <div v-else class="article-editor">
+              <div class="editor-toolbar">
+                <el-upload
+                  ref="imageUploadRef"
+                  :show-file-list="false"
+                  :before-upload="() => false"
+                  :on-change="handleImageUpload"
+                  accept="image/*"
+                  style="display: inline-block; margin-right: 8px;"
+                >
+                  <el-button size="small">
+                    <el-icon><Picture /></el-icon>
+                    插入图片
+                  </el-button>
+                </el-upload>
                 
-                <el-form-item label="章节标题">
-                  <el-input 
-                    v-model="postForm.chapterTitle" 
-                    placeholder="章节标题"
-                    maxlength="300"
-                  />
-                </el-form-item>
-                
-                <el-form-item label="自动生成目录">
-                  <el-switch 
-                    v-model="postForm.autoGenerateToc"
-                    active-text="开启"
-                    inactive-text="关闭"
-                  />
-                  <div class="form-tip">开启后将根据文章中的标题自动生成目录</div>
-                </el-form-item>
-                
-                <el-form-item label="目录生成">
-                  <el-button @click="generateTocFromContent" :disabled="!postForm.contentMd">
+                <el-upload
+                  ref="articleWordUploadRef"
+                  :show-file-list="false"
+                  :before-upload="() => false"
+                  :on-change="handleArticleWordUpload"
+                  accept=".doc,.docx"
+                  style="display: inline-block;"
+                >
+                  <el-button size="small">
                     <el-icon><DocumentAdd /></el-icon>
-                    根据内容生成目录
+                    导入Word
                   </el-button>
-                  <el-button @click="previewToc" :disabled="!postForm.tableOfContents">
-                    <el-icon><View /></el-icon>
-                    预览目录
-                  </el-button>
-                </el-form-item>
-                
-                <el-form-item label="自定义目录">
-                  <el-input 
-                    v-model="postForm.tableOfContents" 
-                    type="textarea" 
-                    :rows="8"
-                    placeholder="JSON格式的目录数据，如：[{&quot;id&quot;:&quot;heading-1&quot;,&quot;title&quot;:&quot;第一章&quot;,&quot;level&quot;:1}]"
-                  />
-                  <div class="form-tip">可手动编辑目录结构，JSON格式</div>
-                </el-form-item>
+                </el-upload>
               </div>
-            </el-tab-pane>
-            
-            <!-- 注解与设置 -->
-            <el-tab-pane label="注解设置" name="annotations">
-              <div class="form-section">
-                <el-form-item label="文章注解">
-                  <el-input 
-                    v-model="postForm.annotations" 
-                    type="textarea" 
-                    :rows="10"
-                    placeholder="JSON格式的注解数据，用于添加文章注释、备注等信息"
-                  />
-                  <div class="form-tip">
-                    注解格式示例：<br>
-                    [{"position": 100, "content": "这里是注解内容", "type": "note"}]
-                  </div>
-                </el-form-item>
-                
-                <el-form-item label="排序权重">
-                  <el-input-number 
-                    v-model="postForm.sortOrder" 
-                    :min="0" 
-                    :max="9999" 
-                    placeholder="数字越大越靠前"
-                    style="width: 100%"
-                  />
-                  <div class="form-tip">用于控制文章在列表中的显示顺序</div>
-                </el-form-item>
-              </div>
-            </el-tab-pane>
-            
-            <!-- 壁纸设置 -->
-            <el-tab-pane label="壁纸设置" name="wallpaper">
-              <div class="form-section">
-                <el-form-item label="背景壁纸URL">
-                  <el-input 
-                    v-model="postForm.wallpaperUrl" 
-                    placeholder="背景壁纸图片URL"
-                  />
-                  <div class="form-tip">为文章设置专属背景壁纸</div>
-                </el-form-item>
-                
-                <el-form-item label="壁纸透明度">
-                  <el-slider 
-                    v-model="postForm.wallpaperOpacity" 
-                    :min="0" 
-                    :max="1" 
-                    :step="0.05"
-                    show-input
-                    :show-input-controls="false"
-                  />
-                  <div class="form-tip">调整壁纸透明度，避免影响文字阅读</div>
-                </el-form-item>
-                
-                <el-form-item label="封面图片">
-                  <div class="cover-upload-section">
-                    <el-button @click="uploadCover" :loading="uploadingImage">
-                      <el-icon><Upload /></el-icon>
-                      上传封面
-                    </el-button>
-                    <div class="upload-tip">支持 JPG、PNG、GIF格式，建议尺寸1200x600</div>
-                  </div>
-                </el-form-item>
-              </div>
-            </el-tab-pane>
-          </el-tabs>
-        </el-form>
+              
+              <el-input
+                v-model="postForm.contentMd"
+                type="textarea"
+                :rows="23"
+                placeholder="请输入文章内容"
+                class="content-textarea"
+              />
+            </div>
+          </el-card>
+        </div>
       </div>
-      
+
       <template #footer>
         <div class="dialog-footer">
-          <el-button @click="dialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="savePost" :loading="saving">
-            {{ isEditing ? '保存修改' : '创建文章' }}
-          </el-button>
+          <el-button @click="cancelEdit">取消</el-button>
+          <el-button type="primary" @click="savePost">保存文章</el-button>
         </div>
+      </template>
+    </el-dialog>
+
+    <!-- 章节编辑对话框 -->
+    <el-dialog
+      v-model="chapterDialogVisible"
+      title="章节信息"
+      width="500px"
+    >
+      <el-form :model="chapterForm" label-width="80px">
+        <el-form-item label="章节标题" required>
+          <el-input v-model="chapterForm.title" placeholder="请输入章节标题" />
+        </el-form-item>
+        
+        <el-form-item label="背景说明">
+          <el-input
+            v-model="chapterForm.backgroundText"
+            type="textarea"
+            :rows="3"
+            placeholder="章节背景说明（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="chapterDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveChapterInfo">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量设置可见性对话框 -->
+    <el-dialog
+      v-model="batchVisibilityDialogVisible"
+      title="批量设置可见性"
+      width="400px"
+    >
+      <el-form label-width="80px">
+        <el-form-item label="可见性">
+          <el-select v-model="batchVisibilityForm.visibility" style="width: 100%">
+            <el-option label="公开" value="PUBLIC" />
+            <el-option label="不公开" value="UNLISTED" />
+            <el-option label="私有" value="PRIVATE" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="batchVisibilityDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmBatchVisibility">确定</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 单个文章可见性设置对话框 -->
+    <el-dialog
+      v-model="visibilityDialogVisible"
+      title="设置可见性"
+      width="400px"
+    >
+      <el-form label-width="80px">
+        <el-form-item label="可见性">
+          <el-select v-model="visibilityForm.visibility" style="width: 100%">
+            <el-option label="公开" value="PUBLIC" />
+            <el-option label="不公开" value="UNLISTED" />
+            <el-option label="私有" value="PRIVATE" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <el-button @click="visibilityDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="confirmVisibility">确定</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, nextTick } from 'vue'
+import Sortable from 'sortablejs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Upload, RefreshLeft, Promotion, Picture, Sort, Edit, Delete, View, ArrowUp, ArrowDown, DocumentAdd, DocumentRemove, Rank } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Edit, Delete, Document, DocumentAdd, Rank, Upload, ArrowDown, Setting, Picture, DocumentCopy, Lock, Unlock } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
+
+// API imports
 import { 
   getAdminPosts, 
-  getPostById,
-  checkTitleExists,
   createAdminPost, 
   updateAdminPost, 
   deleteAdminPost,
-  publishPost,
-  togglePostStatus,
-  togglePostVisibility,
-  batchPublishPosts
+  getPostById 
 } from '@/api/admin'
-import { getAllPostTypes } from '@/api/postType'
-import { getAllTags } from '@/api/tag'
-import { getAllSeries } from '@/api/series'
-import { WordParser } from '@/utils/wordParser'
+import { getPostTypes } from '@/api/postType'
+import { getSeries } from '@/api/series'
+import { getTags } from '@/api/tag'
 import { uploadImage } from '@/api/file'
-import { updatePostSortOrder, batchUpdatePostSortOrder, generateTableOfContents } from '@/api/post'
+import { publishPost, updatePostVisibility } from '@/api/admin'
+import { 
+  getChapterTree, 
+  createChapter, 
+  updateChapter, 
+  deleteChapter as deleteChapterAPI,
+  reorderChapters 
+} from '@/api/postChapter'
+import { parseWordDocument } from '@/utils/wordParser'
 
-// 响应式状态
+// 响应式数据
 const loading = ref(false)
-const saving = ref(false)
-const posts = ref([])
 const dialogVisible = ref(false)
+const chapterDialogVisible = ref(false)
 const isEditing = ref(false)
-const sortableTable = ref(null)
-
-// 数据状态
+const posts = ref([])
 const postTypes = ref([])
-const tags = ref([])
 const seriesList = ref([])
-const uploadingImage = ref(false)
-const activeTab = ref('basic')
-
-// 响应式计算
-const isMobile = computed(() => {
-  if (typeof window !== 'undefined') {
-    return window.innerWidth <= 768
-  }
-  return false
-})
-const dialogWidth = computed(() => isMobile.value ? '100%' : '90%')
+const chapters = ref([])
+const currentEditingChapter = ref(null)
+const wordUploadRef = ref()
+const selectedPosts = ref([])
+const availableTags = ref([])
+const batchVisibilityDialogVisible = ref(false)
+const visibilityDialogVisible = ref(false)
+const coverUploadRef = ref()
+const imageUploadRef = ref()
+const chapterImageUploadRef = ref()
+const articleWordUploadRef = ref()
+const currentVisibilityPost = ref(null)
 
 // 筛选条件
 const filters = reactive({
@@ -507,38 +689,96 @@ const pagination = reactive({
   total: 0
 })
 
-// 表单数据
+// 文章表单
 const postForm = reactive({
+  id: null,
   title: '',
-  slug: '',
-  contentMd: '',
   summary: '',
+  contentMd: '',
   postTypeId: null,
   seriesId: null,
-  chapterNo: null,
-  chapterTitle: '',
-  annotations: '',
-  tableOfContents: '',
-  autoGenerateToc: true,
-  wallpaperUrl: '',
-  wallpaperOpacity: 0.1,
-  sortOrder: 0,
-  visibility: 'PUBLIC',
   status: 'DRAFT',
+  visibility: 'PUBLIC',
+  hasChapters: false,
+  preChapterContent: '',
   publishDate: null,
-  tagIds: []
+  tags: [],
+  coverUrl: '',
+  coverAssetId: null
 })
 
-// 表单验证规则
-const postRules = {
-  title: [{ required: true, message: '请输入文章标题', trigger: 'blur' }],
-  slug: [{ required: true, message: '请输入文章别名', trigger: 'blur' }],
-  contentMd: [{ required: true, message: '请输入文章内容', trigger: 'blur' }],
-  postTypeId: [{ required: true, message: '请选择文章类型', trigger: 'change' }],
-  visibility: [{ required: true, message: '请选择可见性', trigger: 'change' }]
+// 批量可见性表单
+const batchVisibilityForm = reactive({
+  visibility: 'PUBLIC'
+})
+
+// 单个可见性表单
+const visibilityForm = reactive({
+  visibility: 'PUBLIC'
+})
+
+// 章节表单
+const chapterForm = reactive({
+  id: null,
+  postId: null,
+  parentId: null,
+  title: '',
+  content: '',
+  backgroundText: '',
+  orderNo: 0
+})
+
+// 生命周期
+onMounted(() => {
+  loadPosts()
+  loadPostTypes()
+  loadSeries()
+  loadTags()
+  nextTick(() => {
+    initSortable()
+  })
+})
+
+const initSortable = () => {
+  nextTick(() => {
+    const tableBodyEl = document.querySelector('.posts-table .el-table__body-wrapper tbody')
+    if (tableBodyEl) {
+      new Sortable(tableBodyEl, {
+        handle: '.drag-handle',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: ({ newIndex, oldIndex }) => {
+          if (newIndex !== oldIndex) {
+            const movedItem = posts.value.splice(oldIndex, 1)[0]
+            posts.value.splice(newIndex, 0, movedItem)
+            updatePostsOrder()
+          }
+        }
+      })
+    }
+  })
 }
 
-// 加载文章列表
+const updatePostsOrder = async () => {
+  try {
+    const orderData = posts.value.map((post, index) => ({
+      id: post.id,
+      sortOrder: posts.value.length - index
+    }))
+    
+    // 这里需要调用批量更新排序的API
+    // await batchUpdatePostSortOrder(orderData)
+    ElMessage.success('排序更新成功')
+  } catch (error) {
+    ElMessage.error('排序更新失败')
+    console.error('Update order error:', error)
+    // 重新加载恢复原状态
+    loadPosts()
+  }
+}
+
+// 方法定义
 const loadPosts = async () => {
   try {
     loading.value = true
@@ -551,2006 +791,1454 @@ const loadPosts = async () => {
     posts.value = response.data.records || []
     pagination.total = response.data.total || 0
   } catch (error) {
-    console.error('加载文章失败:', error)
-    ElMessage.error('加载文章失败')
+    ElMessage.error('加载文章列表失败')
+    console.error('Load posts error:', error)
   } finally {
     loading.value = false
   }
 }
 
-// 加载基础数据
-const loadBaseData = async () => {
+const loadPostTypes = async () => {
   try {
-    const [typesRes, tagsRes, seriesRes] = await Promise.all([
-      getAllPostTypes(),
-      getAllTags(),
-      getAllSeries()
-    ])
-    postTypes.value = typesRes.data || []
-    tags.value = tagsRes.data || []
-    seriesList.value = seriesRes.data || []
+    const response = await getPostTypes()
+    postTypes.value = response.data || []
   } catch (error) {
-    console.error('加载基础数据失败:', error)
+    console.error('Load post types error:', error)
   }
 }
 
-// 搜索处理
-const handleSearch = () => {
-  pagination.page = 1
-  loadPosts()
-}
-
-// 显示创建对话框
-const showCreateDialog = () => {
-  resetForm()
-  isEditing.value = false
-  dialogVisible.value = true
-}
-
-// 编辑文章
-const editPost = async (post) => {
+const loadSeries = async () => {
   try {
-    loading.value = true
-    // 直接使用传入的post数据
-    Object.assign(postForm, {
-      id: post.id,
-      title: post.title || '',
-      slug: post.slug || '',
-      contentMd: post.contentMd || '',
-      summary: post.summary || '',
-      postTypeId: post.postTypeId,
-      seriesId: post.seriesId,
-      chapterNo: post.chapterNo,
-      chapterTitle: post.chapterTitle || '',
-      annotations: post.annotations || '',
-      tableOfContents: post.tableOfContents || '',
-      autoGenerateToc: post.autoGenerateToc !== false,
-      wallpaperUrl: post.wallpaperUrl || '',
-      wallpaperOpacity: post.wallpaperOpacity || 0.1,
-      sortOrder: post.sortOrder || 0,
-      visibility: post.visibility || 'PUBLIC',
-      status: post.status || 'DRAFT',
-      publishDate: post.publishDate,
-      tagIds: post.tagIds || []
-    })
-    isEditing.value = true
-    dialogVisible.value = true
+    const response = await getSeries()
+    seriesList.value = response.data || []
   } catch (error) {
-    console.error('加载文章详情失败:', error)
-    ElMessage.error('加载文章详情失败')
-  } finally {
-    loading.value = false
+    console.error('Load series error:', error)
   }
 }
 
-// 保存文章
-const savePost = async () => {
+const loadTags = async () => {
   try {
-    const isEdit = isEditing.value
-    
-    // 检查标题是否重复 - 暂时跳过
-    
-    saving.value = true
-    
-    if (isEdit) {
-      await updateAdminPost(postForm.id, postForm)
-    } else {
-      await createAdminPost(postForm)
-    }
-    
-    dialogVisible.value = false
-    resetForm()
-    // 自动刷新列表
-    await loadPosts()
-    ElMessage.success(isEdit ? '文章更新成功' : '文章创建成功')
+    const response = await getTags()
+    availableTags.value = response.data || []
   } catch (error) {
-    console.error('保存文章失败:', error)
-    ElMessage.error('保存文章失败')
-  } finally {
-    saving.value = false
+    console.error('Load tags error:', error)
   }
 }
 
-
-// 删除文章
-const deletePost = async (post) => {
+const loadChapters = async (postId) => {
   try {
-    await ElMessageBox.confirm('确定要删除这篇文章吗？', '确认删除', {
-      type: 'warning'
-    })
-    
-    await deleteAdminPost(post.id)
-    ElMessage.success('文章删除成功')
-    loadPosts()
+    const response = await getChapterTree(postId)
+    chapters.value = response.data || []
   } catch (error) {
-    if (error !== 'cancel') {
-      console.error('删除文章失败:', error)
-      ElMessage.error('删除文章失败')
-    }
+    console.error('Load chapters error:', error)
+    chapters.value = []
   }
 }
 
-// 重置表单
-const resetForm = () => {
-  Object.assign(postForm, {
-    title: '',
-    slug: '',
-    contentMd: '',
-    summary: '',
-    postTypeId: null,
-    seriesId: null,
-    chapterNo: null,
-    chapterTitle: '',
-    annotations: '',
-    tableOfContents: '',
-    autoGenerateToc: true,
-    wallpaperUrl: '',
-    wallpaperOpacity: 0.1,
-    sortOrder: 0,
-    visibility: 'PUBLIC',
-    status: 'DRAFT',
-    publishDate: null,
-    tagIds: []
-  })
-  editingPost.value = null
-  if (postFormRef.value) {
-    postFormRef.value.resetFields()
-  }
-}
-
-// 格式化日期
-const formatDate = (dateString) => {
-  if (!dateString) return '-'
-  return new Date(dateString).toLocaleString('zh-CN')
-}
-
-// 可见性类型
-const getVisibilityType = (visibility) => {
-  const types = {
-    PUBLIC: 'success',
-    UNLISTED: 'warning', 
-    PRIVATE: 'danger'
-  }
-  return types[visibility] || ''
-}
-
-const getVisibilityLabel = (visibility) => {
-  const labels = {
-    PUBLIC: '公开',
-    UNLISTED: '不公开',
-    PRIVATE: '私有'
-  }
-  return labels[visibility] || visibility
-}
-
-// Word 文档上传处理
-const handleWordUpload = async (file) => {
-  if (!file || !file.raw) {
-    return
-  }
-
-  try {
-    ElMessage.info('正在解析 Word 文档...')
-    
-    const result = await WordParser.parseWordDocument(file.raw)
-    
-    // 填充表单数据
-    Object.assign(postForm, {
-      title: result.title,
-      slug: result.slug,
-      contentMd: result.contentMd,
-      summary: '',
-      postTypeId: null,
-      seriesId: null,
-      visibility: 'PUBLIC',
-      status: 'DRAFT',
-      publishDate: null,
-      tagIds: []
-    })
-    
-    ElMessage.success(`Word 文档解析成功！文件：${result.originalFilename}`)
-    
-    // 清空上传组件
-    if (wordUploadRef.value) {
-      wordUploadRef.value.clearFiles()
-    }
-    
-  } catch (error) {
-    console.error('Word 文档解析失败:', error)
-    ElMessage.error(error.message || '解析 Word 文档失败')
-  }
-}
-
-// 选择变化处理
-const handleSelectionChange = (selection) => {
-  selectedPosts.value = selection
-}
-
-// 批量发布
-const batchPublish = async () => {
-  if (selectedPosts.value.length === 0) {
-    ElMessage.warning('请选择要发布的文章')
-    return
-  }
-
-  try {
-    await ElMessageBox.confirm(
-      `确定要发布选中的 ${selectedPosts.value.length} 篇文章吗？`,
-      '批量发布',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning',
-      }
-    )
-
-    loading.value = true
-    
-    // 提取草稿状态的文章ID
-    const draftPostIds = selectedPosts.value
-      .filter(post => post.status === 'DRAFT')
-      .map(post => post.id)
-    
-    if (draftPostIds.length === 0) {
-      ElMessage.warning('选中的文章中没有草稿状态的文章')
-      return
-    }
-    
-    await batchPublishPosts(draftPostIds)
-    
-    ElMessage.success('批量发布成功')
-    await loadPosts()
-    
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('批量发布失败:', error)
-      ElMessage.error('批量发布失败')
-    }
-  } finally {
-    loading.value = false
-  }
-}
-
-// 切换状态
-const toggleStatus = async (post) => {
-  try {
-    await togglePostStatus(post.id)
-    ElMessage.success('状态切换成功')
-    await loadPosts()
-  } catch (error) {
-    console.error('状态切换失败:', error)
-    ElMessage.error('状态切换失败')
-  }
-}
-
-// 切换可见性
-const toggleVisibility = async (post) => {
-  try {
-    await togglePostVisibility(post.id)
-    ElMessage.success('可见性切换成功')
-    await loadPosts()
-  } catch (error) {
-    console.error('可见性切换失败:', error)
-    ElMessage.error('可见性切换失败')
-  }
-}
-
-// 排序对话框相关（保留以防其他地方调用）
-const showSortDialog = () => {
-  ElMessage.info('请使用拖拽功能调整文章顺序')
-}
-
-// 从内容生成目录
-const generateTocFromContent = async () => {
-  if (!postForm.contentMd) {
-    ElMessage.warning('请先输入文章内容')
-    return
-  }
-  
-  try {
-    const response = await generateTableOfContents(postForm.contentMd)
-    postForm.tableOfContents = response.data
-    ElMessage.success('目录生成成功')
-  } catch (error) {
-    console.error('生成目录失败:', error)
-    ElMessage.error('生成目录失败')
-  }
-}
-
-// 预览目录
-const previewToc = () => {
-  if (!postForm.tableOfContents) {
-    ElMessage.warning('暂无目录数据')
-    return
-  }
-  
-  try {
-    const tocItems = JSON.parse(postForm.tableOfContents)
-    const tocText = tocItems.map(item => {
-      const indent = '  '.repeat(item.level - 1)
-      return `${indent}${item.level}. ${item.title}`
-    }).join('\n')
-    
-    ElMessageBox.alert(tocText, '目录预览', {
-      confirmButtonText: '确定',
-      type: 'info'
-    })
-  } catch (error) {
-    ElMessage.error('目录格式错误')
-  }
-}
-
-
-// 图片上传前检查
-const beforeImageUpload = (file) => {
-  const isImage = file.type.startsWith('image/')
-  const isLt5M = file.size / 1024 / 1024 < 5
-
-  if (!isImage) {
-    ElMessage.error('只能上传图片文件!')
-    return false
-  }
-  if (!isLt5M) {
-    ElMessage.error('图片大小不能超过 5MB!')
-    return false
-  }
-  return true
-}
-
-// 处理图片选择
-const handleImageSelect = async (file) => {
-  if (!beforeImageUpload(file.raw)) {
-    return
-  }
-
-  try {
-    uploadingImage.value = true
-    ElMessage.info('正在上传图片...')
-    
-    const response = await uploadImage(file.raw)
-    const imageUrl = response.data.url
-    const imageName = response.data.originalName
-    
-    // 在光标位置插入Markdown图片语法
-    const markdownImage = `![${imageName}](${imageUrl})\n`
-    const textarea = document.querySelector('.markdown-editor textarea')
-    
-    if (textarea) {
-      const start = textarea.selectionStart
-      const end = textarea.selectionEnd
-      const text = postForm.contentMd
-      postForm.contentMd = text.substring(0, start) + markdownImage + text.substring(end)
-      
-      // 设置光标位置到插入内容的末尾
-      setTimeout(() => {
-        textarea.focus()
-        textarea.setSelectionRange(start + markdownImage.length, start + markdownImage.length)
-      }, 100)
-    } else {
-      // 如果找不到textarea，就追加到内容末尾
-      postForm.contentMd += '\n' + markdownImage
-    }
-    
-    ElMessage.success('图片上传成功')
-    
-    // 清空上传组件
-    if (imageUploadRef.value) {
-      imageUploadRef.value.clearFiles()
-    }
-    
-  } catch (error) {
-    console.error('图片上传失败:', error)
-    ElMessage.error('图片上传失败: ' + (error.message || '未知错误'))
-  } finally {
-    uploadingImage.value = false
-  }
-}
-
-// 重置过滤器
 const resetFilters = () => {
   Object.assign(filters, {
     keyword: '',
     status: '',
     visibility: ''
   })
+  pagination.page = 1
   loadPosts()
 }
 
-onMounted(() => {
-  loadPosts()
-  loadBaseData()
-  initSortable()
-})
+const showCreateDialog = () => {
+  isEditing.value = false
+  resetForm()
+  dialogVisible.value = true
+}
 
-// 初始化拖拽功能
-const initSortable = () => {
-  import('sortablejs').then((module) => {
-    const Sortable = module.default
-    nextTick(() => {
-      const el = sortableTable.value?.$el?.querySelector('.el-table__body-wrapper tbody')
-      if (el) {
-        Sortable.create(el, {
-          // 整行拖拽，不限制handle
-          ghostClass: 'sortable-ghost',
-          chosenClass: 'sortable-chosen',
-          dragClass: 'sortable-drag',
-          animation: 150,
-          onEnd: (evt) => {
-            const { oldIndex, newIndex } = evt
-            if (oldIndex !== newIndex) {
-              // 更新本地数组顺序
-              const movedItem = posts.value.splice(oldIndex, 1)[0]
-              posts.value.splice(newIndex, 0, movedItem)
-              
-              // 更新服务器端排序
-              updatePostsOrder()
-            }
-          }
-        })
-      }
+const editPost = async (postId) => {
+  try {
+    isEditing.value = true
+    const response = await getPostById(postId)
+    const post = response.data
+    
+    console.log('Loading post data:', post)
+    
+    Object.assign(postForm, {
+      id: post.id,
+      title: post.title,
+      summary: post.summary || '',
+      contentMd: post.contentMd || '',
+      postTypeId: post.postTypeId,
+      seriesId: post.seriesId,
+      status: post.status,
+      visibility: post.visibility,
+      hasChapters: Boolean(post.hasChapters),
+      preChapterContent: post.preChapterContent || '',
+      publishDate: post.publishDate,
+      tags: post.tags || [],
+      coverUrl: post.coverUrl || '',
+      coverAssetId: post.coverAssetId || null
     })
+    
+    console.log('Form data after loading:', postForm)
+    
+    // 如果文章有章节，加载章节数据
+    if (postForm.hasChapters) {
+      console.log('Loading chapters for post:', postId)
+      await loadChapters(postId)
+      console.log('Chapters loaded:', chapters.value)
+    } else {
+      // 清空章节数据
+      chapters.value = []
+      currentEditingChapter.value = null
+    }
+    
+    dialogVisible.value = true
+  } catch (error) {
+    ElMessage.error('加载文章详情失败')
+    console.error('Edit post error:', error)
+  }
+}
+
+const deletePost = async (postId) => {
+  try {
+    await ElMessageBox.confirm('确定删除这篇文章吗？', '确认删除', {
+      type: 'warning'
+    })
+    
+    await deleteAdminPost(postId)
+    ElMessage.success('删除成功')
+    loadPosts()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+      console.error('Delete post error:', error)
+    }
+  }
+}
+
+const toggleChapters = (hasChapters) => {
+  if (!hasChapters) {
+    chapters.value = []
+    currentEditingChapter.value = null
+  }
+}
+
+const addChapter = () => {
+  const newChapter = {
+    id: Date.now(), // 临时ID
+    postId: postForm.id,
+    parentId: null,
+    title: '新章节',
+    content: '',
+    backgroundText: '',
+    orderNo: chapters.value.length,
+    children: []
+  }
+  chapters.value.push(newChapter)
+  editChapter(newChapter)
+}
+
+const addSection = (parentChapter) => {
+  if (!parentChapter.children) {
+    parentChapter.children = []
+  }
+  
+  const newSection = {
+    id: Date.now(), // 临时ID
+    postId: postForm.id,
+    parentId: parentChapter.id,
+    title: '新节',
+    content: '',
+    backgroundText: '',
+    orderNo: parentChapter.children.length
+  }
+  
+  parentChapter.children.push(newSection)
+  editChapter(newSection)
+}
+
+const editChapter = (chapter) => {
+  currentEditingChapter.value = chapter
+  Object.assign(chapterForm, {
+    id: chapter.id,
+    postId: chapter.postId,
+    parentId: chapter.parentId,
+    title: chapter.title,
+    content: chapter.content,
+    backgroundText: chapter.backgroundText,
+    orderNo: chapter.orderNo
   })
 }
 
-// 更新文章排序到服务器
-const updatePostsOrder = async () => {
+const saveCurrentChapter = () => {
+  if (!chapterForm.title.trim()) {
+    ElMessage.error('请输入章节标题')
+    return
+  }
+  
+  if (!chapterForm.content.trim()) {
+    ElMessage.error('请输入章节内容')
+    return
+  }
+  
+  // 更新当前编辑的章节
+  Object.assign(currentEditingChapter.value, {
+    title: chapterForm.title,
+    content: chapterForm.content,
+    backgroundText: chapterForm.backgroundText
+  })
+  
+  currentEditingChapter.value = null
+  ElMessage.success('章节内容已保存，记得保存文章以提交所有更改')
+}
+
+const cancelChapterEdit = () => {
+  currentEditingChapter.value = null
+}
+
+const deleteChapter = async (chapter) => {
   try {
-    const postIds = posts.value.map(post => post.id)
-    await batchUpdatePostSortOrder(postIds)
-    ElMessage.success('排序已更新')
+    await ElMessageBox.confirm('确定删除这个章节吗？', '确认删除', {
+      type: 'warning'
+    })
+    
+    // 从章节列表中移除
+    if (chapter.parentId) {
+      // 删除节
+      const parentChapter = chapters.value.find(c => c.id === chapter.parentId)
+      if (parentChapter && parentChapter.children) {
+        const index = parentChapter.children.findIndex(s => s.id === chapter.id)
+        if (index > -1) {
+          parentChapter.children.splice(index, 1)
+        }
+      }
+    } else {
+      // 删除章
+      const index = chapters.value.findIndex(c => c.id === chapter.id)
+      if (index > -1) {
+        chapters.value.splice(index, 1)
+      }
+    }
+    
+    if (currentEditingChapter.value?.id === chapter.id) {
+      currentEditingChapter.value = null
+    }
+    
+    ElMessage.success('删除成功')
   } catch (error) {
-    ElMessage.error('排序更新失败：' + error.message)
-    // 重新加载数据以恢复原始顺序
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+const handleChapterReorder = () => {
+  // 重新设置排序号
+  chapters.value.forEach((chapter, index) => {
+    chapter.orderNo = index
+    if (chapter.children) {
+      chapter.children.forEach((section, sectionIndex) => {
+        section.orderNo = sectionIndex
+      })
+    }
+  })
+}
+
+const handleWordUpload = async (file) => {
+  try {
+    const result = await parseWordDocument(file.raw)
+    
+    // 如果文章标题为空，使用Word标题
+    if (!postForm.title && result.title) {
+      postForm.title = result.title
+    }
+    
+    if (postForm.hasChapters) {
+      // 章节模式：将Word内容作为新章节添加
+      const newChapter = {
+        id: Date.now(),
+        postId: postForm.id,
+        parentId: null,
+        title: result.title || '导入的章节',
+        content: result.contentMd || result.content,
+        backgroundText: '',
+        orderNo: chapters.value.length,
+        children: []
+      }
+      
+      chapters.value.push(newChapter)
+      ElMessage.success('Word文档导入为新章节成功')
+    } else {
+      // 普通模式：将Word内容填充到文章内容
+      postForm.contentMd = result.contentMd || result.content
+      ElMessage.success('Word文档导入成功')
+    }
+  } catch (error) {
+    ElMessage.error(`Word文档导入失败: ${error.message}`)
+    console.error('Word upload error:', error)
+  }
+}
+
+const savePost = async () => {
+  try {
+    if (!postForm.title.trim()) {
+      ElMessage.error('请输入文章标题')
+      return
+    }
+    
+    if (!postForm.postTypeId) {
+      ElMessage.error('请选择文章类型')
+      return
+    }
+    
+    // 验证内容：如果没有启用章节，必须有文章内容；如果启用章节，必须有章节
+    if (!postForm.hasChapters) {
+      if (!postForm.contentMd.trim()) {
+        ElMessage.error('请输入文章内容')
+        return
+      }
+    } else {
+      if (chapters.value.length === 0) {
+        ElMessage.error('启用章节模式时，至少需要一个章节')
+        return
+      }
+    }
+    
+    const submitData = {
+      title: postForm.title,
+      summary: postForm.summary,
+      postTypeId: postForm.postTypeId,
+      seriesId: postForm.seriesId,
+      status: postForm.status,
+      visibility: postForm.visibility,
+      hasChapters: postForm.hasChapters,
+      preChapterContent: postForm.preChapterContent,
+      publishDate: postForm.publishDate,
+      contentMd: postForm.hasChapters ? '' : (postForm.contentMd || '')
+    }
+    
+    console.log('Submitting data:', submitData)
+    
+    let savedPost
+    if (isEditing.value) {
+      savedPost = await updateAdminPost(postForm.id, submitData)
+    } else {
+      savedPost = await createAdminPost(submitData)
+    }
+    
+    console.log('API Response:', savedPost)
+    
+    // 安全获取postId
+    let postId
+    if (savedPost && savedPost.data) {
+      postId = savedPost.data.id || savedPost.data
+    } else if (isEditing.value) {
+      postId = postForm.id
+    } else {
+      throw new Error('无法获取文章ID，保存失败')
+    }
+    
+    console.log('Post ID:', postId)
+    
+    // 如果有章节，保存章节数据
+    if (postForm.hasChapters && chapters.value.length > 0) {
+      await saveChapters(postId)
+    }
+    
+    ElMessage.success(isEditing.value ? '更新成功' : '创建成功')
+    dialogVisible.value = false
     loadPosts()
+  } catch (error) {
+    ElMessage.error('保存失败: ' + (error.message || error))
+    console.error('Save post error:', error)
+  }
+}
+
+const saveChapters = async (postId) => {
+  try {
+    console.log('Saving chapters for postId:', postId)
+    console.log('Chapters data:', chapters.value)
+    
+    if (!postId) {
+      throw new Error('文章ID不能为空')
+    }
+    
+    if (!chapters.value || chapters.value.length === 0) {
+      console.log('No chapters to save')
+      return
+    }
+    
+    // 扁平化所有章节
+    const allChapters = []
+    chapters.value.forEach((chapter, chapterIndex) => {
+      // 确保章节有标题和内容
+      if (!chapter.title || !chapter.title.trim()) {
+        throw new Error(`第${chapterIndex + 1}章缺少标题`)
+      }
+      if (!chapter.content || !chapter.content.trim()) {
+        throw new Error(`第${chapterIndex + 1}章缺少内容`)
+      }
+      
+      allChapters.push({
+        id: chapter.id,
+        postId: postId,
+        parentId: null,
+        title: chapter.title,
+        content: chapter.content,
+        backgroundText: chapter.backgroundText || '',
+        orderNo: chapterIndex
+      })
+      
+      if (chapter.children && chapter.children.length > 0) {
+        chapter.children.forEach((section, sectionIndex) => {
+          if (!section.title || !section.title.trim()) {
+            throw new Error(`第${chapterIndex + 1}章第${sectionIndex + 1}节缺少标题`)
+          }
+          if (!section.content || !section.content.trim()) {
+            throw new Error(`第${chapterIndex + 1}章第${sectionIndex + 1}节缺少内容`)
+          }
+          
+          allChapters.push({
+            id: section.id,
+            postId: postId,
+            parentId: chapter.id,
+            title: section.title,
+            content: section.content,
+            backgroundText: section.backgroundText || '',
+            orderNo: sectionIndex
+          })
+        })
+      }
+    })
+    
+    console.log('All chapters to save:', allChapters)
+    
+    // 保存每个章节
+    for (const chapter of allChapters) {
+      const chapterData = {
+        postId: chapter.postId,
+        parentId: chapter.parentId,
+        title: chapter.title,
+        content: chapter.content,
+        backgroundText: chapter.backgroundText,
+        orderNo: chapter.orderNo
+      }
+      
+      console.log('Saving chapter:', chapterData)
+      
+      try {
+        if (!chapter.id || (typeof chapter.id === 'number' && chapter.id > 1000000000000)) {
+          // 新章节（临时ID或无ID）
+          const result = await createChapter(chapterData)
+          console.log('Created chapter:', result)
+        } else {
+          // 已存在的章节
+          const result = await updateChapter(chapter.id, chapterData)
+          console.log('Updated chapter:', result)
+        }
+      } catch (chapterError) {
+        console.error('Failed to save chapter:', chapterData, chapterError)
+        throw new Error(`保存章节"${chapter.title}"失败: ${chapterError.message}`)
+      }
+    }
+    
+    console.log('All chapters saved successfully')
+  } catch (error) {
+    console.error('Save chapters error:', error)
+    throw error
+  }
+}
+
+const cancelEdit = () => {
+  dialogVisible.value = false
+  currentEditingChapter.value = null
+}
+
+const resetForm = () => {
+  Object.assign(postForm, {
+    id: null,
+    title: '',
+    summary: '',
+    contentMd: '',
+    postTypeId: null,
+    seriesId: null,
+    status: 'DRAFT',
+    visibility: 'PUBLIC',
+    hasChapters: false,
+    preChapterContent: '',
+    publishDate: null,
+    tags: [],
+    coverUrl: '',
+    coverAssetId: null
+  })
+  
+  chapters.value = []
+  currentEditingChapter.value = null
+  
+  Object.assign(chapterForm, {
+    id: null,
+    postId: null,
+    parentId: null,
+    title: '',
+    content: '',
+    backgroundText: '',
+    orderNo: 0
+  })
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return '-'
+  const date = new Date(dateString)
+  return date.toLocaleString('zh-CN')
+}
+
+const getChapterDisplayTitle = (chapter, index) => {
+  if (chapter.parentId) {
+    // 这是一个节，查找父章节的索引
+    const parentChapter = chapters.value.find(c => c.id === chapter.parentId)
+    if (parentChapter) {
+      const parentIndex = chapters.value.indexOf(parentChapter)
+      const sectionIndex = parentChapter.children ? parentChapter.children.indexOf(chapter) : 0
+      return `${parentIndex + 1}.${sectionIndex + 1} ${chapter.title || '未命名节'}`
+    }
+    return chapter.title || '未命名节'
+  } else {
+    // 这是一个章
+    return `第${index + 1}章 ${chapter.title || '未命名章节'}`
+  }
+}
+
+const getSectionDisplayTitle = (section, parentChapter, chapterIndex) => {
+  const sectionIndex = parentChapter.children ? parentChapter.children.indexOf(section) : 0
+  return `${chapterIndex + 1}.${sectionIndex + 1} ${section.title || '未命名节'}`
+}
+
+// 批量操作方法
+const handleSelectionChange = (selection) => {
+  selectedPosts.value = selection
+}
+
+const publishSinglePost = async (postId) => {
+  try {
+    await publishPost(postId)
+    ElMessage.success('发布成功')
+    loadPosts()
+  } catch (error) {
+    ElMessage.error('发布失败')
+    console.error('Publish post error:', error)
+  }
+}
+
+const draftSinglePost = async (postId) => {
+  try {
+    // 先获取文章完整信息
+    const response = await getPostById(postId)
+    const post = response.data
+    
+    // 构建完整的更新数据
+    const updateData = {
+      title: post.title,
+      summary: post.summary || '',
+      contentMd: post.contentMd || post.content || '',
+      postTypeId: post.postTypeId,
+      seriesId: post.seriesId,
+      status: 'DRAFT',
+      visibility: post.visibility || 'PUBLIC'
+    }
+    
+    await updateAdminPost(postId, updateData)
+    ElMessage.success('转为草稿成功')
+    loadPosts()
+  } catch (error) {
+    ElMessage.error('转为草稿失败')
+    console.error('Draft post error:', error)
+  }
+}
+
+const setPrivate = async (postId) => {
+  try {
+    await updatePostVisibility(postId, 'PRIVATE')
+    ElMessage.success('设为私人成功')
+    loadPosts()
+  } catch (error) {
+    ElMessage.error('设为私人失败')
+    console.error('Set private error:', error)
+  }
+}
+
+const setPublic = async (postId) => {
+  try {
+    await updatePostVisibility(postId, 'PUBLIC')
+    ElMessage.success('设为公开成功')
+    loadPosts()
+  } catch (error) {
+    ElMessage.error('设为公开失败')
+    console.error('Set public error:', error)
+  }
+}
+
+const batchPublish = async () => {
+  try {
+    await ElMessageBox.confirm(`确定发布选中的 ${selectedPosts.value.length} 篇文章吗？`, '批量发布', {
+      type: 'warning'
+    })
+    
+    for (const post of selectedPosts.value) {
+      if (post.status === 'DRAFT') {
+        await publishPost(post.id)
+      }
+    }
+    
+    ElMessage.success('批量发布成功')
+    loadPosts()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量发布失败')
+    }
+  }
+}
+
+const batchDraft = async () => {
+  try {
+    await ElMessageBox.confirm(`确定将选中的 ${selectedPosts.value.length} 篇文章转为草稿吗？`, '批量转草稿', {
+      type: 'warning'
+    })
+
+    for (const post of selectedPosts.value) {
+      if (post.status === 'PUBLISHED') {
+        const response = await getPostById(post.id)
+        const currentPost = response.data
+        const updateData = {
+          title: currentPost.title,
+          summary: currentPost.summary || '',
+          contentMd: currentPost.contentMd || currentPost.content || '',
+          postTypeId: currentPost.postTypeId,
+          seriesId: currentPost.seriesId,
+          status: 'DRAFT',
+          visibility: currentPost.visibility || 'PUBLIC'
+        }
+        await updateAdminPost(post.id, updateData)
+      }
+    }
+
+    ElMessage.success('批量转草稿成功')
+    loadPosts()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量转草稿失败')
+    }
+  }
+}
+
+const batchDelete = async () => {
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${selectedPosts.value.length} 篇文章吗？`, '批量删除', {
+      type: 'warning'
+    })
+    
+    for (const post of selectedPosts.value) {
+      await deleteAdminPost(post.id)
+    }
+    
+    ElMessage.success('批量删除成功')
+    loadPosts()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除失败')
+    }
+  }
+}
+
+const showBatchVisibilityDialog = () => {
+  batchVisibilityForm.visibility = 'PUBLIC'
+  batchVisibilityDialogVisible.value = true
+}
+
+const confirmBatchVisibility = async () => {
+  try {
+    for (const post of selectedPosts.value) {
+      await updatePostVisibility(post.id, batchVisibilityForm.visibility)
+    }
+    
+    ElMessage.success('批量设置可见性成功')
+    batchVisibilityDialogVisible.value = false
+    loadPosts()
+  } catch (error) {
+    ElMessage.error('批量设置可见性失败')
+  }
+}
+
+const handleDropdownCommand = (command, row) => {
+  if (command === 'delete') {
+    deletePost(row.id)
+  } else if (command === 'visibility') {
+    currentVisibilityPost.value = row
+    visibilityForm.visibility = row.visibility
+    visibilityDialogVisible.value = true
+  }
+}
+
+const confirmVisibility = async () => {
+  try {
+    await updatePostVisibility(currentVisibilityPost.value.id, visibilityForm.visibility)
+    ElMessage.success('设置可见性成功')
+    visibilityDialogVisible.value = false
+    loadPosts()
+  } catch (error) {
+    ElMessage.error('设置可见性失败')
+  }
+}
+
+// 文件上传方法
+const handleCoverUpload = async (file) => {
+  try {
+    console.log('Uploading cover file:', file)
+    
+    // 确保file.raw存在
+    if (!file.raw) {
+      ElMessage.error('文件上传失败：无效的文件对象')
+      return
+    }
+    
+    const response = await uploadImage(file.raw)
+    postForm.coverUrl = response.data.url
+    postForm.coverAssetId = response.data.id
+    
+    ElMessage.success('封面上传成功')
+  } catch (error) {
+    ElMessage.error('封面上传失败: ' + (error.message || error))
+    console.error('Cover upload error:', error)
+  }
+}
+
+const removeCover = () => {
+  postForm.coverUrl = ''
+  postForm.coverAssetId = null
+}
+
+const handleImageUpload = async (file) => {
+  try {
+    console.log('Uploading image file:', file)
+    
+    // 确保file.raw存在
+    if (!file.raw) {
+      ElMessage.error('文件上传失败：无效的文件对象')
+      return
+    }
+    
+    const response = await uploadImage(file.raw)
+    const imageUrl = response.data.url
+    
+    // 在光标位置插入图片Markdown语法
+    const imageMarkdown = `![图片描述](${imageUrl})\n`
+    postForm.contentMd += imageMarkdown
+    
+    ElMessage.success('图片上传成功')
+  } catch (error) {
+    ElMessage.error('图片上传失败: ' + (error.message || error))
+    console.error('Image upload error:', error)
+  }
+}
+
+const handleChapterImageUpload = async (file) => {
+  try {
+    console.log('Uploading chapter image file:', file)
+    
+    // 确保file.raw存在
+    if (!file.raw) {
+      ElMessage.error('文件上传失败：无效的文件对象')
+      return
+    }
+    
+    const response = await uploadImage(file.raw)
+    const imageUrl = response.data.url
+    
+    // 在光标位置插入图片Markdown语法
+    const imageMarkdown = `![图片描述](${imageUrl})\n`
+    chapterForm.content += imageMarkdown
+    
+    ElMessage.success('图片上传成功')
+  } catch (error) {
+    ElMessage.error('图片上传失败: ' + (error.message || error))
+    console.error('Chapter image upload error:', error)
+  }
+}
+
+const handleArticleWordUpload = async (file) => {
+  try {
+    console.log('Uploading article word file:', file)
+    
+    // 确保file.raw存在
+    if (!file.raw) {
+      ElMessage.error('文件上传失败：无效的文件对象')
+      return
+    }
+    
+    const result = await parseWordDocument(file.raw)
+    
+    // 如果文章标题为空，使用Word标题
+    if (!postForm.title && result.title) {
+      postForm.title = result.title
+    }
+    
+    // 将Word内容填充到文章内容
+    postForm.contentMd = result.contentMd || result.content
+    
+    ElMessage.success('Word文档导入成功')
+  } catch (error) {
+    ElMessage.error(`Word文档导入失败: ${error.message}`)
+    console.error('Article word upload error:', error)
   }
 }
 </script>
 
 <style scoped>
-/* 主容器 */
 .post-management {
   padding: 20px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  min-height: 100vh;
 }
 
-/* 页面标题 */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding: 20px;
-  background: var(--card-bg);
-  border-radius: 12px;
-  box-shadow: var(--shadow-light);
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .page-header h1 {
   margin: 0;
   color: var(--text-primary);
-  font-size: 24px;
-  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 120px;
 }
 
 .create-btn {
-  background: var(--accent-gradient);
-  border: none;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 500;
-  transition: all 0.3s ease;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.create-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-medium);
-}
-
-/* 筛选工具栏 */
 .filters-section {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   padding: 20px;
-  background: var(--card-bg);
-  border-radius: 12px;
-  box-shadow: var(--shadow-light);
+  background: var(--bg-secondary);
+  border-radius: 8px;
 }
 
 .filter-row {
   display: flex;
-  gap: 16px;
+  gap: 15px;
   align-items: center;
   flex-wrap: wrap;
 }
 
 .search-input {
-  flex: 1;
-  min-width: 200px;
+  width: 300px;
 }
 
 .filter-select {
-  min-width: 120px;
+  width: 150px;
 }
 
-.search-btn, .reset-btn {
-  padding: 8px 16px;
-}
-
-/* 文章列表容器 */
 .posts-container {
-  background: var(--card-bg);
-  border-radius: 12px;
-  box-shadow: var(--shadow-light);
+  background: var(--bg-secondary);
+  border-radius: 8px;
   overflow: hidden;
-}
-
-/* 桌面端表格 */
-.desktop-view {
-  display: block;
-}
-
-.posts-table {
-  background: var(--card-bg);
-}
-
-.posts-table {
-  background: var(--card-bg) !important;
-}
-
-.posts-table .el-table__header {
-  background: var(--bg-secondary) !important;
-}
-
-.posts-table .el-table__header th {
-  background: var(--bg-secondary) !important;
-  color: var(--text-primary) !important;
-  border-bottom: 1px solid var(--border-color) !important;
-}
-
-.posts-table .el-table__row {
-  background: var(--card-bg) !important;
-  cursor: move;
-  transition: background-color 0.2s;
-}
-
-.posts-table .el-table__row:hover {
-  background: var(--bg-secondary) !important;
-}
-
-.posts-table .el-table__row td {
-  background: var(--card-bg) !important;
-  color: var(--text-primary) !important;
-  border-bottom: 1px solid var(--border-color) !important;
-}
-
-.posts-table .el-table__row:hover td {
-  background: var(--bg-secondary) !important;
-}
-
-.posts-table .el-table__body {
-  background: var(--card-bg) !important;
-}
-
-.posts-table .el-table__empty-block {
-  background: var(--card-bg) !important;
-}
-
-.posts-table .el-table__empty-text {
-  color: var(--text-muted) !important;
-}
-
-/* 分页组件主题修复 */
-.pagination-container .el-pagination {
-  background: var(--card-bg) !important;
-}
-
-.pagination-container .el-pagination .el-pagination__total,
-.pagination-container .el-pagination .el-pagination__sizes,
-.pagination-container .el-pagination .el-pagination__jump {
-  color: var(--text-primary) !important;
-}
-
-.pagination-container .el-pagination .el-pager li {
-  background: var(--bg-tertiary) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-color) !important;
-}
-
-.pagination-container .el-pagination .el-pager li:hover {
-  background: var(--accent-primary) !important;
-  color: white !important;
-}
-
-.pagination-container .el-pagination .el-pager li.is-active {
-  background: var(--accent-primary) !important;
-  color: white !important;
-}
-
-.pagination-container .el-pagination .btn-prev,
-.pagination-container .el-pagination .btn-next {
-  background: var(--bg-tertiary) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-color) !important;
-}
-
-.pagination-container .el-pagination .btn-prev:hover,
-.pagination-container .el-pagination .btn-next:hover {
-  background: var(--accent-primary) !important;
-  color: white !important;
-}
-
-.posts-table .el-table__row td {
-  background: var(--card-bg) !important;
-  color: var(--text-primary) !important;
-  border-bottom: 1px solid var(--border-color) !important;
-}
-
-.posts-table .el-table__row:hover td {
-  background: var(--bg-secondary) !important;
-}
-
-.posts-table .el-table__body {
-  background: var(--card-bg) !important;
-}
-
-.posts-table .el-table__empty-block {
-  background: var(--card-bg) !important;
-}
-
-.posts-table .el-table__empty-text {
-  color: var(--text-muted) !important;
-}
-
-/* 分页组件主题修复 */
-.pagination-container .el-pagination {
-  background: var(--card-bg) !important;
-}
-
-.pagination-container .el-pagination .el-pagination__total,
-.pagination-container .el-pagination .el-pagination__sizes,
-.pagination-container .el-pagination .el-pagination__jump {
-  color: var(--text-primary) !important;
-}
-
-.pagination-container .el-pagination .el-pager li {
-  background: var(--bg-tertiary) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-color) !important;
-}
-
-.pagination-container .el-pagination .el-pager li:hover {
-  background: var(--accent-primary) !important;
-  color: white !important;
-}
-
-.pagination-container .el-pagination .el-pager li.is-active {
-  background: var(--accent-primary) !important;
-  color: white !important;
-}
-
-.pagination-container .el-pagination .btn-prev,
-.pagination-container .el-pagination .btn-next {
-  background: var(--bg-tertiary) !important;
-  color: var(--text-primary) !important;
-  border: 1px solid var(--border-color) !important;
-}
-
-.pagination-container .el-pagination .btn-prev:hover,
-.pagination-container .el-pagination .btn-next:hover {
-  background: var(--accent-primary) !important;
-  color: white !important;
-}
-
-.sort-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: grab;
 }
 
 .post-title-cell h4 {
-  margin: 0 0 4px 0;
+  margin: 0 0 5px 0;
   color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
 }
 
-.post-title-cell .post-summary {
+.post-summary {
   margin: 0;
-  color: var(--text-muted);
-  font-size: 12px;
-  font-style: italic;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chapter-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.chapter-no {
-  font-size: 12px;
-  color: var(--accent-primary);
-  font-weight: 500;
-}
-
-.chapter-title {
-  font-size: 11px;
   color: var(--text-secondary);
+  font-size: 12px;
 }
 
-.no-chapter {
-  color: var(--text-muted);
-}
-
-.action-buttons {
+.chapter-indicator {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  color: var(--accent-primary);
+  font-size: 12px;
 }
 
-/* 移动端视图 */
-.mobile-view {
-  display: none;
+.pagination-section {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
 }
 
-.mobile-posts-list {
-  padding: 16px;
+.post-dialog {
+  .editor-container {
+    display: flex;
+    gap: 20px;
+    height: 70vh;
+  }
+  
+  .left-panel {
+    width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+  }
+  
+  .right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .content-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    
+    :deep(.el-card__body) {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+  }
 }
 
-.mobile-post-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  margin-bottom: 16px;
-  overflow: hidden;
-  transition: all 0.3s ease;
+/* 对话框标题栏样式优化 */
+.post-dialog :deep(.el-dialog__header) {
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.mobile-post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-medium);
+.post-dialog :deep(.el-dialog__title) {
+  margin-top: 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.post-dialog :deep(.el-dialog__headerbtn) {
+  top: 20px;
+  right: 20px;
+}
+
+.post-dialog :deep(.el-dialog__body) {
+  padding: 20px 24px;
+}
+
+.post-dialog :deep(.el-dialog__footer) {
+  padding: 16px 24px 20px 24px;
+  border-top: 1px solid var(--border-color);
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
-  background: var(--bg-secondary);
+}
+
+.chapters-toolbar {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border-color);
 }
 
-.drag-area {
+.chapters-tree {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.chapter-item {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.chapter-header {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  cursor: grab;
+  padding: 10px;
+  background: var(--bg-primary);
+  border-radius: 6px 6px 0 0;
 }
 
-.mobile-drag-handle {
-  font-size: 18px;
-  color: var(--accent-primary);
-}
-
-.post-index {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.post-status {
-  display: flex;
-  gap: 8px;
-}
-
-.card-content {
-  padding: 16px;
-}
-
-.post-title {
-  margin: 0 0 8px 0;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.4;
-}
-
-.post-summary {
-  margin: 0 0 12px 0;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-style: italic;
-  line-height: 1.4;
-}
-
-.post-meta {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-
-.meta-item {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-}
-
-.post-date {
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.card-actions {
-  padding: 16px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* 分页容器 */
-.pagination-container {
-  margin-top: 24px;
-  padding: 20px;
-  background: var(--card-bg);
-  border-radius: 12px;
-  box-shadow: var(--shadow-light);
-  display: flex;
-  justify-content: center;
-}
-
-/* 拖拽排序样式 */
-.sort-number {
+.chapter-info {
   display: flex;
   align-items: center;
   gap: 8px;
-  cursor: move;
 }
 
 .drag-handle {
-  cursor: grab;
+  cursor: move;
   color: var(--text-secondary);
-  transition: color 0.2s;
 }
 
-.drag-handle:hover {
-  color: var(--accent-primary);
+.chapter-title {
+  font-weight: 500;
 }
 
-.drag-handle:active {
-  cursor: grabbing;
+.chapter-actions {
+  display: flex;
+  gap: 5px;
 }
 
-.sortable-ghost {
-  opacity: 0.5;
-  background: var(--accent-primary) !important;
+.sections-list {
+  padding: 10px;
+  border-top: 1px solid var(--border-color);
 }
 
-.sortable-chosen {
-  background: var(--bg-secondary) !important;
+.section-item {
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 8px;
 }
 
-.sortable-drag {
-  background: var(--card-bg) !important;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2) !important;
-}
-
-  .sortable-table .el-table__row {
-    transition: none !important;
-  }
-
-  /* 移动端拖拽样式 */
-  .mobile-drag-handle {
-    cursor: grab;
-    color: var(--accent-primary);
-    font-size: 18px;
-    margin-right: 8px;
-  }
-
-  .mobile-drag-handle:active {
-    cursor: grabbing;
-  }
-
-  .mobile-sortable-ghost {
-    opacity: 0.5;
-    transform: scale(0.98);
-  }
-
-  .mobile-sortable-chosen {
-    background: var(--bg-secondary) !important;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .mobile-sortable-drag {
-    background: var(--card-bg) !important;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2) !important;
-    transform: rotate(2deg);
-  }
-
-  .drag-hint {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
-  }
-
-/* 对话框样式 */
-.post-dialog {
-  background: var(--card-bg);
-}
-
-.post-dialog .el-dialog__header {
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  padding: 20px;
 }
 
-.post-dialog .el-dialog__title {
-  color: var(--text-primary);
-  font-size: 20px;
-  font-weight: 600;
+.section-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.dialog-content {
-  background: var(--card-bg);
-  padding: 24px;
+.section-title {
+  font-size: 14px;
 }
 
-.post-form {
-  background: var(--card-bg);
+.section-actions {
+  display: flex;
+  gap: 5px;
 }
 
-.form-tabs .el-tabs__header {
-  background: var(--bg-secondary);
-  margin: 0;
-  padding: 0 20px;
-}
-
-.form-tabs .el-tabs__content {
-  background: var(--card-bg);
-  padding: 24px;
-}
-
-.form-section {
-  background: var(--card-bg);
-}
-
-.content-form-item .el-form-item__content {
+.chapter-editor,
+.article-editor {
+  height: 100%;
   display: flex;
   flex-direction: column;
 }
 
 .content-textarea {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  height: 100%;
 }
 
-.content-textarea:focus {
+.content-textarea :deep(.el-textarea__inner) {
+  height: 100% !important;
+  min-height: 400px !important;
+  resize: none;
+}
+
+.pre-chapter-section {
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.batch-operations {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.batch-info {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.batch-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.sort-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.drag-handle {
+  cursor: move;
+  color: var(--text-secondary);
+}
+
+.cover-upload {
+  width: 120px;
+  height: 80px;
+}
+
+.cover-preview {
+  position: relative;
+  width: 120px;
+  height: 80px;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cover-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.cover-preview:hover .cover-overlay {
+  opacity: 1;
+}
+
+.upload-placeholder {
+  width: 120px;
+  height: 80px;
+  border: 2px dashed var(--border-color);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.3s ease;
+}
+
+.upload-placeholder:hover {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 2px rgba(255, 107, 157, 0.1);
+  color: var(--accent-primary);
+}
+
+.editor-toolbar,
+.chapter-editor-toolbar {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .form-tip {
   font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 8px;
-  line-height: 1.4;
+  color: var(--text-secondary);
+  margin-top: 5px;
 }
 
-.cover-upload-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* 章节展开时的样式调整 */
+.chapters-expanded {
+  min-height: 500px;
 }
 
-.upload-tip {
-  font-size: 12px;
-  color: var(--text-muted);
+.post-dialog .left-panel {
+  transition: width 0.3s ease;
 }
 
-.dialog-footer {
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  padding: 20px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
+.post-dialog .editor-container {
+  gap: 15px;
 }
 
-  /* 移动端适配 */
-@media (max-width: 768px) {
-  .post-management {
-    padding: 12px;
-  }
-  
-  /* 页面标题 */
-  .page-header {
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-  
-  .page-header h1 {
-    font-size: 20px;
-  }
-  
-  .create-btn {
-    padding: 10px 16px;
-    font-size: 14px;
-  }
-  
-  /* 筛选工具栏 */
-  .filters-section {
-    padding: 16px;
-    margin-bottom: 16px;
-  }
-  
-  .filter-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-  
-  .search-input, .filter-select {
-    width: 100%;
-    min-width: auto;
-  }
-  
-  .search-btn, .reset-btn {
-    width: 100%;
-    padding: 12px;
-  }
-  
-  /* 隐藏桌面端表格 */
-  .desktop-view {
-    display: none;
-  }
-  
-  /* 显示移动端视图 */
-  .mobile-view {
-    display: block;
-  }
-  
-  .mobile-posts-list {
-    padding: 12px;
-  }
-  
-  .mobile-post-card {
-    margin-bottom: 12px;
-    border-radius: 8px;
-  }
-  
-  .card-header {
-    padding: 12px;
-  }
-  
-  .mobile-drag-handle {
-    font-size: 16px;
-  }
-  
-  .card-content {
-    padding: 12px;
-  }
-  
-  .post-title {
-    font-size: 15px;
-  }
-  
-  .post-summary {
-    font-size: 13px;
-  }
-  
-  .card-actions {
-    padding: 12px;
-    gap: 6px;
-  }
-  
-  .card-actions .el-button {
-    flex: 1;
-    padding: 8px 12px;
-    font-size: 12px;
-  }
-  
-  /* 分页 */
-  .pagination-container {
-    padding: 16px;
-    margin-top: 16px;
-  }
-  
-  /* 对话框移动端样式 */
-  .post-dialog {
-    margin: 0 !important;
-    width: 100% !important;
-    height: 100vh !important;
-    max-width: none !important;
-    border-radius: 0 !important;
-  }
-  
-  .post-dialog .el-dialog__header {
-    padding: 16px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  
-  .post-dialog .el-dialog__title {
-    font-size: 18px;
-  }
-  
-  .dialog-content {
-    padding: 0;
-    height: calc(100vh - 120px);
-    overflow-y: auto;
-  }
-  
-  .post-form {
-    height: 100%;
-  }
-  
-  .form-tabs {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-  
-  .form-tabs .el-tabs__header {
-    padding: 0 16px;
-    flex-shrink: 0;
-  }
-  
-  .form-tabs .el-tabs__content {
-    flex: 1;
-    padding: 16px;
-    overflow-y: auto;
-  }
-  
-  .form-tabs .el-tab-pane {
-    height: 100%;
-  }
-  
-  .form-section {
-    padding-bottom: 60px;
-  }
-  
-  .el-form-item {
-    margin-bottom: 20px;
-  }
-  
-  .el-form-item__label {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    padding-bottom: 8px;
-  }
-  
-  .el-input, .el-textarea, .el-select, .el-input-number, .el-date-editor {
-    font-size: 16px;
-  }
-  
-  .el-input__inner, .el-textarea__inner {
-    padding: 12px 16px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-  
-  .el-input__inner:focus, .el-textarea__inner:focus {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px rgba(255, 107, 157, 0.1);
-  }
-  
-  .content-textarea .el-textarea__inner {
-    min-height: 300px !important;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 14px;
-    line-height: 1.6;
-  }
-  
-  .el-select .el-input__inner {
-    height: 48px;
-    line-height: 48px;
-  }
-  
-  .el-radio-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
-  
-  .el-radio {
-    margin-right: 0;
-    padding: 8px 16px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--bg-tertiary);
-  }
-  
-  .el-radio.is-checked {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
-    color: white;
-  }
-  
-  .dialog-footer {
-    position: sticky;
-    bottom: 0;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
-  }
-  
-  .dialog-footer .el-button {
-    flex: 1;
-    padding: 12px 24px;
-    font-size: 16px;
-    border-radius: 8px;
-  }
+/* 确保拖拽手柄可见 */
+.drag-handle {
+  cursor: move !important;
+  color: var(--text-secondary) !important;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+.drag-handle:hover {
+  opacity: 1;
+  color: var(--accent-primary) !important;
 }
 
-@media (max-width: 768px) {
-  .page-header {
-    flex-direction: column;
-    gap: 15px;
-    align-items: stretch;
-  }
-  
-  .page-header h2 {
-    text-align: center;
-    margin: 0;
-  }
-}
-
-.filters {
-  margin-bottom: 20px;
-  padding: 20px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
-}
-
-.filter-section {
-  margin-bottom: 16px;
-}
-
-.filter-section:last-child {
-  margin-bottom: 0;
-}
-
-.search-input {
-  width: 100%;
-}
-
-.filter-selects {
-  display: flex;
-  gap: 12px;
-}
-
-.filter-select {
-  flex: 1;
-}
-
-.filter-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* 表单样式 */
-.post-form {
-  width: 100%;
-}
-
-.form-section {
-  margin-bottom: 20px;
-}
-
-.form-row {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.form-row-multi {
-  flex-wrap: wrap;
-}
-
-.form-item {
-  flex: 1;
-  min-width: 200px;
-}
-
-.form-item-full {
-  flex: 1;
-  width: 100%;
-}
-
-.form-item .el-select,
-.form-item-full .el-select {
-  width: 100%;
-}
-
+/* 操作按钮样式优化 */
 .action-buttons {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 768px) {
-  .action-buttons {
-    justify-content: center;
-  }
-}
-
-.action-btn {
-  border-radius: 6px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-.action-buttons-inline {
-  display: flex;
   gap: 4px;
+  align-items: center;
+  justify-content: center;
   flex-wrap: nowrap;
 }
 
-.action-buttons-inline .el-button {
+.action-buttons .el-button {
   margin: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  min-width: auto;
   flex-shrink: 0;
 }
 
-.pagination {
-  margin-top: 20px;
-  text-align: right;
+.action-buttons .el-button .el-icon {
+  margin-right: 2px;
 }
 
-.word-upload-section {
-  margin-bottom: 20px;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
+.el-table .el-button + .el-button {
+  margin-left: 0;
 }
 
-.upload-tips {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #666;
-}
-
-.upload-tips p {
+.el-table .el-button {
   margin: 0;
 }
 
-.editor-container {
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-  overflow: hidden;
+/* 章节标题样式 */
+.chapter-title,
+.section-title {
+  font-weight: 500;
+  color: var(--text-primary);
 }
 
-.image-upload-section {
-  padding: 12px 15px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.upload-tip {
-  font-size: 12px;
-  color: #909399;
-}
-
-.markdown-editor {
-  border: none;
-}
-
-.markdown-editor :deep(.el-textarea__inner) {
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  resize: vertical;
-}
-
-/* 表格容器 */
-.table-container {
-  position: relative;
-}
-
-/* 桌面端显示表格，移动端隐藏 */
-.desktop-table {
-  display: table;
-}
-
-.mobile-cards {
-  display: none;
-}
-
-/* 移动端样式优化 - 保持电脑端样式不变 */
 @media (max-width: 768px) {
-  .desktop-table {
-    display: none !important;
-  }
-  
-  .mobile-cards {
-    display: block;
-    padding: 0 8px;
-  }
-  
-  .mobile-card {
-    background: var(--card-bg);
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 16px;
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-light);
-  }
-  
-  /* 优化卡片头部 */
-  .mobile-card .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-    gap: 12px;
-  }
-  
-  .mobile-card .post-main-info {
-    flex: 1;
-    min-width: 0;
-  }
-  
-  .mobile-card .post-title {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.4;
-    word-break: break-word;
-  }
-  
-  /* 移动端元信息标签 */
-  .post-meta-mobile {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin-top: 8px;
-  }
-  
-  .meta-tag {
-    color: var(--text-secondary);
-    font-size: 12px;
-    background: var(--bg-secondary);
-    padding: 2px 6px;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-  
-  .mobile-card .post-meta {
-    display: flex;
+  .post-dialog .editor-container {
     flex-direction: column;
-    gap: 4px;
-    flex-shrink: 0;
+    height: auto;
   }
   
-  /* 移动端排序控制 */
-  .mobile-sort-control {
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 12px;
-    border: 1px solid var(--border-color);
-  }
-  
-  .mobile-sort-control .sort-label {
-    color: var(--text-primary);
-    font-weight: 500;
-    margin-bottom: 8px;
-    font-size: 13px;
-  }
-  
-  .sort-actions {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-  }
-  
-  .sort-number-input {
-    width: 80px;
-  }
-  
-  .sort-btn {
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  /* 移动端卡片内容 */
-  .mobile-card .card-content {
-    margin-bottom: 12px;
-  }
-  
-  .mobile-card .post-info {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  
-  .mobile-card .info-item {
-    font-size: 13px;
-    color: var(--text-secondary);
-  }
-  
-  /* 移动端操作按钮优化 */
-  .card-actions.mobile-optimized {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .action-row {
-    display: flex;
-    gap: 8px;
-  }
-  
-  .action-row.primary .mobile-btn {
-    flex: 1;
-    height: 40px;
-    font-size: 14px;
-    font-weight: 500;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-  }
-  
-  .action-row.secondary .mobile-btn-small {
-    flex: 1;
-    height: 32px;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    padding: 0 8px;
-  }
-  
-  .mobile-btn span,
-  .mobile-btn-small span {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  
-  /* 移动端过滤器优化 */
-  .filters {
-    background: var(--card-bg);
-    border-radius: 16px;
-    padding: 20px;
-    margin-bottom: 20px;
-    border: 1px solid var(--border-color);
-    box-shadow: var(--shadow-light);
+  .post-dialog .left-panel {
+    width: 100%;
+    max-height: 50vh;
   }
   
   .filter-row {
     flex-direction: column;
-    gap: 16px;
+    align-items: stretch;
   }
   
-  .filter-group {
+  .search-input,
+  .filter-select {
     width: 100%;
   }
   
-  .filter-group label {
-    display: block;
-    color: var(--text-primary);
-    font-weight: 500;
-    margin-bottom: 8px;
-    font-size: 14px;
-  }
-  
-  .filter-group .el-input,
-  .filter-group .el-select {
-    width: 100%;
-    height: 44px;
-  }
-  
-  .filter-group .el-input .el-input__inner,
-  .filter-group .el-select .el-input__inner {
-    height: 44px;
-    line-height: 44px;
-    font-size: 16px;
-    border-radius: 12px;
-  }
-  
-  .filter-actions {
-    margin-top: 20px;
-    display: flex;
+  .page-header {
     flex-direction: column;
-    gap: 12px;
+    align-items: stretch;
+    gap: 15px;
   }
   
-  .action-btn-group {
-    display: flex;
-    gap: 12px;
-  }
-  
-  .action-btn-group .el-button {
-    flex: 1;
-    height: 44px;
-    font-size: 16px;
-    border-radius: 12px;
-    font-weight: 500;
-  }
-  
-  /* 移动端分页优化 */
-  .pagination-wrapper {
-    padding: 16px 8px;
-  }
-  
-  .pagination-wrapper .el-pagination {
-    justify-content: center;
+  .page-header h1 {
+    text-align: center;
   }
 }
 
-/* 编辑对话框移动端适配 */
-@media (max-width: 768px) {
-  .el-dialog {
-    width: 100% !important;
-    height: 100vh !important;
-    margin: 0 !important;
-    border-radius: 0 !important;
-    max-height: none !important;
-  }
-  
-  .el-dialog__header {
-    background: var(--card-bg);
-    border-bottom: 1px solid var(--border-color);
-    padding: 16px 20px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  
-  .el-dialog__title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  
-  .el-dialog__body {
-    padding: 0;
-    height: calc(100vh - 120px);
-    overflow-y: auto;
-  }
-  
-  .el-dialog__footer {
-    background: var(--card-bg);
-    border-top: 1px solid var(--border-color);
-    padding: 16px 20px;
-    position: sticky;
-    bottom: 0;
-    z-index: 10;
-  }
-  
-  /* 移动端表单样式优化 */
-  .post-form {
-    background: var(--bg-primary);
-  }
-  
-  .form-tabs {
-    background: var(--card-bg);
-  }
-  
-  .form-tabs .el-tabs__header {
-    margin: 0;
-    background: var(--card-bg);
-    border-bottom: 1px solid var(--border-color);
-    padding: 0 20px;
-  }
-  
-  .form-tabs .el-tabs__nav {
-    width: 100%;
-  }
-  
-  .form-tabs .el-tabs__item {
-    flex: 1;
-    text-align: center;
-    height: 48px;
-    line-height: 48px;
-    font-size: 16px;
-    font-weight: 500;
-  }
-  
-  .form-tabs .el-tabs__content {
-    padding: 0;
-  }
-  
-  .form-tabs .el-tab-pane {
-    padding: 20px;
-  }
-  
-  .form-section {
-    background: var(--card-bg);
-    margin-bottom: 16px;
-    border-radius: 16px;
-    padding: 20px;
-    border: 1px solid var(--border-color);
-  }
-  
-  .el-dialog__header {
-    padding: 15px;
-    text-align: center;
-  }
-  
-  .el-dialog__header .el-dialog__title {
-    font-size: 18px;
-  }
-  
-  .el-dialog__body {
-    padding: 15px;
-    max-height: calc(95vh - 140px);
-    overflow-y: auto;
-  }
-  
-  /* 表单移动端样式 */
-  .post-form {
-    width: 100%;
-  }
-  
-  .form-section {
-    margin-bottom: 16px;
-  }
-  
-  .form-row {
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-  
-  .form-row-multi {
-    flex-direction: column;
-  }
-  
-  .form-item,
-  .form-item-full {
-    min-width: auto;
-    width: 100%;
-  }
-  
-  .el-form-item {
-    margin-bottom: 16px;
-  }
-  
-  .el-form-item__label {
-    font-size: 14px;
-    line-height: 1.4;
-    margin-bottom: 6px;
-    font-weight: 600;
-    color: #333;
-  }
-  
-  .el-form-item__content {
-    margin-left: 0 !important;
-    margin-top: 0;
-  }
-  
-  .el-input__wrapper,
-  .el-textarea__inner,
-  .el-select .el-input__wrapper {
-    font-size: 16px; /* 防止iOS缩放 */
-    min-height: 44px; /* 触摸友好的最小高度 */
-  }
-  
-  .el-select {
-    width: 100%;
-  }
-  
-  /* Word上传区域 */
-  .word-upload-section {
-    margin-bottom: 16px;
-    padding: 12px;
-    background: #f8f9fa;
-    border-radius: 8px;
-  }
-  
-  .word-upload-section .el-button {
-    width: 100%;
-    padding: 12px 16px;
-    font-size: 16px;
-    height: auto;
-  }
-  
-  .upload-tips {
-    margin-top: 8px;
-    text-align: center;
-  }
-  
-  .upload-tips p {
-    font-size: 12px;
-    color: #666;
-    margin: 0;
-  }
-  
-  /* 图片上传区域 */
-  .image-upload-section {
-    margin-bottom: 15px;
-    padding: 12px;
-    background: #f8f9fa;
-    border-radius: 8px;
-  }
-  
-  .image-upload-section .el-button {
-    width: 100%;
-    margin-bottom: 8px;
-    padding: 12px 16px;
-    font-size: 16px;
-    height: auto;
-  }
-  
-  .upload-tip {
-    display: block;
-    text-align: center;
-    font-size: 12px;
-    color: #909399;
-  }
-  
-  /* Markdown编辑器 */
-  .markdown-editor .el-textarea__inner {
-    min-height: 300px !important;
-    font-size: 14px;
-    line-height: 1.5;
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  }
-  
-  /* 移动端表单项优化 */
-  .el-form-item {
-    margin-bottom: 20px;
-  }
-  
-  .el-form-item__label {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
-    padding-bottom: 8px;
-    line-height: 1.5;
-  }
-  
-  .el-input__inner,
-  .el-textarea__inner,
-  .el-select .el-input__inner {
-    font-size: 16px;
-    padding: 16px;
-    border-radius: 12px;
-    border: 2px solid var(--border-color);
-    min-height: 52px;
-  }
-  
-  .el-input__inner:focus,
-  .el-textarea__inner:focus {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.1);
-  }
-  
-  .el-textarea .el-textarea__inner {
-    padding: 16px;
-    line-height: 1.6;
-    min-height: 120px;
-    resize: vertical;
-  }
-  
-  .el-select,
-  .el-input-number,
-  .el-date-editor {
-    width: 100%;
-  }
-  
-  .el-select .el-input__inner,
-  .el-input-number .el-input__inner,
-  .el-date-editor .el-input__inner {
-    height: 52px;
-    line-height: 52px;
-  }
-  
-  .form-actions {
-    margin-top: 16px;
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  
-  .form-actions .el-button {
-    flex: 1;
-    height: 44px;
-    font-size: 14px;
-    border-radius: 12px;
-  }
-  
-  .form-tip {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
-    line-height: 1.4;
-  }
-  
-  .el-divider {
-    margin: 24px 0 16px 0;
-  }
-  
-  .el-divider__text {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  
-  /* 对话框底部按钮 */
-  .el-dialog__footer {
-    padding: 15px;
-    text-align: center;
-    border-top: 1px solid var(--border-color);
-    background: var(--bg-secondary);
-  }
-  
-  .el-dialog__footer .el-button {
-    width: 48%;
-    margin: 0 1%;
-    padding: 12px 16px;
-    font-size: 16px;
-    height: auto;
-  }
-  
-  /* 筛选区域移动端适配 */
-  .filters {
-    padding: 15px;
-  }
-  
-  .filter-section {
-    margin-bottom: 12px;
-  }
-  
-  .filter-selects {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .filter-actions {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .action-btn {
-    width: 100%;
-    padding: 12px 16px;
-    font-size: 16px;
-    height: auto;
-  }
+/* 章节展开时的样式调整 */
+.chapters-expanded {
+  min-height: 500px;
+}
+
+.post-dialog .left-panel {
+  transition: width 0.3s ease;
+}
+
+.post-dialog .editor-container {
+  gap: 15px;
+}
+
+/* 确保拖拽手柄可见 */
+.drag-handle {
+  cursor: move !important;
+  color: var(--text-secondary) !important;
+  opacity: 0.6;
+  transition: opacity 0.3s ease;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+  color: var(--accent-primary) !important;
+}
+
+/* 操作按钮样式优化 */
+.el-table .el-button + .el-button {
+  margin-left: 4px;
+}
+
+.el-table .el-button {
+  margin: 1px;
+}
+
+/* 章节标题样式 */
+.chapter-title,
+.section-title {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* 表格行样式优化 */
+.posts-table .el-table__row {
+  height: 60px;
+}
+
+.posts-table .el-table__cell {
+  padding: 16px 8px;
+}
+
+/* 操作按钮右对齐 */
+.posts-table .el-table-column--selection + .el-table__cell,
+.posts-table .el-table__cell:last-child {
+  text-align: right;
+}
+
+/* 章节管理区域优化 */
+.chapters-tree {
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 6px;
+  padding: 8px;
+  background-color: var(--bg-secondary, #f9f9f9);
+}
+
+/* 表格容器样式 */
+.posts-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* 表格样式优化 */
+.posts-table {
+  width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.posts-table .el-table__header-wrapper,
+.posts-table .el-table__body-wrapper {
+  width: 100% !important;
+}
+
+.posts-table .el-table__header th,
+.posts-table .el-table__body td {
+  text-align: left;
+  vertical-align: middle;
+}
+
+/* 确保每列宽度一致 */
+.posts-table .el-table-column--selection {
+  width: 55px !important;
+  min-width: 55px !important;
+  max-width: 55px !important;
+}
+
+.posts-table .el-table__cell:first-child {
+  width: 55px !important;
+  min-width: 55px !important;
+  max-width: 55px !important;
+}
+
+/* 序号列 */
+.posts-table .el-table__cell:nth-child(2) {
+  width: 80px !important;
+  min-width: 80px !important;
+  max-width: 80px !important;
+}
+
+/* 操作列右对齐 */
+.posts-table .el-table__cell:last-child {
+  text-align: center !important;
+  width: 280px !important;
+  min-width: 280px !important;
+  max-width: 280px !important;
+}
+
+.posts-table .el-table__row {
+  height: 70px;
+}
+
+.posts-table .el-table__cell {
+  padding: 16px 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* 拖拽排序样式 */
+.sortable-ghost {
+  opacity: 0.5;
+}
+
+.sortable-chosen {
+  background-color: var(--bg-hover, #f5f5f5);
+}
+
+/* 左侧面板滚动样式 */
+.left-panel.with-chapters {
+  height: 70vh;
+  overflow: hidden;
+}
+
+.left-content.scrollable {
+  height: 100%;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.left-content.scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.left-content.scrollable::-webkit-scrollbar-track {
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 3px;
+}
+
+.left-content.scrollable::-webkit-scrollbar-thumb {
+  background: var(--border-color, #ddd);
+  border-radius: 3px;
+}
+
+.left-content.scrollable::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary, #999);
+}
+
+/* 章节管理卡片样式调整 */
+.chapters-card {
+  margin-top: 16px;
+}
+
+.chapters-expanded {
+  min-height: 300px;
+}
+
+/* 章节树容器优化 */
+.chapters-tree {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 6px;
+  padding: 8px;
+  background-color: var(--bg-tertiary, #f9f9f9);
+}
+
+/* 对话框样式优化 */
+.post-dialog .el-dialog__header {
+  padding: 20px 20px 10px 20px;
+}
+
+.post-dialog .el-dialog__body {
+  padding: 20px;
+}
+
+/* 左侧面板边距优化 */
+.left-content {
+  padding: 0 8px;
+}
+
+.info-card {
+  margin-bottom: 16px;
 }
 </style>
+
+
+

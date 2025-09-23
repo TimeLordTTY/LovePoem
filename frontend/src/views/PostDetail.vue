@@ -1,628 +1,733 @@
 <template>
   <div class="post-detail">
-    <!-- 顶部导航栏 -->
-    <div class="top-nav" v-if="post">
-      <div class="nav-left">
-        <el-button @click="goBack" text class="back-btn">
-          <el-icon><ArrowLeft /></el-icon>
-          返回
-        </el-button>
-      </div>
-      <div class="nav-right">
-        <el-button
-          v-if="!isFavorited"
-          type="primary"
-          @click="addToFavorites"
-          :loading="favoriteLoading"
-          class="favorite-btn"
-        >
-          <el-icon><Star /></el-icon>
-          收藏
-        </el-button>
-        <el-button
-          v-else
-          type="warning"
-          @click="removeFromFavorites"
-          :loading="favoriteLoading"
-          class="favorite-btn"
-        >
-          <el-icon><StarFilled /></el-icon>
-          已收藏
-        </el-button>
-      </div>
+    <div v-if="loading" class="loading-container">
+      <el-skeleton :rows="10" animated />
     </div>
     
-    <div class="container">
-      <div class="post-layout" v-if="post">
-        <!-- 左侧目录 -->
-        <aside class="toc-sidebar" v-if="showToc">
-          <TableOfContents 
-            :table-of-contents="post.tableOfContents"
-            :auto-collapse="false"
-          />
-        </aside>
-        
-        <!-- 主要内容 -->
-        <article class="post-content" :class="{ 'with-toc': showToc }">
-        <!-- 文章头部 -->
-        <header class="post-header">
-          <div class="post-meta">
-            <span class="post-type">{{ post.postTypeName }}</span>
-            <time class="post-date">{{ formatDate(post.publishDate) }}</time>
-            <span class="reading-time">{{ post.readingTime }}分钟阅读</span>
-          </div>
-          
-          <h1 class="post-title">{{ post.title }}</h1>
-          
-          <!-- 作者自述 -->
-          <div class="post-summary" v-if="post.summary">
-            <p>{{ post.summary }}</p>
-          </div>
-          
-          <div class="post-tags" v-if="post.tags && post.tags.length">
-            <span v-for="tag in post.tags" :key="tag" class="tag">
-              {{ tag }}
-            </span>
-          </div>
-
-
-        </header>
-        
-        <!-- 文章内容 -->
-        <div class="post-body">
-          <div class="markdown-content" v-html="renderedContent"></div>
+    <div v-else-if="post" class="post-container">
+      <!-- 文章头部 -->
+      <div class="post-header">
+        <h1 class="post-title">{{ post.title }}</h1>
+        <div class="post-meta">
+          <span class="author">{{ post.authorName }}</span>
+          <span class="separator">•</span>
+          <span class="date">{{ formatDate(post.publishDate) }}</span>
+          <span v-if="post.seriesName" class="separator">•</span>
+          <span v-if="post.seriesName" class="series">{{ post.seriesName }}</span>
+          <span v-if="post.readingTime" class="separator">•</span>
+          <span v-if="post.readingTime" class="reading-time">{{ post.readingTime }}分钟阅读</span>
         </div>
-        
-        <!-- 文章底部 -->
-        <footer class="post-footer">
-          <div class="post-info">
-            <p>作者：白秦</p>
-            <p>发布时间：{{ formatDate(post.publishDate) }}</p>
+        <p v-if="post.summary" class="post-summary">{{ post.summary }}</p>
+      </div>
+
+      <!-- 有章节的文章 -->
+      <div v-if="post.hasChapters" class="chaptered-post">
+        <!-- 桌面端布局 -->
+        <div class="desktop-layout">
+          <!-- 左侧目录 -->
+          <div class="toc-sidebar">
+            <div class="toc-header">
+              <h3>目录</h3>
+            </div>
+            <div class="toc-content">
+              <!-- 章节前内容 -->
+              <div v-if="post.preChapterContent" class="toc-item pre-chapter" @click="scrollToPreChapter">
+                <span class="toc-title">引言</span>
+              </div>
+              
+              <!-- 章节目录 -->
+              <div v-for="chapter in post.chapters" :key="chapter.id" class="toc-chapter">
+                <div 
+                  class="toc-item chapter-item"
+                  :class="{ active: currentChapterId === chapter.id }"
+                  @click="scrollToChapter(chapter.id)"
+                >
+                  <span class="toc-title">{{ chapter.title }}</span>
+                </div>
+                
+                <!-- 子节 -->
+                <div v-if="chapter.children && chapter.children.length > 0" class="toc-sections">
+                  <div 
+                    v-for="section in chapter.children" 
+                    :key="section.id"
+                    class="toc-item section-item"
+                    :class="{ active: currentChapterId === section.id }"
+                    @click="scrollToChapter(section.id)"
+                  >
+                    <span class="toc-title">{{ section.title }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          
-          <!-- 导航 -->
-          <div class="post-navigation">
-            <router-link v-if="prevPost" :to="`/post/${prevPost.slug}`" class="nav-link prev">
-              <span class="nav-label">上一篇</span>
-              <span class="nav-title">{{ prevPost.title }}</span>
-            </router-link>
+
+          <!-- 右侧内容 -->
+          <div class="content-area">
+            <!-- 章节前内容 -->
+            <div v-if="post.preChapterContent" ref="preChapterRef" class="pre-chapter-content">
+              <div class="content-block">
+                <div class="content-text" v-html="formatContent(post.preChapterContent)"></div>
+              </div>
+            </div>
+
+            <!-- 章节内容 -->
+            <div v-for="chapter in flattenedChapters" :key="chapter.id" :ref="el => setChapterRef(el, chapter.id)" class="chapter-content">
+              <!-- 章节背景 -->
+              <div v-if="chapter.backgroundText" class="chapter-background">
+                <div class="background-text" v-html="formatContent(chapter.backgroundText)"></div>
+              </div>
+              
+              <!-- 章节标题 -->
+              <h2 class="chapter-title">{{ chapter.title }}</h2>
+              
+              <!-- 章节正文 -->
+              <div class="chapter-body">
+                <div class="content-text" v-html="formatContent(chapter.content)"></div>
+              </div>
+            </div>
+
+            <!-- 章节导航 -->
+            <div class="chapter-navigation">
+              <el-button 
+                v-if="prevChapter" 
+                @click="goToChapter(prevChapter.id)"
+                class="nav-btn prev-btn"
+              >
+                <el-icon><ArrowLeft /></el-icon>
+                上一章: {{ prevChapter.title }}
+              </el-button>
+              
+              <el-button 
+                v-if="nextChapter" 
+                @click="goToChapter(nextChapter.id)"
+                class="nav-btn next-btn"
+              >
+                下一章: {{ nextChapter.title }}
+                <el-icon><ArrowRight /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 移动端布局 -->
+        <div class="mobile-layout">
+          <!-- 顶部章节导航 -->
+          <div class="mobile-chapter-nav">
+            <el-button @click="showMobileToc = true" class="toc-btn">
+              <el-icon><List /></el-icon>
+              目录
+            </el-button>
+            <span class="current-chapter">{{ currentChapterTitle }}</span>
+          </div>
+
+          <!-- 内容区域 -->
+          <div class="mobile-content">
+            <!-- 章节前内容 -->
+            <div v-if="post.preChapterContent && currentChapterId === 'pre'" class="content-block">
+              <h2>引言</h2>
+              <div class="content-text" v-html="formatContent(post.preChapterContent)"></div>
+            </div>
+
+            <!-- 当前章节内容 -->
+            <div v-else-if="currentChapterData" class="content-block">
+              <div v-if="currentChapterData.backgroundText" class="chapter-background">
+                <div class="background-text" v-html="formatContent(currentChapterData.backgroundText)"></div>
+              </div>
+              
+              <h2 class="chapter-title">{{ currentChapterData.title }}</h2>
+              <div class="content-text" v-html="formatContent(currentChapterData.content)"></div>
+            </div>
+          </div>
+
+          <!-- 底部章节导航 -->
+          <div class="mobile-chapter-footer">
+            <el-button 
+              v-if="prevChapter" 
+              @click="goToChapter(prevChapter.id)"
+              class="nav-btn"
+              size="small"
+            >
+              <el-icon><ArrowLeft /></el-icon>
+              上一章
+            </el-button>
             
-            <router-link v-if="nextPost" :to="`/post/${nextPost.slug}`" class="nav-link next">
-              <span class="nav-label">下一篇</span>
-              <span class="nav-title">{{ nextPost.title }}</span>
-            </router-link>
+            <el-button @click="showMobileToc = true" class="toc-btn" size="small">
+              <el-icon><List /></el-icon>
+              目录
+            </el-button>
+            
+            <el-button 
+              v-if="nextChapter" 
+              @click="goToChapter(nextChapter.id)"
+              class="nav-btn"
+              size="small"
+            >
+              下一章
+              <el-icon><ArrowRight /></el-icon>
+            </el-button>
           </div>
-        </footer>
-        </article>
+        </div>
+
+        <!-- 移动端目录抽屉 -->
+        <el-drawer v-model="showMobileToc" title="目录" direction="ltr" size="300px">
+          <div class="mobile-toc">
+            <div v-if="post.preChapterContent" class="toc-item pre-chapter" @click="goToChapter('pre')">
+              <span class="toc-title">引言</span>
+            </div>
+            
+            <div v-for="chapter in post.chapters" :key="chapter.id" class="toc-chapter">
+              <div 
+                class="toc-item chapter-item"
+                :class="{ active: currentChapterId === chapter.id }"
+                @click="goToChapter(chapter.id)"
+              >
+                <span class="toc-title">{{ chapter.title }}</span>
+              </div>
+              
+              <div v-if="chapter.children && chapter.children.length > 0" class="toc-sections">
+                <div 
+                  v-for="section in chapter.children" 
+                  :key="section.id"
+                  class="toc-item section-item"
+                  :class="{ active: currentChapterId === section.id }"
+                  @click="goToChapter(section.id)"
+                >
+                  <span class="toc-title">{{ section.title }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </el-drawer>
       </div>
-      
-      <!-- 加载状态 -->
-      <div v-else-if="loading" class="loading">
-        <div class="loading-spinner"></div>
-        <p>正在加载文章...</p>
+
+      <!-- 普通文章 -->
+      <div v-else class="regular-post">
+        <div class="content-text" v-html="formatContent(post.contentMd)"></div>
       </div>
-      
-      <!-- 错误状态 -->
-      <div v-else class="error-state">
-        <h2>文章不存在</h2>
-        <p>您访问的文章可能已被删除或不存在</p>
-        <router-link to="/posts" class="btn-primary">返回文章列表</router-link>
-      </div>
+    </div>
+
+    <div v-else class="error-container">
+      <el-result icon="error" title="文章不存在" sub-title="抱歉，您访问的文章不存在或已被删除">
+        <template #extra>
+          <el-button type="primary" @click="$router.push('/')">返回首页</el-button>
+        </template>
+      </el-result>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Star, StarFilled, ArrowLeft } from '@element-plus/icons-vue'
-import { getPostBySlug } from '@/api/post'
-import { addFavorite, removeFavorite, checkFavorite } from '@/api/favorite'
-import { useAuthStore } from '@/store/auth'
-import TableOfContents from '@/components/TableOfContents.vue'
+import { ArrowLeft, ArrowRight, List } from '@element-plus/icons-vue'
+import { getPostWithChapters } from '@/api/postChapter'
+import { getPostById, getPostBySlug } from '@/api/post'
 
 const route = useRoute()
 const router = useRouter()
-const authStore = useAuthStore()
-const post = ref(null)
-const loading = ref(true)
-const prevPost = ref(null)
-const nextPost = ref(null)
-const isFavorited = ref(false)
-const favoriteLoading = ref(false)
 
-// 目录显示控制
-const showToc = computed(() => {
-  if (!post.value?.tableOfContents) return false
-  try {
-    const tocItems = JSON.parse(post.value.tableOfContents)
-    return tocItems.length > 0
-  } catch {
-    return false
+// 响应式数据
+const loading = ref(true)
+const post = ref(null)
+const currentChapterId = ref(null)
+const showMobileToc = ref(false)
+const chapterRefs = reactive({})
+const preChapterRef = ref(null)
+
+// 计算属性
+const flattenedChapters = computed(() => {
+  if (!post.value?.chapters) return []
+  
+  const result = []
+  post.value.chapters.forEach(chapter => {
+    result.push(chapter)
+    if (chapter.children) {
+      result.push(...chapter.children)
+    }
+  })
+  return result
+})
+
+const currentChapterData = computed(() => {
+  if (currentChapterId.value === 'pre') {
+    return { title: '引言', content: post.value?.preChapterContent }
+  }
+  return flattenedChapters.value.find(c => c.id === currentChapterId.value)
+})
+
+const currentChapterTitle = computed(() => {
+  if (currentChapterId.value === 'pre') return '引言'
+  return currentChapterData.value?.title || ''
+})
+
+const prevChapter = computed(() => {
+  if (!flattenedChapters.value.length) return null
+  
+  if (currentChapterId.value === 'pre') {
+    return null
+  }
+  
+  const currentIndex = flattenedChapters.value.findIndex(c => c.id === currentChapterId.value)
+  if (currentIndex > 0) {
+    return flattenedChapters.value[currentIndex - 1]
+  }
+  
+  if (post.value?.preChapterContent) {
+    return { id: 'pre', title: '引言' }
+  }
+  
+  return null
+})
+
+const nextChapter = computed(() => {
+  if (!flattenedChapters.value.length) return null
+  
+  if (currentChapterId.value === 'pre') {
+    return flattenedChapters.value[0] || null
+  }
+  
+  const currentIndex = flattenedChapters.value.findIndex(c => c.id === currentChapterId.value)
+  if (currentIndex < flattenedChapters.value.length - 1) {
+    return flattenedChapters.value[currentIndex + 1]
+  }
+  
+  return null
+})
+
+// 生命周期
+onMounted(async () => {
+  await loadPost()
+  setupScrollListener()
+  
+  // 如果URL中有章节ID，滚动到对应位置
+  if (route.hash) {
+    const chapterId = route.hash.replace('#', '')
+    await nextTick()
+    scrollToChapter(chapterId)
+  } else if (post.value?.hasChapters) {
+    // 默认显示第一章或引言
+    if (post.value.preChapterContent) {
+      currentChapterId.value = 'pre'
+    } else if (flattenedChapters.value.length > 0) {
+      currentChapterId.value = flattenedChapters.value[0].id
+    }
   }
 })
 
-// 返回上一页
-const goBack = () => {
-  router.back()
-}
-
-// 模拟Markdown渲染
-const renderedContent = computed(() => {
-  if (!post.value?.contentMd) return ''
-  
-  // 简单的Markdown渲染（实际项目中应使用markdown-it等库）
-  let content = post.value.contentMd
-  let headingCounter = 1
-  
-  content = content
-    // 处理图片语法 ![alt](url)
-    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; display: block; margin: 20px auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" />')
-    // 处理标题并添加ID
-    .replace(/^(#{1,6})\s+(.+)$/gm, function(match, hashes, title) {
-      const level = hashes.length
-      const id = `heading-${headingCounter++}`
-      return `<h${level} id="${id}">${title}</h${level}>`
-    })
-    // 处理加粗和斜体
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // 处理换行和段落
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/^(.+)$/gm, '<p>$1</p>')
-    // 修复标题被包在p标签里的问题
-    .replace(/<p><h/g, '<h')
-    .replace(/<\/h[1-6]><\/p>/g, function(match) {
-      return match.replace('<p>', '').replace('</p>', '')
-    })
-    // 修复图片被包在p标签里的问题
-    .replace(/<p><img/g, '<img')
-    .replace(/\/><\/p>/g, '/>')
-    
-  return content
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
 })
 
-const formatDate = (dateString) => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
-}
-
+// 方法定义
 const loadPost = async () => {
   try {
-    loading.value = true
     const slug = route.params.slug
+    console.log('Loading post with slug:', slug)
     
-    // 前台只显示已发布的公开和不公开文章
-    const params = {
-      status: 'PUBLISHED',
-      visibilityList: ['PUBLIC', 'UNLISTED']
+    if (!slug) {
+      throw new Error('文章标识符不存在')
     }
-    const response = await getPostBySlug(slug, params)
+    
+    // 使用slug获取文章详情
+    const response = await getPostBySlug(slug)
     post.value = response.data
     
-    // TODO: 实现上一篇/下一篇功能
-    prevPost.value = null
-    nextPost.value = null
-    
-    // 检查收藏状态
-    if (authStore.isLoggedIn && post.value) {
-      checkFavoriteStatus()
+    // 如果文章有章节，获取章节数据
+    if (post.value?.hasChapters && post.value?.id) {
+      try {
+        const chaptersResponse = await getPostWithChapters(post.value.id)
+        if (chaptersResponse.data?.chapters) {
+          post.value.chapters = chaptersResponse.data.chapters
+          post.value.preChapterContent = chaptersResponse.data.preChapterContent
+        }
+      } catch (error) {
+        console.warn('获取章节数据失败:', error)
+      }
     }
     
   } catch (error) {
-    console.error('加载文章失败:', error)
-    post.value = null
+    console.error('Load post error:', error)
+    ElMessage.error('加载文章失败: ' + (error.message || error))
   } finally {
     loading.value = false
   }
 }
 
-// 检查收藏状态
-const checkFavoriteStatus = async () => {
-  if (!post.value || !authStore.isLoggedIn) return
-  
-  try {
-    const response = await checkFavorite(post.value.id)
-    isFavorited.value = response.data.isFavorited
-  } catch (error) {
-    console.error('检查收藏状态失败:', error)
+const setChapterRef = (el, chapterId) => {
+  if (el) {
+    chapterRefs[chapterId] = el
   }
 }
 
-// 添加收藏
-const addToFavorites = async () => {
-  if (!authStore.isLoggedIn) {
-    ElMessage.warning('请先登录')
-    return
+const scrollToChapter = (chapterId) => {
+  if (chapterId === 'pre' && preChapterRef.value) {
+    preChapterRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    currentChapterId.value = 'pre'
+  } else if (chapterRefs[chapterId]) {
+    chapterRefs[chapterId].scrollIntoView({ behavior: 'smooth', block: 'start' })
+    currentChapterId.value = chapterId
   }
   
-  try {
-    favoriteLoading.value = true
-    await addFavorite(post.value.id)
-    isFavorited.value = true
-    ElMessage.success('已添加到收藏')
-  } catch (error) {
-    console.error('添加收藏失败:', error)
-    ElMessage.error(error.message || '添加收藏失败')
-  } finally {
-    favoriteLoading.value = false
+  // 移动端关闭目录
+  showMobileToc.value = false
+  
+  // 更新URL
+  router.replace({ hash: `#${chapterId}` })
+}
+
+const scrollToPreChapter = () => {
+  scrollToChapter('pre')
+}
+
+const goToChapter = (chapterId) => {
+  if (window.innerWidth <= 768) {
+    // 移动端直接切换章节
+    currentChapterId.value = chapterId
+    showMobileToc.value = false
+    router.replace({ hash: `#${chapterId}` })
+  } else {
+    // 桌面端滚动到章节
+    scrollToChapter(chapterId)
   }
 }
 
-// 取消收藏
-const removeFromFavorites = async () => {
-  if (!authStore.isLoggedIn) {
-    ElMessage.warning('请先登录')
-    return
-  }
-  
-  try {
-    favoriteLoading.value = true
-    await removeFavorite(post.value.id)
-    isFavorited.value = false
-    ElMessage.success('已取消收藏')
-  } catch (error) {
-    console.error('取消收藏失败:', error)
-    ElMessage.error(error.message || '取消收藏失败')
-  } finally {
-    favoriteLoading.value = false
+const setupScrollListener = () => {
+  if (window.innerWidth > 768) {
+    window.addEventListener('scroll', handleScroll)
   }
 }
 
-onMounted(() => {
-  loadPost()
-})
+const handleScroll = () => {
+  if (window.innerWidth <= 768) return
+  
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+  
+  // 检查引言
+  if (preChapterRef.value) {
+    const rect = preChapterRef.value.getBoundingClientRect()
+    if (rect.top <= 100 && rect.bottom > 100) {
+      currentChapterId.value = 'pre'
+      return
+    }
+  }
+  
+  // 检查章节
+  for (const chapter of flattenedChapters.value) {
+    const element = chapterRefs[chapter.id]
+    if (element) {
+      const rect = element.getBoundingClientRect()
+      if (rect.top <= 100 && rect.bottom > 100) {
+        currentChapterId.value = chapter.id
+        break
+      }
+    }
+  }
+}
+
+const formatContent = (content) => {
+  if (!content) return ''
+  
+  // 简单的换行处理
+  return content
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\n/g, '<br>')
+    .replace(/^/, '<p>')
+    .replace(/$/, '</p>')
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('zh-CN')
+}
 </script>
 
 <style scoped>
 .post-detail {
   min-height: 100vh;
   background: var(--bg-primary);
-  color: var(--text-primary);
 }
 
-/* 顶部导航栏 */
-.top-nav {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: var(--header-bg);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--border-color);
-  padding: 12px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.nav-left, .nav-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.back-btn {
-  color: var(--text-primary);
-  padding: 8px 16px;
-  transition: all 0.3s ease;
-}
-
-.back-btn:hover {
-  background: var(--bg-secondary);
-  color: var(--accent-primary);
-}
-
-.favorite-btn {
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-weight: 500;
-}
-
-.container {
-  max-width: 1200px;
+.loading-container {
+  max-width: 800px;
   margin: 0 auto;
   padding: 40px 20px;
 }
 
-.post-layout {
+.post-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: var(--bg-primary);
+}
+
+.post-header {
+  text-align: center;
+  padding: 40px 20px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 30px;
+}
+
+.post-title {
+  font-size: 2.5em;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+  line-height: 1.2;
+}
+
+.post-meta {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+
+.separator {
+  margin: 0 8px;
+}
+
+.post-summary {
+  font-size: 18px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* 有章节的文章布局 */
+.chaptered-post .desktop-layout {
   display: flex;
-  gap: 40px;
-  align-items: flex-start;
+  gap: 30px;
+  padding: 0 20px;
 }
 
 .toc-sidebar {
-  flex: 0 0 280px;
+  width: 280px;
   position: sticky;
   top: 20px;
+  height: fit-content;
+  max-height: calc(100vh - 40px);
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  overflow: hidden;
 }
 
-.post-content {
+.toc-header {
+  padding: 20px;
+  background: var(--accent-primary);
+  color: white;
+}
+
+.toc-header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.toc-content {
+  padding: 20px 0;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.toc-item {
+  padding: 12px 20px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.toc-item:hover {
+  background: var(--bg-hover);
+  border-left-color: var(--accent-primary);
+}
+
+.toc-item.active {
+  background: var(--accent-light);
+  border-left-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.toc-item.pre-chapter {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.toc-sections {
+  margin-left: 20px;
+}
+
+.section-item {
+  font-size: 14px;
+  padding: 8px 20px;
+}
+
+.content-area {
   flex: 1;
   min-width: 0;
 }
 
-.post-content.with-toc {
-  max-width: none;
-}
-
-.post-content {
-  background: var(--card-bg);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: var(--shadow-light);
-}
-
-.post-header {
-  padding: 40px 40px 0;
-  text-align: center;
-}
-
-.post-meta {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.post-type {
-  background: var(--accent-gradient);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.post-date,
-.reading-time {
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-.post-title {
-  font-size: 2.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-  line-height: 1.2;
-}
-
-.post-summary {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.post-summary p {
-  color: var(--text-secondary);
-  font-style: italic;
-  font-size: 16px;
-  line-height: 1.6;
-  margin: 0;
-}
-
-.post-tags {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 32px;
-  flex-wrap: wrap;
-}
-
-.tag {
+.pre-chapter-content,
+.chapter-content {
+  margin-bottom: 40px;
+  padding: 30px;
   background: var(--bg-secondary);
+  border-radius: 12px;
+}
+
+.chapter-background {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border-left: 4px solid var(--accent-primary);
+}
+
+.background-text {
   color: var(--text-secondary);
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 500;
-  border: 1px solid var(--border-color);
-}
-
-.post-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 24px;
-}
-
-.post-actions .el-button {
-  padding: 12px 24px;
-  font-size: 16px;
-}
-
-.post-body {
-  padding: 0 40px 40px;
-}
-
-.markdown-content {
-  line-height: 1.8;
-  color: var(--text-primary);
-  font-size: 16px;
-}
-
-.markdown-content h1,
-.markdown-content h2,
-.markdown-content h3 {
-  color: var(--text-primary);
-  margin: 24px 0 16px;
-  font-weight: 600;
-}
-
-.markdown-content h1 {
-  font-size: 2rem;
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.markdown-content p {
-  margin-bottom: 16px;
-  text-align: center;
-  font-size: 18px;
-  line-height: 2;
-}
-
-.markdown-content strong {
-  font-weight: 600;
-  color: var(--accent-primary);
-}
-
-.markdown-content em {
   font-style: italic;
-  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
-.post-footer {
-  padding: 32px 40px 40px;
-  border-top: 1px solid var(--border-color);
+.chapter-title {
+  font-size: 2em;
+  color: var(--text-primary);
+  margin-bottom: 30px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid var(--accent-primary);
 }
 
-.post-info {
-  text-align: center;
-  margin-bottom: 32px;
+.content-text {
+  line-height: 1.8;
+  font-size: 16px;
+  color: var(--text-primary);
 }
 
-.post-info p {
-  color: var(--text-secondary);
-  font-size: 14px;
-  margin: 4px 0;
+.content-text :deep(p) {
+  margin-bottom: 20px;
 }
 
-.post-navigation {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.nav-link {
+.chapter-navigation {
   display: flex;
-  flex-direction: column;
-  padding: 16px;
+  justify-content: space-between;
+  margin-top: 50px;
+  padding: 30px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+}
+
+.nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 15px 25px;
+  border-radius: 8px;
+}
+
+.prev-btn {
+  margin-right: auto;
+}
+
+.next-btn {
+  margin-left: auto;
+}
+
+/* 移动端布局 */
+.mobile-layout {
+  display: none;
+  padding: 0 15px;
+}
+
+.mobile-chapter-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 15px;
   background: var(--bg-secondary);
   border-radius: 8px;
-  text-decoration: none;
-  transition: all 0.3s ease;
-  border: 1px solid var(--border-color);
+  margin-bottom: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.nav-link:hover {
-  background: var(--accent-primary);
-  color: white;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-medium);
-}
-
-.nav-link.next {
-  text-align: right;
-}
-
-.nav-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.nav-link:hover .nav-label {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.nav-title {
+.current-chapter {
   font-weight: 500;
   color: var(--text-primary);
-}
-
-.nav-link:hover .nav-title {
-  color: white;
-}
-
-.loading,
-.error-state {
+  flex: 1;
   text-align: center;
-  padding: 80px 20px;
+  margin: 0 15px;
 }
 
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid var(--border-color);
-  border-top: 3px solid var(--accent-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 24px;
+.mobile-content {
+  margin-bottom: 20px;
 }
 
-.error-state h2 {
-  color: var(--text-primary);
-  margin-bottom: 16px;
+.mobile-chapter-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
 }
 
-.error-state p {
-  color: var(--text-secondary);
-  margin-bottom: 24px;
+.mobile-toc {
+  padding: 20px 0;
 }
 
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+.mobile-toc .toc-item {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-/* 移动端响应式设计 */
+/* 普通文章 */
+.regular-post {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+.error-container {
+  padding: 100px 20px;
+}
+
+/* 响应式设计 */
 @media (max-width: 768px) {
-  .container {
-    padding: 0 16px;
+  .post-title {
+    font-size: 1.8em;
   }
   
-  .post-layout {
-    flex-direction: column;
-    gap: 20px;
+  .chaptered-post .desktop-layout {
+    display: none;
   }
   
-  .toc-sidebar {
-    flex: none;
-    position: static;
-    order: -1;
+  .mobile-layout {
+    display: block;
   }
   
+  .content-text {
+    font-size: 15px;
+  }
+  
+  .chapter-title {
+    font-size: 1.5em;
+  }
+}
+
+@media (max-width: 480px) {
   .post-header {
-    padding: 20px 16px;
+    padding: 20px 15px;
   }
   
   .post-title {
-    font-size: 1.8rem;
+    font-size: 1.5em;
   }
   
-  .post-body {
-    padding: 0 16px 20px;
-  }
-}
-
-@media (max-width: 768px) {
-  .post-header,
-  .post-body,
-  .post-footer {
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-  
-  .post-title {
-    font-size: 2rem;
-  }
-  
-  .post-navigation {
-    grid-template-columns: 1fr;
-  }
-  
-  .nav-link.next {
-    text-align: left;
-  }
-  
-  .markdown-content p {
-    font-size: 16px;
+  .mobile-layout {
+    padding: 0 10px;
   }
 }
 </style>
