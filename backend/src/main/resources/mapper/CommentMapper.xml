@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herpoem.site.mapper.CommentMapper">
+
+    <!-- 获取文章评论列表 -->
+    <select id="selectPostComments" resultType="com.herpoem.site.model.vo.CommentVO">
+        SELECT 
+            c.id,
+            c.post_id as postId,
+            p.title as postTitle,
+            c.user_id as userId,
+            u.display_name as userName,
+            '' as userAvatar,
+            c.parent_id as parentId,
+            c.content,
+            c.status,
+            c.like_count as likeCount,
+            EXISTS(SELECT 1 FROM comment_like cl WHERE cl.comment_id = c.id AND cl.user_id = #{userId}) as isLiked,
+            c.created_at as createdAt,
+            c.updated_at as updatedAt,
+            (SELECT COUNT(*) FROM comment cc WHERE cc.parent_id = c.id AND cc.deleted = 0) as replyCount
+        FROM comment c
+        LEFT JOIN post p ON c.post_id = p.id
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.post_id = #{postId} 
+          AND c.deleted = 0 
+          AND c.status = 'APPROVED'
+          AND c.parent_id IS NULL
+        ORDER BY c.created_at DESC
+    </select>
+
+    <!-- 根据ID获取评论详情 -->
+    <select id="selectCommentById" resultType="com.herpoem.site.model.vo.CommentVO">
+        SELECT 
+            c.id,
+            c.post_id as postId,
+            p.title as postTitle,
+            c.user_id as userId,
+            u.display_name as userName,
+            '' as userAvatar,
+            c.parent_id as parentId,
+            c.content,
+            c.status,
+            c.like_count as likeCount,
+            FALSE as isLiked,
+            c.created_at as createdAt,
+            c.updated_at as updatedAt,
+            0 as replyCount
+        FROM comment c
+        LEFT JOIN post p ON c.post_id = p.id
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.id = #{commentId} AND c.deleted = 0
+    </select>
+
+    <!-- 更新文章评论数 -->
+    <update id="updatePostCommentCount">
+        UPDATE post 
+        SET comment_count = (
+            SELECT COUNT(*) 
+            FROM comment 
+            WHERE post_id = #{postId} 
+              AND deleted = 0 
+              AND status = 'APPROVED'
+        )
+        WHERE id = #{postId}
+    </update>
+
+    <!-- 检查用户是否已点赞评论 -->
+    <select id="isCommentLiked" resultType="boolean">
+        SELECT COUNT(*) > 0
+        FROM comment_like
+        WHERE comment_id = #{commentId} AND user_id = #{userId}
+    </select>
+
+    <!-- 添加评论点赞 -->
+    <insert id="addCommentLike">
+        INSERT INTO comment_like (comment_id, user_id, created_at)
+        VALUES (#{commentId}, #{userId}, #{createdAt})
+    </insert>
+
+    <!-- 移除评论点赞 -->
+    <delete id="removeCommentLike">
+        DELETE FROM comment_like
+        WHERE comment_id = #{commentId} AND user_id = #{userId}
+    </delete>
+
+    <!-- 增加评论点赞数 -->
+    <update id="incrementCommentLikeCount">
+        UPDATE comment 
+        SET like_count = like_count + 1,
+            updated_at = NOW()
+        WHERE id = #{commentId}
+    </update>
+
+    <!-- 减少评论点赞数 -->
+    <update id="decrementCommentLikeCount">
+        UPDATE comment 
+        SET like_count = GREATEST(like_count - 1, 0),
+            updated_at = NOW()
+        WHERE id = #{commentId}
+    </update>
+
+    <!-- 获取用户评论列表 -->
+    <select id="selectUserComments" resultType="com.herpoem.site.model.vo.CommentVO">
+        SELECT 
+            c.id,
+            c.post_id as postId,
+            p.title as postTitle,
+            c.user_id as userId,
+            u.display_name as userName,
+            '' as userAvatar,
+            c.parent_id as parentId,
+            c.content,
+            c.status,
+            c.like_count as likeCount,
+            FALSE as isLiked,
+            c.created_at as createdAt,
+            c.updated_at as updatedAt,
+            (SELECT COUNT(*) FROM comment cc WHERE cc.parent_id = c.id AND cc.deleted = 0) as replyCount
+        FROM comment c
+        LEFT JOIN post p ON c.post_id = p.id
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.user_id = #{userId} AND c.deleted = 0
+        ORDER BY c.created_at DESC
+    </select>
+
+    <!-- 获取管理员评论列表 -->
+    <select id="selectAdminComments" resultType="com.herpoem.site.model.vo.CommentVO">
+        SELECT 
+            c.id,
+            c.post_id as postId,
+            p.title as postTitle,
+            c.user_id as userId,
+            u.display_name as userName,
+            '' as userAvatar,
+            c.parent_id as parentId,
+            c.content,
+            c.status,
+            c.like_count as likeCount,
+            FALSE as isLiked,
+            c.created_at as createdAt,
+            c.updated_at as updatedAt,
+            (SELECT COUNT(*) FROM comment cc WHERE cc.parent_id = c.id AND cc.deleted = 0) as replyCount
+        FROM comment c
+        LEFT JOIN post p ON c.post_id = p.id
+        LEFT JOIN users u ON c.user_id = u.id
+        WHERE c.deleted = 0
+        <if test="status != null and status != ''">
+            AND c.status = #{status}
+        </if>
+        ORDER BY c.created_at DESC
+    </select>
+
+</mapper> 

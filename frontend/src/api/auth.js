@@ -30,7 +30,13 @@ export function checkEmail(email) {
   return request.get('/auth/check-email', { params: { email } })
 }
 
-// 修改密码
-export function changePassword(data) {
-  return request.post('/auth/change-password', data)
+/**
+ * 修改密码
+ */
+export function changeUserPassword(data) {
+  return request({
+    url: '/auth/change-password',
+    method: 'post',
+    data
+  })
 }

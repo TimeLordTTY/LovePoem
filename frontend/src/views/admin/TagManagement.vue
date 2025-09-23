@@ -140,16 +140,21 @@ const tagFormRef = ref()
 const loadTags = async () => {
   try {
     loading.value = true
-    const params = {
-      page: pagination.page,
-      size: pagination.size
-    }
-    const response = await getAdminTags(params)
-    tags.value = response.data.records || []
-    pagination.total = response.data.total || 0
+    const response = await getAdminTags()
+    
+    // 后端返回所有标签，前端进行分页处理
+    const allTags = response.data || []
+    pagination.total = allTags.length
+    
+    // 计算分页
+    const startIndex = (pagination.page - 1) * pagination.size
+    const endIndex = startIndex + pagination.size
+    tags.value = allTags.slice(startIndex, endIndex)
+    
+    console.log('Loaded tags:', tags.value)
   } catch (error) {
     console.error('加载标签失败:', error)
-    ElMessage.error('加载标签失败')
+    ElMessage.error('加载标签失败: ' + (error.message || error))
   } finally {
     loading.value = false
   }

@@ -65,15 +65,61 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+
+    <!-- 修改密码 -->
+    <el-card class="settings-card">
+      <template #header>
+        <div class="card-header">
+          <h3>修改密码</h3>
+        </div>
+      </template>
+      
+      <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="120px">
+        <el-form-item label="当前密码" prop="currentPassword">
+          <el-input
+            v-model="passwordForm.currentPassword"
+            type="password"
+            show-password
+            placeholder="请输入当前密码"
+          />
+        </el-form-item>
+        
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input
+            v-model="passwordForm.newPassword"
+            type="password"
+            show-password
+            placeholder="请输入新密码"
+          />
+        </el-form-item>
+        
+        <el-form-item label="确认新密码" prop="confirmPassword">
+          <el-input
+            v-model="passwordForm.confirmPassword"
+            type="password"
+            show-password
+            placeholder="请再次输入新密码"
+          />
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button type="primary" @click="changePassword" :loading="passwordLoading">
+            修改密码
+          </el-button>
+          <el-button @click="resetPasswordForm">重置</el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Picture } from '@element-plus/icons-vue'
 import { getSystemSettings, updateSystemSettings } from '@/api/system'
 import { uploadImage } from '@/api/file'
+import { changeUserPassword } from '@/api/auth'
 
 // 响应式数据
 const activeTab = ref('网站基本')
@@ -81,6 +127,39 @@ const groupedSettings = ref({})
 const formData = reactive({})
 const saving = ref(false)
 const uploadingWallpaper = ref(false)
+
+// 密码表单
+const passwordForm = reactive({
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+// 密码验证规则
+const passwordRules = {
+  currentPassword: [
+    { required: true, message: '请输入当前密码', trigger: 'blur' }
+  ],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, message: '密码长度至少6位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请确认新密码', trigger: 'blur' },
+    {
+      validator: (rule, value, callback) => {
+        if (value !== passwordForm.newPassword) {
+          callback(new Error('两次输入的密码不一致'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ]
+}
+
+const passwordFormRef = ref()
 
 // 加载设置
 const loadSettings = async () => {
@@ -115,6 +194,51 @@ const saveSettings = async () => {
     ElMessage.error('保存设置失败')
   } finally {
     saving.value = false
+  }
+}
+
+// 修改密码
+const changePassword = async () => {
+  try {
+    await passwordFormRef.value.validate()
+    
+    await ElMessageBox.confirm('确定要修改密码吗？', '确认修改', {
+      type: 'warning'
+    })
+    
+    passwordLoading.value = true
+    
+    await changeUserPassword({
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword
+    })
+    
+    ElMessage.success('密码修改成功，请重新登录')
+    resetPasswordForm()
+    
+    // 可以选择自动退出登录
+    setTimeout(() => {
+      window.location.href = '/login'
+    }, 2000)
+    
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('密码修改失败: ' + (error.message || error))
+    }
+  } finally {
+    passwordLoading.value = false
+  }
+}
+
+// 重置密码表单
+const resetPasswordForm = () => {
+  Object.assign(passwordForm, {
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+  if (passwordFormRef.value) {
+    passwordFormRef.value.resetFields()
   }
 }
 

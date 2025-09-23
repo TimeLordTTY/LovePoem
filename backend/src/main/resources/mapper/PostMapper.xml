@@ -21,10 +21,12 @@
             p.created_at as createdAt,
             p.updated_at as updatedAt,
             pt.name as postTypeName,
+            s.name as seriesName,
             u.display_name as authorName,
             CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
         FROM post p
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        LEFT JOIN series s ON p.series_id = s.id
         LEFT JOIN users u ON p.created_by = u.id
         WHERE p.deleted = 0
         <if test="status != null">

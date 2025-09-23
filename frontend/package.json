@@ -12,6 +12,7 @@
   "dependencies": {
     "@element-plus/icons-vue": "^2.1.0",
     "axios": "^1.5.0",
+    "echarts": "^6.0.0",
     "element-plus": "^2.4.1",
     "highlight.js": "^11.9.0",
     "mammoth": "^1.10.0",

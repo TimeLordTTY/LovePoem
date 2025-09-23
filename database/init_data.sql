@@ -87,3 +87,20 @@ INSERT INTO settings (setting_key, value, description, group_name, is_system) VA
 ('db_version_010', 'completed', '数据库版本010：文章注解', '系统设置', 1),
 ('db_version_011', 'completed', '数据库版本011：章节和目录', '系统设置', 1),
 ('db_version_012', 'completed', '数据库版本012：章节体系', '系统设置', 1);
+
+-- 插入数据库版本记录
+INSERT INTO settings (setting_key, value, description, group_name, is_system) VALUES 
+('db_version_014', 'completed', '数据库版本014：评论和催更系统', '系统设置', 1);
+
+-- 插入评论系统配置
+INSERT INTO settings (setting_key, value, description, group_name, is_system) VALUES 
+('comment_enabled', 'true', '是否启用评论功能', '评论设置', 0),
+('comment_approval_required', 'false', '评论是否需要审核', '评论设置', 0),
+('comment_max_length', '500', '评论最大长度', '评论设置', 0),
+('comment_allow_anonymous', 'false', '是否允许匿名评论', '评论设置', 0);
+
+-- 插入催更系统配置
+INSERT INTO settings (setting_key, value, description, group_name, is_system) VALUES 
+('update_request_enabled', 'true', '是否启用催更功能', '催更设置', 0),
+('update_request_max_per_day', '3', '每日最大催更次数', '催更设置', 0),
+('update_request_max_length', '200', '催更留言最大长度', '催更设置', 0);

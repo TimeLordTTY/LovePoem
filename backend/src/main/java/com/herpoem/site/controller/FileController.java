@@ -51,14 +51,21 @@ public class FileController {
         }
         
         try {
-            // 创建上传目录
+            // 创建上传目录 - 使用绝对路径
             String dateFolder = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-            String uploadDir = uploadPath + File.separator + dateFolder;
-            File dir = new File(uploadDir);
-            if (!dir.exists()) {
-                boolean created = dir.mkdirs();
+            
+            // 确保uploadPath是绝对路径
+            File baseUploadDir = new File(uploadPath);
+            if (!baseUploadDir.isAbsolute()) {
+                // 如果是相对路径，基于当前工作目录
+                baseUploadDir = new File(System.getProperty("user.dir"), uploadPath);
+            }
+            
+            File uploadDir = new File(baseUploadDir, dateFolder);
+            if (!uploadDir.exists()) {
+                boolean created = uploadDir.mkdirs();
                 if (!created) {
-                    return Result.error("无法创建上传目录: " + uploadDir);
+                    return Result.error("无法创建上传目录: " + uploadDir.getAbsolutePath());
                 }
             }
             
@@ -71,7 +78,7 @@ public class FileController {
             String filename = UUID.randomUUID().toString() + extension;
             
             // 保存文件
-            File destFile = new File(dir, filename);
+            File destFile = new File(uploadDir, filename);
             file.transferTo(destFile);
             
             // 返回文件信息
@@ -80,6 +87,7 @@ public class FileController {
             result.put("originalName", originalFilename);
             result.put("url", urlPrefix + "/" + dateFolder + "/" + filename);
             result.put("size", file.getSize());
+            result.put("id", UUID.randomUUID().toString()); // 添加ID字段供前端使用
             
             return Result.success(result);
             

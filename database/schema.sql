@@ -61,6 +61,10 @@ CREATE TABLE post (
     visibility ENUM('PUBLIC', 'UNLISTED', 'PRIVATE') NOT NULL DEFAULT 'PUBLIC' COMMENT '可见性',
     status ENUM('DRAFT', 'PUBLISHED') NOT NULL DEFAULT 'DRAFT' COMMENT '状态',
     publish_date DATETIME COMMENT '发布时间',
+    has_chapters TINYINT(1) DEFAULT 0 COMMENT '是否有章节',
+    pre_chapter_content TEXT COMMENT '章节前内容（引言、背景等）',
+    comment_count INT NOT NULL DEFAULT 0 COMMENT '评论数量',
+    update_request_count INT NOT NULL DEFAULT 0 COMMENT '催更数量',
     created_by BIGINT NOT NULL COMMENT '创建者ID',
     updated_by BIGINT NOT NULL COMMENT '更新者ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -161,3 +165,104 @@ CREATE TABLE settings (
     INDEX idx_key (setting_key),
     INDEX idx_deleted_group (deleted, group_name)
 ) COMMENT '站点配置表';
+
+-- 文章章节表
+CREATE TABLE post_chapter (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '章节ID',
+    post_id BIGINT NOT NULL COMMENT '所属文章ID',
+    parent_id BIGINT DEFAULT NULL COMMENT '父章节ID（用于节，NULL表示章）',
+    title VARCHAR(200) NOT NULL COMMENT '章节标题',
+    content TEXT NOT NULL COMMENT '章节内容',
+    background_text TEXT COMMENT '章节背景说明',
+    order_no INT NOT NULL DEFAULT 0 COMMENT '排序号（同层内从小到大）',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
+    
+    INDEX idx_post_order (post_id, order_no),
+    INDEX idx_parent (parent_id),
+    INDEX idx_post_parent_order (post_id, parent_id, order_no),
+    INDEX idx_deleted_post (deleted, post_id),
+    
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES post_chapter(id) ON DELETE CASCADE
+) COMMENT '文章章节表';
+
+-- 用户收藏表
+CREATE TABLE user_favorite (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '收藏ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    post_id BIGINT NOT NULL COMMENT '文章ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+    
+    UNIQUE KEY uk_user_post (user_id, post_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_post_id (post_id),
+    INDEX idx_created_at (created_at),
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE
+) COMMENT '用户收藏表';
+
+-- 评论表
+CREATE TABLE comment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '评论ID',
+    post_id BIGINT NOT NULL COMMENT '文章ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    parent_id BIGINT DEFAULT NULL COMMENT '父评论ID（用于回复）',
+    content TEXT NOT NULL COMMENT '评论内容',
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '评论状态：PENDING-待审核，APPROVED-已通过，REJECTED-已拒绝',
+    like_count INT NOT NULL DEFAULT 0 COMMENT '点赞数',
+    ip_address VARCHAR(45) COMMENT 'IP地址',
+    user_agent TEXT COMMENT '用户代理',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
+    
+    INDEX idx_post_id (post_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_parent_id (parent_id),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at),
+    INDEX idx_deleted_status (deleted, status),
+    
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES comment(id) ON DELETE CASCADE
+) COMMENT '评论表';
+
+-- 催更表
+CREATE TABLE update_request (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '催更ID',
+    post_id BIGINT NOT NULL COMMENT '文章ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    message TEXT COMMENT '催更内容/留言',
+    type VARCHAR(20) NOT NULL DEFAULT 'GENERAL' COMMENT '催更类型：GENERAL-一般催更，URGENT-紧急催更',
+    ip_address VARCHAR(45) COMMENT 'IP地址',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
+    
+    INDEX idx_post_id (post_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_type (type),
+    INDEX idx_created_at (created_at),
+    INDEX idx_deleted_type (deleted, type),
+    
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) COMMENT '催更表';
+
+-- 评论点赞表
+CREATE TABLE comment_like (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '点赞ID',
+    comment_id BIGINT NOT NULL COMMENT '评论ID',
+    user_id BIGINT NOT NULL COMMENT '用户ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    
+    UNIQUE KEY uk_comment_user (comment_id, user_id),
+    INDEX idx_comment_id (comment_id),
+    INDEX idx_user_id (user_id),
+    
+    FOREIGN KEY (comment_id) REFERENCES comment(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) COMMENT '评论点赞表';

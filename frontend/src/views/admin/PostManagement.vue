@@ -76,12 +76,17 @@
         
         <el-table-column prop="title" label="标题" min-width="300" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="post-title-cell">
-              <h4>{{ row.title }}</h4>
-              <p v-if="row.summary" class="post-summary">{{ row.summary }}</p>
-              <div v-if="row.hasChapters" class="chapter-indicator">
-                <el-icon><Document /></el-icon>
-                <span>有章节</span>
+            <div class="post-title-cell drag-area" :data-post-id="row.id">
+              <div class="drag-handle-area">
+                <el-icon class="drag-handle"><Rank /></el-icon>
+                <div class="post-info">
+                  <h4>{{ row.title }}</h4>
+                  <p v-if="row.summary" class="post-summary">{{ row.summary }}</p>
+                  <div v-if="row.hasChapters" class="chapter-indicator">
+                    <el-icon><Document /></el-icon>
+                    <span>有章节</span>
+                  </div>
+                </div>
               </div>
             </div>
           </template>
@@ -496,6 +501,10 @@
                     placeholder="请输入章节内容"
                     class="content-textarea"
                   />
+                  
+                  <div class="word-count-info">
+                    当前章节字数：{{ chapterWordCount }}
+                  </div>
                 </el-form-item>
               </el-form>
             </div>
@@ -530,6 +539,10 @@
                     导入Word
                   </el-button>
                 </el-upload>
+                
+                <div class="word-count">
+                  字数：{{ articleWordCount }}
+                </div>
               </div>
               
               <el-input
@@ -547,6 +560,7 @@
       <template #footer>
         <div class="dialog-footer">
           <el-button @click="cancelEdit">取消</el-button>
+          <el-button @click="previewPost" :disabled="!postForm.title">预览</el-button>
           <el-button type="primary" @click="savePost">保存文章</el-button>
         </div>
       </template>
@@ -626,7 +640,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import Sortable from 'sortablejs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Edit, Delete, Document, DocumentAdd, Rank, Upload, ArrowDown, Setting, Picture, DocumentCopy, Lock, Unlock } from '@element-plus/icons-vue'
@@ -728,6 +742,57 @@ const chapterForm = reactive({
   orderNo: 0
 })
 
+// 计算属性
+const articleWordCount = computed(() => {
+  return countWords(postForm.contentMd)
+})
+
+const chapterWordCount = computed(() => {
+  return countWords(chapterForm.content)
+})
+
+const totalWordCount = computed(() => {
+  if (!postForm.hasChapters) {
+    return articleWordCount.value
+  }
+  
+  let total = countWords(postForm.preChapterContent)
+  chapters.value.forEach(chapter => {
+    total += countWords(chapter.content)
+    if (chapter.backgroundText) {
+      total += countWords(chapter.backgroundText)
+    }
+    if (chapter.children) {
+      chapter.children.forEach(section => {
+        total += countWords(section.content)
+        if (section.backgroundText) {
+          total += countWords(section.backgroundText)
+        }
+      })
+    }
+  })
+  
+  return total
+})
+
+// 工具函数
+const countWords = (text) => {
+  if (!text) return 0
+  // 移除Markdown语法和HTML标签
+  const cleanText = text
+    .replace(/[#*_~`]/g, '') // 移除Markdown标记
+    .replace(/<[^>]*>/g, '') // 移除HTML标签
+    .replace(/!\[.*?\]\(.*?\)/g, '') // 移除图片语法
+    .replace(/\[.*?\]\(.*?\)/g, '') // 移除链接语法
+    .trim()
+  
+  // 中文字符和英文单词分别计数
+  const chineseChars = (cleanText.match(/[\u4e00-\u9fa5]/g) || []).length
+  const englishWords = (cleanText.match(/[a-zA-Z]+/g) || []).length
+  
+  return chineseChars + englishWords
+}
+
 // 生命周期
 onMounted(() => {
   loadPosts()
@@ -744,11 +809,16 @@ const initSortable = () => {
     const tableBodyEl = document.querySelector('.posts-table .el-table__body-wrapper tbody')
     if (tableBodyEl) {
       new Sortable(tableBodyEl, {
-        handle: '.drag-handle',
+        handle: '.drag-handle-area',
         animation: 150,
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        onStart: (evt) => {
+          console.log('Drag start:', evt.oldIndex)
+        },
         onEnd: ({ newIndex, oldIndex }) => {
+          console.log('Drag end:', oldIndex, '->', newIndex)
           if (newIndex !== oldIndex) {
             const movedItem = posts.value.splice(oldIndex, 1)[0]
             posts.value.splice(newIndex, 0, movedItem)
@@ -1103,14 +1173,14 @@ const savePost = async () => {
     
     const submitData = {
       title: postForm.title,
-      summary: postForm.summary,
+      summary: postForm.summary || '',
       postTypeId: postForm.postTypeId,
-      seriesId: postForm.seriesId,
+      seriesId: postForm.seriesId || null,
       status: postForm.status,
       visibility: postForm.visibility,
       hasChapters: postForm.hasChapters,
-      preChapterContent: postForm.preChapterContent,
-      publishDate: postForm.publishDate,
+      preChapterContent: postForm.preChapterContent || '',
+      publishDate: postForm.publishDate || null,
       contentMd: postForm.hasChapters ? '' : (postForm.contentMd || '')
     }
     
@@ -1498,10 +1568,15 @@ const handleCoverUpload = async (file) => {
     }
     
     const response = await uploadImage(file.raw)
-    postForm.coverUrl = response.data.url
-    postForm.coverAssetId = response.data.id
+    console.log('Cover upload response:', response)
     
-    ElMessage.success('封面上传成功')
+    if (response.data) {
+      postForm.coverUrl = response.data.url
+      postForm.coverAssetId = response.data.id
+      ElMessage.success('封面上传成功')
+    } else {
+      throw new Error('上传响应数据格式错误')
+    }
   } catch (error) {
     ElMessage.error('封面上传失败: ' + (error.message || error))
     console.error('Cover upload error:', error)
@@ -1511,6 +1586,7 @@ const handleCoverUpload = async (file) => {
 const removeCover = () => {
   postForm.coverUrl = ''
   postForm.coverAssetId = null
+  ElMessage.success('封面已删除')
 }
 
 const handleImageUpload = async (file) => {
@@ -1586,6 +1662,16 @@ const handleArticleWordUpload = async (file) => {
     ElMessage.error(`Word文档导入失败: ${error.message}`)
     console.error('Article word upload error:', error)
   }
+}
+
+const previewPost = () => {
+  if (!postForm.title) {
+    ElMessage.warning('请先输入文章标题')
+    return
+  }
+  // 这里可以跳转到文章预览页面，并传递文章ID
+  // 例如：router.push(`/preview/${postForm.id}`)
+  ElMessage.info(`预览文章: ${postForm.title}`)
 }
 </script>
 
@@ -2164,12 +2250,48 @@ const handleArticleWordUpload = async (file) => {
 }
 
 /* 拖拽排序样式 */
+.drag-area {
+  cursor: move;
+}
+
+.drag-handle-area {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.drag-handle-area:hover {
+  background-color: var(--bg-hover, #f5f5f5);
+}
+
+.drag-handle {
+  color: var(--text-secondary);
+  font-size: 16px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.post-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .sortable-ghost {
   opacity: 0.5;
+  background-color: var(--bg-hover, #f5f5f5);
 }
 
 .sortable-chosen {
-  background-color: var(--bg-hover, #f5f5f5);
+  background-color: var(--accent-light, #e3f2fd);
+}
+
+.sortable-drag {
+  background-color: var(--bg-primary);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 /* 左侧面板滚动样式 */
@@ -2237,6 +2359,23 @@ const handleArticleWordUpload = async (file) => {
 
 .info-card {
   margin-bottom: 16px;
+}
+
+/* 字数统计样式 */
+.word-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.word-count-info {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: right;
 }
 </style>
 
