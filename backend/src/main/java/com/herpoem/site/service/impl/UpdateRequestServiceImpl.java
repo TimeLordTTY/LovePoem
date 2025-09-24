@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.herpoem.site.mapper.UpdateRequestMapper;
-import com.herpoem.site.model.dto.UpdateRequestCreateDTO;
 import com.herpoem.site.model.entity.UpdateRequest;
 import com.herpoem.site.model.vo.UpdateRequestVO;
 import com.herpoem.site.service.UpdateRequestService;
@@ -15,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 /**
- * 催更服务实现类
+ * 催更服务实现类（简化版）
  * 
  * @author TimeLord
  */
@@ -27,23 +26,23 @@ public class UpdateRequestServiceImpl extends ServiceImpl<UpdateRequestMapper, U
 
     @Override
     @Transactional
-    public UpdateRequestVO createUpdateRequest(UpdateRequestCreateDTO updateRequestCreateDTO, Long userId, String ipAddress) {
+    public void createUpdateRequest(Long postId, String ipAddress) {
         // 验证输入
-        if (updateRequestCreateDTO.getPostId() == null) {
+        if (postId == null) {
             throw new IllegalArgumentException("文章ID不能为空");
         }
+        if (ipAddress == null || ipAddress.trim().isEmpty()) {
+            throw new IllegalArgumentException("IP地址不能为空");
+        }
 
-        // 检查今日催更次数限制
-        Integer todayCount = updateRequestMapper.getTodayUserUpdateRequestCount(updateRequestCreateDTO.getPostId(), userId);
-        if (todayCount >= 3) { // 假设每天最多催更3次
-            throw new IllegalArgumentException("今日催更次数已达上限");
+        // 检查今日该IP是否已催更
+        Integer todayCount = updateRequestMapper.checkTodayUpdateRequestByIp(postId, ipAddress);
+        if (todayCount > 0) {
+            throw new IllegalArgumentException("今日已催更，请明天再来");
         }
 
         UpdateRequest updateRequest = new UpdateRequest();
-        updateRequest.setPostId(updateRequestCreateDTO.getPostId());
-        updateRequest.setUserId(userId);
-        updateRequest.setMessage(updateRequestCreateDTO.getMessage());
-        updateRequest.setType(updateRequestCreateDTO.getType() != null ? updateRequestCreateDTO.getType() : "GENERAL");
+        updateRequest.setPostId(postId);
         updateRequest.setIpAddress(ipAddress);
         updateRequest.setCreatedAt(LocalDateTime.now());
         updateRequest.setDeleted(0);
@@ -51,10 +50,7 @@ public class UpdateRequestServiceImpl extends ServiceImpl<UpdateRequestMapper, U
         save(updateRequest);
 
         // 更新文章催更数
-        updateRequestMapper.updatePostUpdateRequestCount(updateRequestCreateDTO.getPostId());
-
-        // 返回催更VO
-        return updateRequestMapper.selectUpdateRequestById(updateRequest.getId());
+        updateRequestMapper.updatePostUpdateRequestCount(postId);
     }
 
     @Override
@@ -69,22 +65,17 @@ public class UpdateRequestServiceImpl extends ServiceImpl<UpdateRequestMapper, U
     }
 
     @Override
-    public IPage<UpdateRequestVO> getUserUpdateRequests(Long userId, Integer page, Integer size) {
-        Page<UpdateRequestVO> pageParam = new Page<>(page, size);
-        return updateRequestMapper.selectUserUpdateRequests(pageParam, userId);
+    public boolean checkTodayUpdateRequestByIp(Long postId, String ipAddress) {
+        Integer count = updateRequestMapper.checkTodayUpdateRequestByIp(postId, ipAddress);
+        return count > 0;
     }
 
     @Override
     @Transactional
-    public void deleteUpdateRequest(Long id, Long userId) {
+    public void deleteUpdateRequest(Long id) {
         UpdateRequest updateRequest = getById(id);
         if (updateRequest == null) {
             throw new IllegalArgumentException("催更记录不存在");
-        }
-
-        // 检查权限：只有催更者或管理员可以删除
-        if (!updateRequest.getUserId().equals(userId)) {
-            throw new IllegalArgumentException("无权删除此催更记录");
         }
 
         // 软删除
@@ -96,8 +87,8 @@ public class UpdateRequestServiceImpl extends ServiceImpl<UpdateRequestMapper, U
     }
 
     @Override
-    public IPage<UpdateRequestVO> getAdminUpdateRequests(Integer page, Integer size, String type) {
+    public IPage<UpdateRequestVO> getAdminUpdateRequests(Integer page, Integer size) {
         Page<UpdateRequestVO> pageParam = new Page<>(page, size);
-        return updateRequestMapper.selectAdminUpdateRequests(pageParam, type);
+        return updateRequestMapper.selectAdminUpdateRequests(pageParam);
     }
 } 

@@ -32,25 +32,7 @@ public class UpdateRequest {
     private Long postId;
 
     /**
-     * 用户ID
-     */
-    @TableField("user_id")
-    private Long userId;
-
-    /**
-     * 催更内容/留言
-     */
-    @TableField("message")
-    private String message;
-
-    /**
-     * 催更类型：GENERAL-一般催更，URGENT-紧急催更
-     */
-    @TableField("type")
-    private String type;
-
-    /**
-     * IP地址
+     * IP地址（用于防刷）
      */
     @TableField("ip_address")
     private String ipAddress;
@@ -68,12 +50,6 @@ public class UpdateRequest {
     private Integer deleted;
 
     // 非数据库字段
-    @TableField(exist = false)
-    private String userName;
-
-    @TableField(exist = false)
-    private String userAvatar;
-
     @TableField(exist = false)
     private String postTitle;
 } 

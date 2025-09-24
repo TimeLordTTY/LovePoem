@@ -69,6 +69,11 @@ public interface PostService extends IService<Post> {
     List<PostListVO> getPostsBySeries(Long seriesId, Post.Status status, Post.Visibility visibility);
     
     /**
+     * 专门更新文章的系列字段
+     */
+    void updatePostSeries(Long postId, Long seriesId, Long userId);
+    
+    /**
      * 更新文章排序
      */
     void updatePostSortOrder(Long id, Integer sortOrder, Long userId);

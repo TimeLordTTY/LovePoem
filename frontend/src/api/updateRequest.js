@@ -1,7 +1,7 @@
 import request from './request'
 
 /**
- * 提交催更
+ * 提交催更（简化版）
  */
 export function createUpdateRequest(data) {
   return request({
@@ -23,22 +23,21 @@ export function getPostUpdateRequests(postId, params) {
 }
 
 /**
- * 获取用户的催更历史
- */
-export function getUserUpdateRequests(params) {
-  return request({
-    url: '/update-requests/user',
-    method: 'get',
-    params
-  })
-}
-
-/**
  * 获取今日催更统计
  */
 export function getTodayUpdateRequestCount(postId) {
   return request({
     url: `/update-requests/post/${postId}/today-count`,
+    method: 'get'
+  })
+}
+
+/**
+ * 检查IP今日是否已催更
+ */
+export function checkTodayUpdateRequestByIp(postId) {
+  return request({
+    url: `/update-requests/post/${postId}/check-ip`,
     method: 'get'
   })
 }

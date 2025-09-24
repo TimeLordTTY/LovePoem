@@ -28,24 +28,9 @@ public class UpdateRequestVO {
     private String postTitle;
 
     /**
-     * 用户ID
+     * IP地址
      */
-    private Long userId;
-
-    /**
-     * 用户名
-     */
-    private String userName;
-
-    /**
-     * 催更内容/留言
-     */
-    private String message;
-
-    /**
-     * 催更类型
-     */
-    private String type;
+    private String ipAddress;
 
     /**
      * 创建时间

@@ -230,4 +230,14 @@
         LIMIT 1
     </select>
     
+    <!-- 专门更新文章的系列字段 -->
+    <update id="updatePostSeries">
+        UPDATE post 
+        SET series_id = #{seriesId},
+            updated_by = #{userId},
+            updated_at = NOW()
+        WHERE id = #{postId}
+        AND deleted = 0
+    </update>
+    
 </mapper>

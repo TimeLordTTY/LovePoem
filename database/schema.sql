@@ -231,26 +231,21 @@ CREATE TABLE comment (
     FOREIGN KEY (parent_id) REFERENCES comment(id) ON DELETE CASCADE
 ) COMMENT '评论表';
 
--- 催更表
+-- 催更表（简化版，一键催更）
 CREATE TABLE update_request (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '催更ID',
     post_id BIGINT NOT NULL COMMENT '文章ID',
-    user_id BIGINT NOT NULL COMMENT '用户ID',
-    message TEXT COMMENT '催更内容/留言',
-    type VARCHAR(20) NOT NULL DEFAULT 'GENERAL' COMMENT '催更类型：GENERAL-一般催更，URGENT-紧急催更',
-    ip_address VARCHAR(45) COMMENT 'IP地址',
+    ip_address VARCHAR(45) NOT NULL COMMENT 'IP地址（用于防刷）',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
     INDEX idx_post_id (post_id),
-    INDEX idx_user_id (user_id),
-    INDEX idx_type (type),
     INDEX idx_created_at (created_at),
-    INDEX idx_deleted_type (deleted, type),
+    INDEX idx_ip_post_date (ip_address, post_id, created_at),
+    INDEX idx_deleted (deleted),
     
-    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) COMMENT '催更表';
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE
+) COMMENT '催更表（简化版）';
 
 -- 评论点赞表
 CREATE TABLE comment_like (

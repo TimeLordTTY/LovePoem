@@ -37,17 +37,12 @@ public interface UpdateRequestMapper extends BaseMapper<UpdateRequest> {
     Integer getTodayUpdateRequestCount(@Param("postId") Long postId);
 
     /**
-     * 获取用户今日催更次数
+     * 检查IP今日是否已催更
      */
-    Integer getTodayUserUpdateRequestCount(@Param("postId") Long postId, @Param("userId") Long userId);
-
-    /**
-     * 获取用户催更历史
-     */
-    IPage<UpdateRequestVO> selectUserUpdateRequests(Page<UpdateRequestVO> page, @Param("userId") Long userId);
+    Integer checkTodayUpdateRequestByIp(@Param("postId") Long postId, @Param("ipAddress") String ipAddress);
 
     /**
      * 获取管理员催更列表
      */
-    IPage<UpdateRequestVO> selectAdminUpdateRequests(Page<UpdateRequestVO> page, @Param("type") String type);
+    IPage<UpdateRequestVO> selectAdminUpdateRequests(Page<UpdateRequestVO> page);
 } 

@@ -12,9 +12,9 @@ import com.herpoem.site.model.vo.UpdateRequestVO;
 public interface UpdateRequestService {
 
     /**
-     * 创建催更
+     * 创建催更（简化版，一键催更）
      */
-    UpdateRequestVO createUpdateRequest(UpdateRequestCreateDTO updateRequestCreateDTO, Long userId, String ipAddress);
+    void createUpdateRequest(Long postId, String ipAddress);
 
     /**
      * 获取文章的催更列表
@@ -27,17 +27,17 @@ public interface UpdateRequestService {
     Integer getTodayUpdateRequestCount(Long postId);
 
     /**
-     * 获取用户催更历史
+     * 检查IP今日是否已催更
      */
-    IPage<UpdateRequestVO> getUserUpdateRequests(Long userId, Integer page, Integer size);
+    boolean checkTodayUpdateRequestByIp(Long postId, String ipAddress);
 
     /**
      * 删除催更记录
      */
-    void deleteUpdateRequest(Long id, Long userId);
+    void deleteUpdateRequest(Long id);
 
     /**
      * 获取管理员催更列表
      */
-    IPage<UpdateRequestVO> getAdminUpdateRequests(Integer page, Integer size, String type);
+    IPage<UpdateRequestVO> getAdminUpdateRequests(Integer page, Integer size);
 } 

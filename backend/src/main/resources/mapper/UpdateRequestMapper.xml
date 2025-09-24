@@ -8,14 +8,10 @@
             ur.id,
             ur.post_id as postId,
             p.title as postTitle,
-            ur.user_id as userId,
-            u.display_name as userName,
-            ur.message,
-            ur.type,
+            ur.ip_address as ipAddress,
             ur.created_at as createdAt
         FROM update_request ur
         LEFT JOIN post p ON ur.post_id = p.id
-        LEFT JOIN users u ON ur.user_id = u.id
         WHERE ur.post_id = #{postId} AND ur.deleted = 0
         ORDER BY ur.created_at DESC
     </select>
@@ -26,14 +22,10 @@
             ur.id,
             ur.post_id as postId,
             p.title as postTitle,
-            ur.user_id as userId,
-            u.display_name as userName,
-            ur.message,
-            ur.type,
+            ur.ip_address as ipAddress,
             ur.created_at as createdAt
         FROM update_request ur
         LEFT JOIN post p ON ur.post_id = p.id
-        LEFT JOIN users u ON ur.user_id = u.id
         WHERE ur.id = #{id} AND ur.deleted = 0
     </select>
 
@@ -57,32 +49,14 @@
           AND DATE(created_at) = CURDATE()
     </select>
 
-    <!-- 获取用户今日催更次数 -->
-    <select id="getTodayUserUpdateRequestCount" resultType="java.lang.Integer">
+    <!-- 检查IP今日是否已催更 -->
+    <select id="checkTodayUpdateRequestByIp" resultType="java.lang.Integer">
         SELECT COUNT(*)
         FROM update_request
         WHERE post_id = #{postId} 
-          AND user_id = #{userId}
+          AND ip_address = #{ipAddress}
           AND deleted = 0
           AND DATE(created_at) = CURDATE()
-    </select>
-
-    <!-- 获取用户催更历史 -->
-    <select id="selectUserUpdateRequests" resultType="com.herpoem.site.model.vo.UpdateRequestVO">
-        SELECT 
-            ur.id,
-            ur.post_id as postId,
-            p.title as postTitle,
-            ur.user_id as userId,
-            u.display_name as userName,
-            ur.message,
-            ur.type,
-            ur.created_at as createdAt
-        FROM update_request ur
-        LEFT JOIN post p ON ur.post_id = p.id
-        LEFT JOIN users u ON ur.user_id = u.id
-        WHERE ur.user_id = #{userId} AND ur.deleted = 0
-        ORDER BY ur.created_at DESC
     </select>
 
     <!-- 获取管理员催更列表 -->
@@ -91,18 +65,11 @@
             ur.id,
             ur.post_id as postId,
             p.title as postTitle,
-            ur.user_id as userId,
-            u.display_name as userName,
-            ur.message,
-            ur.type,
+            ur.ip_address as ipAddress,
             ur.created_at as createdAt
         FROM update_request ur
         LEFT JOIN post p ON ur.post_id = p.id
-        LEFT JOIN users u ON ur.user_id = u.id
         WHERE ur.deleted = 0
-        <if test="type != null and type != ''">
-            AND ur.type = #{type}
-        </if>
         ORDER BY ur.created_at DESC
     </select>
 

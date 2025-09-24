@@ -56,4 +56,9 @@ public interface PostMapper extends BaseMapper<Post> {
      * 获取系列的章节列表
      */
     List<PostListVO> selectChaptersBySeries(@Param("seriesId") Long seriesId);
+    
+    /**
+     * 专门更新文章的系列字段（确保null值能正确处理）
+     */
+    int updatePostSeries(@Param("postId") Long postId, @Param("seriesId") Long seriesId, @Param("userId") Long userId);
 }

@@ -25,16 +25,15 @@ public class UpdateRequestController {
     private final JwtUtil jwtUtil;
 
     /**
-     * 提交催更
+     * 提交催更（简化版，一键催更）
      */
     @PostMapping
-    public Result<UpdateRequestVO> createUpdateRequest(@RequestBody UpdateRequestCreateDTO updateRequestCreateDTO,
-                                                      HttpServletRequest request) {
-        Long userId = getCurrentUserId(request);
+    public Result<String> createUpdateRequest(@RequestBody UpdateRequestCreateDTO updateRequestCreateDTO,
+                                             HttpServletRequest request) {
         String ipAddress = getClientIpAddress(request);
         
-        UpdateRequestVO updateRequest = updateRequestService.createUpdateRequest(updateRequestCreateDTO, userId, ipAddress);
-        return Result.success(updateRequest);
+        updateRequestService.createUpdateRequest(updateRequestCreateDTO.getPostId(), ipAddress);
+        return Result.success("催更成功");
     }
 
     /**
@@ -60,26 +59,24 @@ public class UpdateRequestController {
     }
 
     /**
-     * 获取用户的催更历史
+     * 检查IP今日是否已催更
      */
-    @GetMapping("/user")
-    public Result<IPage<UpdateRequestVO>> getUserUpdateRequests(
-            @RequestParam(defaultValue = "1") Integer page,
-            @RequestParam(defaultValue = "10") Integer size,
+    @GetMapping("/post/{postId}/check-ip")
+    public Result<Boolean> checkTodayUpdateRequestByIp(
+            @PathVariable Long postId,
             HttpServletRequest request) {
         
-        Long userId = getCurrentUserId(request);
-        IPage<UpdateRequestVO> updateRequests = updateRequestService.getUserUpdateRequests(userId, page, size);
-        return Result.success(updateRequests);
+        String ipAddress = getClientIpAddress(request);
+        boolean hasUpdated = updateRequestService.checkTodayUpdateRequestByIp(postId, ipAddress);
+        return Result.success(hasUpdated);
     }
 
     /**
-     * 删除催更记录
+     * 删除催更记录（管理员功能）
      */
     @DeleteMapping("/{id}")
-    public Result<Void> deleteUpdateRequest(@PathVariable Long id, HttpServletRequest request) {
-        Long userId = getCurrentUserId(request);
-        updateRequestService.deleteUpdateRequest(id, userId);
+    public Result<Void> deleteUpdateRequest(@PathVariable Long id) {
+        updateRequestService.deleteUpdateRequest(id);
         return Result.success();
     }
 

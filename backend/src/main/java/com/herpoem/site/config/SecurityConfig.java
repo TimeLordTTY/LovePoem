@@ -74,12 +74,27 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/posts/**", "/api/tags/**", "/api/series/**", "/api/post-types/**").permitAll()
                 // 允许所有人访问站点信息接口
                 .requestMatchers("/api/site/**").permitAll()
+                // 允许所有人访问催更相关接口（游客也可以催更和查看催更统计）
+                .requestMatchers(HttpMethod.GET, "/api/update-requests/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/update-requests").permitAll()
+                // 允许所有人访问评论相关接口（游客也可以查看评论）
+                .requestMatchers(HttpMethod.GET, "/api/comments/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/comments").permitAll()
+                // 允许所有人访问收藏相关查询接口
+                .requestMatchers(HttpMethod.GET, "/api/favorites/**").permitAll()
+                // 允许所有人访问注解相关查询接口
+                .requestMatchers(HttpMethod.GET, "/api/annotations/**").permitAll()
+                // 允许所有人访问章节相关查询接口
+                .requestMatchers(HttpMethod.GET, "/api/chapters/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/post-chapters/**").permitAll()
+                // 允许所有人访问统计接口
+                .requestMatchers(HttpMethod.GET, "/api/statistics/**").permitAll()
                 // 管理员接口需要认证
-                .requestMatchers("/api/admin/**", "/api/files/**", "/api/post-chapters/**").authenticated()
-                // POST、PUT、DELETE请求需要认证
-                .requestMatchers(HttpMethod.POST, "/api/posts/**").authenticated()
-                .requestMatchers(HttpMethod.PUT, "/api/posts/**").authenticated()
-                .requestMatchers(HttpMethod.DELETE, "/api/posts/**").authenticated()
+                .requestMatchers("/api/admin/**", "/api/files/**").authenticated()
+                // POST、PUT、DELETE请求需要认证（除了已经允许的）
+                .requestMatchers(HttpMethod.POST, "/api/posts/**", "/api/favorites/**", "/api/annotations/**", "/api/post-chapters/**", "/api/chapters/**").authenticated()
+                .requestMatchers(HttpMethod.PUT, "/api/posts/**", "/api/favorites/**", "/api/annotations/**", "/api/post-chapters/**", "/api/chapters/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/posts/**", "/api/favorites/**", "/api/annotations/**", "/api/post-chapters/**", "/api/chapters/**", "/api/update-requests/**", "/api/comments/**").authenticated()
                 // 其他请求需要认证
                 .anyRequest().authenticated()
             )

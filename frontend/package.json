@@ -17,6 +17,7 @@
     "highlight.js": "^11.9.0",
     "mammoth": "^1.10.0",
     "markdown-it": "^13.0.2",
+    "marked": "^15.0.12",
     "pinia": "^2.1.6",
     "sortablejs": "^1.15.6",
     "vue": "^3.3.4",

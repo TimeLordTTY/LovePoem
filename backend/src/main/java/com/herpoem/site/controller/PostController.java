@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.Map;
+import java.util.Map;
 
 /**
  * 文章控制器
@@ -306,6 +307,19 @@ public class PostController {
     public Result<List<PostListVO>> getChaptersBySeries(@PathVariable Long seriesId) {
         List<PostListVO> chapters = postService.getChaptersBySeries(seriesId);
         return Result.success(chapters);
+    }
+    
+    /**
+     * 专门更新文章的系列字段
+     */
+    @PutMapping("/{id}/series")
+    public Result<Void> updatePostSeries(@PathVariable Long id, @RequestBody Map<String, Long> request) {
+        // TODO: 从JWT token中获取用户ID
+        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        
+        Long seriesId = request.get("seriesId");
+        postService.updatePostSeries(id, seriesId, userId);
+        return Result.success();
     }
     
 }

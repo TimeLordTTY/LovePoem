@@ -814,7 +814,7 @@ const initSortable = () => {
     const tableBodyEl = document.querySelector('.posts-table .el-table__body-wrapper tbody')
     if (tableBodyEl) {
       new Sortable(tableBodyEl, {
-        handle: '.drag-handle',
+        handle: '.post-title-cell', // 改为整个标题栏可拖拽
         animation: 150,
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
@@ -1180,7 +1180,7 @@ const savePost = async () => {
       title: postForm.title,
       summary: postForm.summary || '',
       postTypeId: postForm.postTypeId,
-      seriesId: postForm.seriesId || null,
+      seriesId: postForm.seriesId === '' ? null : postForm.seriesId, // 明确处理空字符串为null
       status: postForm.status,
       visibility: postForm.visibility,
       hasChapters: postForm.hasChapters,
@@ -2275,6 +2275,7 @@ const goBack = () => {
   gap: 8px;
   width: 100%;
   padding: 4px;
+  cursor: move; /* 整个标题栏可拖拽 */
 }
 
 .drag-handle {
@@ -2295,7 +2296,7 @@ const goBack = () => {
 }
 
 .sortable-chosen {
-  background-color: var(--accent-light, #e3f2fd);
+  /* 移除背景色干扰 */
 }
 
 .sortable-drag {

@@ -294,11 +294,12 @@
                 {{ showCommentForm ? '取消评论' : '发表评论' }}
               </el-button>
               <el-button 
-                v-if="authStore.isLoggedIn" 
                 type="warning" 
-                @click="showUpdateRequestForm = !showUpdateRequestForm"
+                @click="submitUpdateRequest"
+                :loading="submittingUpdateRequest"
+                :disabled="hasUpdatedToday"
               >
-                {{ showUpdateRequestForm ? '取消催更' : '催更' }}
+                {{ hasUpdatedToday ? '今日已催更' : '催更一下' }}
               </el-button>
             </div>
           </div>
@@ -321,29 +322,7 @@
             </div>
           </div>
           
-          <!-- 催更表单 -->
-          <div v-if="showUpdateRequestForm && authStore.isLoggedIn" class="update-request-form">
-            <el-input
-              v-model="updateRequestForm.message"
-              type="textarea"
-              :rows="3"
-              placeholder="催更留言（可选）"
-              maxlength="200"
-              show-word-limit
-            />
-            <div class="form-actions">
-              <el-radio-group v-model="updateRequestForm.type">
-                <el-radio label="GENERAL">一般催更</el-radio>
-                <el-radio label="URGENT">紧急催更</el-radio>
-              </el-radio-group>
-              <div class="action-buttons">
-                <el-button @click="showUpdateRequestForm = false">取消</el-button>
-                <el-button type="warning" @click="submitUpdateRequest" :loading="submittingUpdateRequest">
-                  提交催更
-                </el-button>
-              </div>
-            </div>
-          </div>
+
           
           <!-- 评论列表 -->
           <div class="comments-list" v-loading="loadingComments">
@@ -431,8 +410,12 @@ import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight, List, Star, StarFilled } from '@element-plus/icons-vue'
 import { getPostWithChapters } from '@/api/postChapter'
 import { getPostById, getPostBySlug } from '@/api/post'
+import { getFavorites, addUserFavorite, removeUserFavorite, checkUserFavorite } from '@/api/favorite'
+import { getPostComments, createComment, replyComment, toggleCommentLike as apiToggleCommentLike } from '@/api/comment'
+import { createUpdateRequest, getPostUpdateRequests, getTodayUpdateRequestCount } from '@/api/updateRequest'
 import { useAuthStore } from '@/store/auth'
 import AnnotationText from '@/components/AnnotationText.vue'
+import { marked } from 'marked'
 
 const route = useRoute()
 const router = useRouter()
@@ -449,21 +432,16 @@ const isFavorited = ref(false)
 
 // 评论和催更相关数据
 const showCommentForm = ref(false)
-const showUpdateRequestForm = ref(false)
 const comments = ref([])
 const loadingComments = ref(false)
 const submittingComment = ref(false)
 const submittingUpdateRequest = ref(false)
 const todayUpdateRequests = ref(0)
+const hasUpdatedToday = ref(false)
 
 // 表单数据
 const commentForm = reactive({
   content: ''
-})
-
-const updateRequestForm = reactive({
-  message: '',
-  type: 'GENERAL'
 })
 
 // 分页数据
@@ -490,29 +468,47 @@ const flattenedChapters = computed(() => {
 // 计算总阅读时间（包含所有章节）
 const totalReadingTime = computed(() => {
   if (!post.value?.hasChapters) {
-    return post.value?.readingTime || 0
+    return post.value?.readingTime || Math.ceil(countWords(post.value?.contentMd || '') / 200) || 1
   }
   
   let totalWords = 0
   
   // 计算章节前内容字数
   if (post.value.preChapterContent) {
-    totalWords += post.value.preChapterContent.length
+    totalWords += countWords(post.value.preChapterContent)
   }
   
   // 计算所有章节字数
   flattenedChapters.value.forEach(chapter => {
     if (chapter.content) {
-      totalWords += chapter.content.length
+      totalWords += countWords(chapter.content)
     }
     if (chapter.backgroundText) {
-      totalWords += chapter.backgroundText.length
+      totalWords += countWords(chapter.backgroundText)
     }
   })
   
-  // 按每分钟200字计算
-  return Math.ceil(totalWords / 200)
+  // 按每分钟200字计算，最少1分钟
+  return Math.max(1, Math.ceil(totalWords / 200))
 })
+
+// 字数统计函数
+const countWords = (text) => {
+  if (!text) return 0
+  // 移除Markdown语法和HTML标签
+  const cleanText = text
+    .replace(/[#*_~`]/g, '') // 移除Markdown标记
+    .replace(/<[^>]*>/g, '') // 移除HTML标签
+    .replace(/!\[.*?\]\(.*?\)/g, '') // 移除图片语法
+    .replace(/\[.*?\]\(.*?\)/g, '') // 移除链接语法
+    .trim()
+  
+  // 中文字符和英文单词分别计数
+  const chineseChars = (cleanText.match(/[\u4e00-\u9fa5]/g) || []).length
+  const englishWords = (cleanText.match(/[a-zA-Z]+/g) || []).length
+  
+  return chineseChars + englishWords
+}
 
 const currentChapterData = computed(() => {
   if (currentChapterId.value === 'pre') {
@@ -571,6 +567,15 @@ onMounted(async () => {
       todayUpdateRequests.value = response.data || 0
     } catch (error) {
       console.error('加载催更统计失败:', error)
+    }
+    
+    // 检查今日是否已催更（基于IP）
+    try {
+      const { checkTodayUpdateRequestByIp } = await import('@/api/updateRequest')
+      const response = await checkTodayUpdateRequestByIp(post.value.id)
+      hasUpdatedToday.value = response.data || false
+    } catch (error) {
+      console.error('检查催更状态失败:', error)
     }
   }
   
@@ -739,15 +744,11 @@ const submitUpdateRequest = async () => {
     const { createUpdateRequest } = await import('@/api/updateRequest')
     
     await createUpdateRequest({
-      postId: post.value.id,
-      message: updateRequestForm.message.trim(),
-      type: updateRequestForm.type
+      postId: post.value.id
     })
     
-    ElMessage.success('催更提交成功')
-    updateRequestForm.message = ''
-    updateRequestForm.type = 'GENERAL'
-    showUpdateRequestForm.value = false
+    ElMessage.success('催更成功！')
+    hasUpdatedToday.value = true
     
     // 更新催更统计
     if (post.value) {
@@ -755,8 +756,8 @@ const submitUpdateRequest = async () => {
     }
     todayUpdateRequests.value += 1
   } catch (error) {
-    console.error('提交催更失败:', error)
-    ElMessage.error('提交催更失败: ' + (error.message || error))
+    console.error('催更失败:', error)
+    ElMessage.error(error.message || '催更失败')
   } finally {
     submittingUpdateRequest.value = false
   }
@@ -769,8 +770,7 @@ const toggleCommentLike = async (comment) => {
   }
   
   try {
-    const { toggleCommentLike } = await import('@/api/comment')
-    const response = await toggleCommentLike(comment.id)
+    const response = await apiToggleCommentLike(comment.id)
     
     // 更新点赞数
     comment.likeCount = response.data.likeCount
@@ -810,12 +810,8 @@ const formatTime = (timeString) => {
 const formatContent = (content) => {
   if (!content) return ''
   
-  // 简单的换行处理
-  return content
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>')
-    .replace(/^/, '<p>')
-    .replace(/$/, '</p>')
+  // 使用marked库渲染Markdown
+  return marked(content)
 }
 
 const formatDate = (dateString) => {

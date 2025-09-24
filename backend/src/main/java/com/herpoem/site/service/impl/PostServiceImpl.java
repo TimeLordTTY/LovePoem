@@ -131,12 +131,20 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
             throw new RuntimeException("文章不存在");
         }
         
+        // 添加调试日志
+        System.out.println("=== 更新文章调试信息 ===");
+        System.out.println("文章ID: " + id);
+        System.out.println("原系列ID: " + post.getSeriesId());
+        System.out.println("新系列ID: " + postCreateDTO.getSeriesId());
+        System.out.println("========================");
+        
         post.setTitle(postCreateDTO.getTitle());
         post.setSlug(generateSlug(postCreateDTO.getSlug(), postCreateDTO.getTitle()));
         post.setContentMd(postCreateDTO.getContentMd());
         post.setContentText(extractTextFromMarkdown(postCreateDTO.getContentMd()));
         post.setSummary(postCreateDTO.getSummary());
         post.setPostTypeId(postCreateDTO.getPostTypeId());
+        // 修复系列字段更新问题：显式设置seriesId，包括null值
         post.setSeriesId(postCreateDTO.getSeriesId());
         post.setChapterNo(postCreateDTO.getChapterNo());
         post.setCoverAssetId(postCreateDTO.getCoverAssetId());
@@ -160,9 +168,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         }
         
         post.setUpdatedBy(userId);
-        post.setUpdatedAt(LocalDateTime.now());
         
+        // 使用updateById，确保包含null值的字段也能被更新
         postMapper.updateById(post);
+        
+        System.out.println("更新后系列ID: " + post.getSeriesId());
         
         // 删除旧的标签关联
         QueryWrapper<PostTag> wrapper = new QueryWrapper<>();
@@ -324,6 +334,21 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
     @Override
     public List<PostListVO> getChaptersBySeries(Long seriesId) {
         return postMapper.selectChaptersBySeries(seriesId);
+    }
+    
+    /**
+     * 专门更新文章的系列字段，确保null值能够正确设置
+     */
+    @Override
+    @Transactional
+    public void updatePostSeries(Long postId, Long seriesId, Long userId) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new RuntimeException("文章不存在");
+        }
+        
+        // 直接使用SQL更新，确保null值能够被正确设置
+        postMapper.updatePostSeries(postId, seriesId, userId);
     }
     
     // 内部类用于目录项
