@@ -15,7 +15,7 @@
             c.content,
             c.status,
             c.like_count as likeCount,
-            EXISTS(SELECT 1 FROM comment_like cl WHERE cl.comment_id = c.id AND cl.user_id = #{userId}) as isLiked,
+            FALSE as isLiked,
             c.created_at as createdAt,
             c.updated_at as updatedAt,
             (SELECT COUNT(*) FROM comment cc WHERE cc.parent_id = c.id AND cc.deleted = 0) as replyCount

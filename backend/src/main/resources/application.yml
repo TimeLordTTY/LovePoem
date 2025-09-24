@@ -7,7 +7,7 @@ spring:
   
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://124.220.229.91:9009/poem?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&autoReconnect=true&failOverReadOnly=false&maxReconnects=10&initialTimeout=1&connectTimeout=30000&socketTimeout=30000&useLocalSessionState=true&elideSetAutoCommits=true&alwaysSendSetIsolation=false&enableQueryTimeouts=false&cacheDefaultTimezone=false&cacheServerConfiguration=true&maintainTimeStats=false&netTimeoutForStreamingResults=0&tcpKeepAlive=true
+    url: jdbc:mysql://127.0.0.1:9009/poem?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&autoReconnect=true&failOverReadOnly=false&maxReconnects=10&initialTimeout=1&connectTimeout=30000&socketTimeout=30000&useLocalSessionState=true&elideSetAutoCommits=true&alwaysSendSetIsolation=false&enableQueryTimeouts=false&cacheDefaultTimezone=false&cacheServerConfiguration=true&maintainTimeStats=false&netTimeoutForStreamingResults=0&tcpKeepAlive=true
     username: poem
     password: ${DB_PASSWORD:mbRckCN4m5zAR3E2}
     hikari:

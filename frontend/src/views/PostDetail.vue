@@ -7,6 +7,32 @@
     <div v-else-if="post" class="post-container">
       <!-- 文章头部 -->
       <div class="post-header">
+        <div class="header-actions">
+          <!-- 左侧返回按钮 -->
+          <div class="header-left">
+            <el-button 
+              @click="goBack"
+              size="small"
+              :icon="ArrowLeft"
+              circle
+              title="返回"
+            />
+          </div>
+          
+          <!-- 右侧收藏按钮 -->
+          <div class="header-right">
+            <el-button 
+              v-if="authStore.isLoggedIn"
+              :type="isFavorited ? 'danger' : 'primary'"
+              :icon="isFavorited ? StarFilled : Star"
+              @click="toggleFavorite"
+              size="small"
+            >
+              {{ isFavorited ? '已收藏' : '收藏' }}
+            </el-button>
+          </div>
+        </div>
+        
         <h1 class="post-title">{{ post.title }}</h1>
         <div class="post-meta">
           <span class="author">{{ post.authorName }}</span>
@@ -16,19 +42,6 @@
           <span v-if="post.seriesName" class="series">{{ post.seriesName }}</span>
           <span v-if="totalReadingTime" class="separator">•</span>
           <span v-if="totalReadingTime" class="reading-time">{{ totalReadingTime }}分钟阅读</span>
-          
-          <!-- 收藏按钮 -->
-          <div class="post-actions">
-            <el-button 
-              v-if="authStore.isLoggedIn"
-              :type="isFavorited ? 'danger' : 'primary'"
-              :icon="isFavorited ? 'HeartFilled' : 'Heart'"
-              @click="toggleFavorite"
-              size="small"
-            >
-              {{ isFavorited ? '已收藏' : '收藏' }}
-            </el-button>
-          </div>
         </div>
         <p v-if="post.summary" class="post-summary">{{ post.summary }}</p>
       </div>
@@ -347,7 +360,7 @@
                   </div>
                   <div class="comment-actions">
                     <el-button size="small" text @click="toggleCommentLike(comment)">
-                      <el-icon><Heart /></el-icon>
+                      <el-icon><Star /></el-icon>
                       {{ comment.likeCount || 0 }}
                     </el-button>
                     <el-button size="small" text @click="replyToComment(comment)">
@@ -367,7 +380,7 @@
                         <span class="reply-time">{{ formatTime(reply.createdAt) }}</span>
                       </div>
                       <el-button size="small" text @click="toggleCommentLike(reply)">
-                        <el-icon><Heart /></el-icon>
+                        <el-icon><Star /></el-icon>
                         {{ reply.likeCount || 0 }}
                       </el-button>
                     </div>
@@ -415,7 +428,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight, List } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, List, Star, StarFilled } from '@element-plus/icons-vue'
 import { getPostWithChapters } from '@/api/postChapter'
 import { getPostById, getPostBySlug } from '@/api/post'
 import { useAuthStore } from '@/store/auth'
@@ -908,6 +921,10 @@ const renderedContent = computed(() => {
   }
   return post.value.contentMd
 })
+
+const goBack = () => {
+  router.back()
+}
 </script>
 
 <style scoped>
@@ -933,6 +950,22 @@ const renderedContent = computed(() => {
   padding: 40px 20px;
   border-bottom: 1px solid var(--border-color);
   margin-bottom: 30px;
+}
+
+.header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header-left {
+  flex: 1;
+}
+
+.header-right {
+  flex: 1;
+  text-align: right;
 }
 
 .post-title {

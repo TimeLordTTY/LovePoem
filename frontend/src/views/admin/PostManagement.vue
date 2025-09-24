@@ -2,7 +2,17 @@
   <div class="post-management">
     <!-- 页面标题 -->
     <div class="page-header">
-      <h1>文章管理</h1>
+      <div class="header-left">
+        <el-button 
+          @click="goBack"
+          size="small"
+          :icon="ArrowLeft"
+          circle
+          title="返回"
+          class="back-btn"
+        />
+        <h1>文章管理</h1>
+      </div>
       <el-button type="primary" @click="showCreateDialog" class="create-btn">
         <el-icon><Plus /></el-icon>
         新建文章
@@ -67,25 +77,20 @@
         
         <el-table-column label="序号" width="80" align="center">
           <template #default="{ $index }">
-            <div class="sort-indicator">
-              <span class="drag-handle" style="cursor: move; font-size: 16px; color: #909399; margin-right: 8px;">⋮⋮</span>
-              <span>{{ $index + 1 }}</span>
-            </div>
+            {{ $index + 1 }}
           </template>
         </el-table-column>
         
         <el-table-column prop="title" label="标题" min-width="300" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="post-title-cell drag-area" :data-post-id="row.id">
-              <div class="drag-handle-area">
-                <el-icon class="drag-handle"><Rank /></el-icon>
-                <div class="post-info">
-                  <h4>{{ row.title }}</h4>
-                  <p v-if="row.summary" class="post-summary">{{ row.summary }}</p>
-                  <div v-if="row.hasChapters" class="chapter-indicator">
-                    <el-icon><Document /></el-icon>
-                    <span>有章节</span>
-                  </div>
+            <div class="post-title-cell" :data-post-id="row.id">
+              <el-icon class="drag-handle"><Rank /></el-icon>
+              <div class="post-info">
+                <h4>{{ row.title }}</h4>
+                <p v-if="row.summary" class="post-summary">{{ row.summary }}</p>
+                <div v-if="row.hasChapters" class="chapter-indicator">
+                  <el-icon><Document /></el-icon>
+                  <span>有章节</span>
                 </div>
               </div>
             </div>
@@ -643,7 +648,7 @@
 import { ref, reactive, onMounted, nextTick, computed } from 'vue'
 import Sortable from 'sortablejs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshLeft, Edit, Delete, Document, DocumentAdd, Rank, Upload, ArrowDown, Setting, Picture, DocumentCopy, Lock, Unlock } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Edit, Delete, Document, DocumentAdd, Rank, Upload, ArrowDown, Setting, Picture, DocumentCopy, Lock, Unlock, ArrowLeft } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
 
 // API imports
@@ -809,7 +814,7 @@ const initSortable = () => {
     const tableBodyEl = document.querySelector('.posts-table .el-table__body-wrapper tbody')
     if (tableBodyEl) {
       new Sortable(tableBodyEl, {
-        handle: '.drag-handle-area',
+        handle: '.drag-handle',
         animation: 150,
         ghostClass: 'sortable-ghost',
         chosenClass: 'sortable-chosen',
@@ -1673,6 +1678,10 @@ const previewPost = () => {
   // 例如：router.push(`/preview/${postForm.id}`)
   ElMessage.info(`预览文章: ${postForm.title}`)
 }
+
+const goBack = () => {
+  router.back()
+}
 </script>
 
 <style scoped>
@@ -1687,6 +1696,16 @@ const previewPost = () => {
   margin-bottom: 20px;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.back-btn {
+  flex-shrink: 0;
 }
 
 .page-header h1 {
@@ -2250,22 +2269,12 @@ const previewPost = () => {
 }
 
 /* 拖拽排序样式 */
-.drag-area {
-  cursor: move;
-}
-
-.drag-handle-area {
+.post-title-cell {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   width: 100%;
   padding: 4px;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
-}
-
-.drag-handle-area:hover {
-  background-color: var(--bg-hover, #f5f5f5);
 }
 
 .drag-handle {
@@ -2273,6 +2282,7 @@ const previewPost = () => {
   font-size: 16px;
   margin-top: 2px;
   flex-shrink: 0;
+  cursor: move;
 }
 
 .post-info {
@@ -2282,7 +2292,6 @@ const previewPost = () => {
 
 .sortable-ghost {
   opacity: 0.5;
-  background-color: var(--bg-hover, #f5f5f5);
 }
 
 .sortable-chosen {
