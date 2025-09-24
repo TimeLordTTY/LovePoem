@@ -15,6 +15,7 @@
             p.chapter_no as chapterNo,
             p.cover_asset_id as coverAssetId,
             p.sort_order as sortOrder,
+            p.has_chapters as hasChapters,
             p.visibility,
             p.status,
             p.publish_date as publishDate,

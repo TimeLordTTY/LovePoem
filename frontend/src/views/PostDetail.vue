@@ -1,7 +1,10 @@
 <template>
   <div class="post-detail">
     <div v-if="loading" class="loading-container">
-      <el-skeleton :rows="10" animated />
+      <div class="custom-loading">
+        <div class="loading-spinner"></div>
+        <p>正在加载文章...</p>
+      </div>
     </div>
     
     <div v-else-if="post" class="post-container">
@@ -415,7 +418,7 @@ import { getPostComments, createComment, replyComment, toggleCommentLike as apiT
 import { createUpdateRequest, getPostUpdateRequests, getTodayUpdateRequestCount } from '@/api/updateRequest'
 import { useAuthStore } from '@/store/auth'
 import AnnotationText from '@/components/AnnotationText.vue'
-import { marked } from 'marked'
+import { renderMarkdown } from '@/utils/markdown'
 
 const route = useRoute()
 const router = useRouter()
@@ -479,14 +482,21 @@ const totalReadingTime = computed(() => {
   }
   
   // 计算所有章节字数
-  flattenedChapters.value.forEach(chapter => {
-    if (chapter.content) {
-      totalWords += countWords(chapter.content)
-    }
-    if (chapter.backgroundText) {
-      totalWords += countWords(chapter.backgroundText)
-    }
-  })
+  if (flattenedChapters.value && flattenedChapters.value.length > 0) {
+    flattenedChapters.value.forEach(chapter => {
+      if (chapter.content) {
+        totalWords += countWords(chapter.content)
+      }
+      if (chapter.backgroundText) {
+        totalWords += countWords(chapter.backgroundText)
+      }
+    })
+  }
+  
+  // 如果没有章节内容，至少返回1分钟
+  if (totalWords === 0) {
+    totalWords = 200 // 假设至少200字
+  }
   
   // 按每分钟200字计算，最少1分钟
   return Math.max(1, Math.ceil(totalWords / 200))
@@ -810,8 +820,8 @@ const formatTime = (timeString) => {
 const formatContent = (content) => {
   if (!content) return ''
   
-  // 使用marked库渲染Markdown
-  return marked(content)
+  // 使用自定义的Markdown渲染器
+  return renderMarkdown(content)
 }
 
 const formatDate = (dateString) => {
@@ -933,6 +943,35 @@ const goBack = () => {
   max-width: 800px;
   margin: 0 auto;
   padding: 40px 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50vh;
+}
+
+.custom-loading {
+  text-align: center;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border-color);
+  border-top: 3px solid var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.custom-loading p {
+  color: var(--text-secondary);
+  font-size: 16px;
+  margin: 0;
 }
 
 .post-container {

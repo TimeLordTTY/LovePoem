@@ -60,4 +60,7 @@ public class PostListVO {
     
     // 文章摘要（作者自述）
     private String summary;
+    
+    // 是否有章节
+    private Boolean hasChapters;
 }

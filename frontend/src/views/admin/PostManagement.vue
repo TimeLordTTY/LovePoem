@@ -61,7 +61,82 @@
 
     <!-- 文章列表 -->
     <div class="posts-container">
-            <el-table 
+      <!-- 移动端卡片布局 -->
+      <div class="mobile-posts-list" v-if="isMobile">
+        <div v-loading="loading" class="mobile-loading">
+          <div 
+            v-for="(post, index) in posts" 
+            :key="post.id"
+            class="mobile-post-item"
+            :data-post-id="post.id"
+          >
+            <div class="mobile-post-header">
+              <div class="mobile-post-info">
+                <h4 class="mobile-post-title">{{ post.title }}</h4>
+                <p v-if="post.summary" class="mobile-post-summary">{{ post.summary }}</p>
+                <div class="mobile-post-meta">
+                  <span class="mobile-meta-item">{{ post.postTypeName }}</span>
+                  <span v-if="post.seriesName" class="mobile-meta-item">{{ post.seriesName }}</span>
+                  <el-tag 
+                    :type="post.status === 'PUBLISHED' ? 'success' : 'warning'"
+                    size="small"
+                  >
+                    {{ post.status === 'PUBLISHED' ? '已发布' : '草稿' }}
+                  </el-tag>
+                  <el-tag 
+                    :type="post.visibility === 'PUBLIC' ? 'success' : post.visibility === 'UNLISTED' ? 'warning' : 'info'"
+                    size="small"
+                  >
+                    {{ post.visibility === 'PUBLIC' ? '公开' : post.visibility === 'UNLISTED' ? '不公开' : '私有' }}
+                  </el-tag>
+                </div>
+                <div class="mobile-post-date">
+                  {{ formatDate(post.publishDate) }}
+                </div>
+              </div>
+            </div>
+            
+            <div class="mobile-post-actions">
+              <el-button size="small" @click="editPost(post.id)">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+              
+              <el-button 
+                v-if="post.status === 'DRAFT'" 
+                size="small" 
+                type="success" 
+                @click="publishSinglePost(post.id)"
+              >
+                <el-icon><Upload /></el-icon>
+                发布
+              </el-button>
+              <el-button 
+                v-else 
+                size="small" 
+                type="warning" 
+                @click="draftSinglePost(post.id)"
+              >
+                <el-icon><DocumentCopy /></el-icon>
+                转草稿
+              </el-button>
+              
+              <el-button 
+                size="small" 
+                type="danger" 
+                @click="deletePost(post.id)"
+              >
+                <el-icon><Delete /></el-icon>
+                删除
+              </el-button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 桌面端表格布局 -->
+      <el-table 
+        v-else
         :data="posts" 
         v-loading="loading"
         class="posts-table"
@@ -81,7 +156,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="title" label="标题" min-width="300" show-overflow-tooltip>
+        <el-table-column prop="title" label="标题" min-width="300" show-overflow-tooltip class-name="title-column">
           <template #default="{ row }">
             <div class="post-title-cell" :data-post-id="row.id">
               <el-icon class="drag-handle"><Rank /></el-icon>
@@ -100,7 +175,7 @@
         <el-table-column prop="postTypeName" label="类型" min-width="100" />
         <el-table-column prop="seriesName" label="系列" min-width="120" />
         
-        <el-table-column prop="visibility" label="可见性" min-width="80">
+        <el-table-column prop="visibility" label="可见性" min-width="80" class-name="status-column">
           <template #default="{ row }">
             <el-tag 
               :type="row.visibility === 'PUBLIC' ? 'success' : row.visibility === 'UNLISTED' ? 'warning' : 'info'"
@@ -111,7 +186,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="status" label="状态" min-width="80">
+        <el-table-column prop="status" label="状态" min-width="80" class-name="status-column">
           <template #default="{ row }">
             <el-tag :type="row.status === 'PUBLISHED' ? 'success' : 'warning'">
               {{ row.status === 'PUBLISHED' ? '已发布' : '草稿' }}
@@ -119,13 +194,13 @@
           </template>
         </el-table-column>
         
-        <el-table-column prop="publishDate" label="发布时间" min-width="180">
+        <el-table-column prop="publishDate" label="发布时间" min-width="180" class-name="time-column">
           <template #default="{ row }">
             {{ formatDate(row.publishDate) }}
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" min-width="280" fixed="right" align="center">
+        <el-table-column label="操作" min-width="280" fixed="right" align="center" class-name="action-column">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button size="small" @click="editPost(row.id)">
@@ -641,11 +716,66 @@
         <el-button type="primary" @click="confirmVisibility">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 预览弹窗 -->
+    <el-dialog
+      v-model="showPreview"
+      title="文章预览"
+      width="90%"
+      :style="{ maxWidth: '1000px' }"
+      :show-close="true"
+      :close-on-click-modal="false"
+    >
+      <div class="preview-content" v-if="previewData">
+        <!-- 文章标题 -->
+        <div class="preview-header">
+          <h1 class="preview-title">{{ previewData.title }}</h1>
+          <div class="preview-meta">
+            <span class="preview-tag">预览模式</span>
+            <span>{{ new Date().toLocaleDateString('zh-CN') }}</span>
+          </div>
+        </div>
+        
+        <!-- 文章摘要 -->
+        <div v-if="previewData.summary" class="preview-summary">
+          <p>{{ previewData.summary }}</p>
+        </div>
+        
+        <!-- 普通文章内容 -->
+        <div v-if="!previewData.hasChapters && previewData.contentMd" class="preview-body">
+          <div class="markdown-content" v-html="renderSimpleMarkdown(previewData.contentMd)"></div>
+        </div>
+        
+        <!-- 章节文章 -->
+        <div v-if="previewData.hasChapters">
+          <!-- 章节前内容 -->
+          <div v-if="previewData.preChapterContent" class="preview-chapter">
+            <h3 class="chapter-title">引言</h3>
+            <div class="markdown-content" v-html="renderSimpleMarkdown(previewData.preChapterContent)"></div>
+          </div>
+          
+          <!-- 章节内容 -->
+          <div v-for="chapter in previewData.chapters" :key="chapter.id" class="preview-chapter">
+            <h3 class="chapter-title">{{ chapter.title }}</h3>
+            <div v-if="chapter.backgroundText" class="chapter-background">
+              <div class="markdown-content" v-html="renderSimpleMarkdown(chapter.backgroundText)"></div>
+            </div>
+            <div v-if="chapter.content" class="chapter-text">
+              <div class="markdown-content" v-html="renderSimpleMarkdown(chapter.content)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showPreview = false">关闭预览</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, computed } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import Sortable from 'sortablejs'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, RefreshLeft, Edit, Delete, Document, DocumentAdd, Rank, Upload, ArrowDown, Setting, Picture, DocumentCopy, Lock, Unlock, ArrowLeft } from '@element-plus/icons-vue'
@@ -673,8 +803,10 @@ import {
 } from '@/api/postChapter'
 import { parseWordDocument } from '@/utils/wordParser'
 
+
 // 响应式数据
 const loading = ref(false)
+const isMobile = ref(false)
 const dialogVisible = ref(false)
 const chapterDialogVisible = ref(false)
 const isEditing = ref(false)
@@ -799,10 +931,25 @@ const countWords = (text) => {
 }
 
 // 生命周期
+// 检测移动端
+const checkMobile = () => {
+  isMobile.value = window.innerWidth <= 768
+}
+
 onMounted(() => {
   loadPosts()
   loadPostTypes()
   loadSeries()
+  checkMobile()
+  window.addEventListener('resize', checkMobile)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', checkMobile)
+})
+
+// 在onMounted中添加其他初始化
+onMounted(() => {
   loadTags()
   nextTick(() => {
     initSortable()
@@ -1180,7 +1327,7 @@ const savePost = async () => {
       title: postForm.title,
       summary: postForm.summary || '',
       postTypeId: postForm.postTypeId,
-      seriesId: postForm.seriesId === '' ? null : postForm.seriesId, // 明确处理空字符串为null
+      seriesId: postForm.seriesId || null, // 确保空值和undefined都转为null
       status: postForm.status,
       visibility: postForm.visibility,
       hasChapters: postForm.hasChapters,
@@ -1669,18 +1816,45 @@ const handleArticleWordUpload = async (file) => {
   }
 }
 
+const showPreview = ref(false)
+const previewData = ref(null)
+
 const previewPost = () => {
   if (!postForm.title) {
     ElMessage.warning('请先输入文章标题')
     return
   }
-  // 这里可以跳转到文章预览页面，并传递文章ID
-  // 例如：router.push(`/preview/${postForm.id}`)
-  ElMessage.info(`预览文章: ${postForm.title}`)
+  
+  // 创建预览数据
+  previewData.value = {
+    title: postForm.title,
+    summary: postForm.summary || '',
+    contentMd: postForm.contentMd || '',
+    hasChapters: postForm.hasChapters,
+    preChapterContent: postForm.preChapterContent || '',
+    chapters: postForm.hasChapters ? chapters.value : []
+  }
+  
+  // 显示预览弹窗
+  showPreview.value = true
 }
 
 const goBack = () => {
   router.back()
+}
+
+// 简单的Markdown渲染（避免依赖复杂的渲染器）
+const renderSimpleMarkdown = (content) => {
+  if (!content) return ''
+  
+  return content
+    .replace(/\n/g, '<br>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`(.*?)`/g, '<code>$1</code>')
+    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
 }
 </script>
 
@@ -2386,6 +2560,308 @@ const goBack = () => {
   font-size: 12px;
   color: var(--text-secondary);
   text-align: right;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .header-left {
+    justify-content: space-between;
+    margin-bottom: 15px;
+  }
+  
+  .page-header h1 {
+    min-width: auto;
+  }
+  
+  .create-btn {
+    align-self: stretch;
+  }
+  
+  .filter-row {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .search-input,
+  .filter-select {
+    width: 100%;
+  }
+  
+  .post-title-cell h4 {
+    font-size: 14px;
+  }
+  
+  .post-summary {
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  
+  .post-meta {
+    font-size: 11px;
+  }
+  
+  .action-buttons {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  
+  .action-buttons .el-button {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+  
+  /* 修复移动端表格显示问题 */
+  :deep(.el-table) {
+    font-size: 12px;
+  }
+  
+  :deep(.el-table .el-table__cell) {
+    padding: 8px 4px;
+  }
+  
+  :deep(.el-table .el-table__header) {
+    font-size: 11px;
+  }
+  
+  /* 隐藏部分不重要的列 */
+  :deep(.el-table .el-table__column--selection) {
+    width: 40px !important;
+  }
+  
+  /* 确保操作列始终可见 */
+  :deep(.el-table .action-column) {
+    min-width: 120px !important;
+    position: sticky;
+    right: 0;
+    background: var(--bg-secondary);
+    z-index: 2;
+  }
+  
+  /* 标题列自适应 */
+  :deep(.el-table .title-column) {
+    min-width: 120px;
+  }
+  
+  /* 状态列缩小 */
+  :deep(.el-table .status-column) {
+    min-width: 60px;
+  }
+  
+  /* 时间列缩小 */
+  :deep(.el-table .time-column) {
+    min-width: 80px;
+    font-size: 10px;
+  }
+}
+
+
+
+/* 移动端卡片样式 */
+.mobile-posts-list {
+  display: block;
+}
+
+.mobile-loading {
+  min-height: 200px;
+}
+
+.mobile-post-item {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.mobile-post-header {
+  margin-bottom: 12px;
+}
+
+.mobile-post-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+  line-height: 1.4;
+}
+
+.mobile-post-summary {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0 0 8px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mobile-post-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.mobile-meta-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.mobile-post-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.mobile-post-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.mobile-post-actions .el-button {
+  font-size: 12px;
+  padding: 6px 12px;
+  flex: 1;
+  min-width: 60px;
+}
+
+/* 隐藏桌面端表格在移动端 */
+@media (max-width: 768px) {
+  .posts-table {
+    display: none;
+  }
+}
+
+/* 隐藏移动端卡片在桌面端 */
+@media (min-width: 769px) {
+  .mobile-posts-list {
+    display: none;
+  }
+}
+
+/* 预览弹窗样式 */
+.preview-content {
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  line-height: 1.8;
+  color: var(--text-primary);
+}
+
+.preview-header {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.preview-title {
+  font-size: 2em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 15px 0;
+  line-height: 1.3;
+}
+
+.preview-meta {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+.preview-tag {
+  background: var(--accent-primary);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+}
+
+.preview-summary {
+  background: var(--bg-secondary);
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+  border-left: 4px solid var(--accent-primary);
+}
+
+.preview-summary p {
+  margin: 0;
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.preview-body,
+.preview-chapter {
+  margin-bottom: 30px;
+}
+
+.chapter-title {
+  font-size: 1.4em;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 20px 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--accent-primary);
+}
+
+.chapter-background {
+  background: var(--bg-tertiary);
+  padding: 15px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  border-left: 3px solid var(--accent-secondary);
+}
+
+.chapter-text {
+  line-height: 1.8;
+  color: var(--text-primary);
+}
+
+.markdown-content {
+  line-height: 1.8;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  margin: 20px 0 15px 0;
+  color: var(--text-primary);
+}
+
+.markdown-content p {
+  margin: 15px 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.markdown-content em {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.markdown-content code {
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 0.9em;
 }
 </style>
 
