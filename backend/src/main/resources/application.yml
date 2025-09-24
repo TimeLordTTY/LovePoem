@@ -38,6 +38,7 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+      update-strategy: not_empty
   mapper-locations: classpath*:/mapper/**/*.xml
 
 # JWT配置

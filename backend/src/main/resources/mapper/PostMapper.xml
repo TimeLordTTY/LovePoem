@@ -241,4 +241,14 @@
         AND deleted = 0
     </update>
     
+    <!-- 获取最小排序值 -->
+    <select id="selectMinSortOrder" resultType="java.lang.Integer">
+        SELECT MIN(sort_order) FROM post WHERE deleted = 0
+    </select>
+    
+    <!-- 获取最大排序值 -->
+    <select id="selectMaxSortOrder" resultType="java.lang.Integer">
+        SELECT MAX(sort_order) FROM post WHERE deleted = 0
+    </select>
+
 </mapper>

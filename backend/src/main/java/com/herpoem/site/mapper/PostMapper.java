@@ -61,4 +61,14 @@ public interface PostMapper extends BaseMapper<Post> {
      * 专门更新文章的系列字段（确保null值能正确处理）
      */
     int updatePostSeries(@Param("postId") Long postId, @Param("seriesId") Long seriesId, @Param("userId") Long userId);
+    
+    /**
+     * 获取最小排序值
+     */
+    Integer selectMinSortOrder();
+    
+    /**
+     * 获取最大排序值
+     */
+    Integer selectMaxSortOrder();
 }

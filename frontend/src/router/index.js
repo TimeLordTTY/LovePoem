@@ -112,6 +112,12 @@ const routes = [
     meta: { title: '登录' }
   },
   {
+    path: '/settings',
+    name: 'UserSettings',
+    component: () => import('@/views/UserSettings.vue'),
+    meta: { title: '用户设置', requiresAuth: true }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/NotFound.vue'),

@@ -8,6 +8,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.herpoem.site.common.PageResult;
 import com.herpoem.site.mapper.PostMapper;
 import com.herpoem.site.mapper.PostTagMapper;
+import com.herpoem.site.mapper.PostChapterMapper;
+import com.herpoem.site.model.entity.PostChapter;
 import com.herpoem.site.model.dto.PostCreateDTO;
 import com.herpoem.site.model.entity.Post;
 import com.herpoem.site.model.entity.PostTag;
@@ -36,6 +38,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
     
     private final PostMapper postMapper;
     private final PostTagMapper postTagMapper;
+    private final PostChapterMapper postChapterMapper;
     
     @Override
     public PageResult<PostListVO> getPostList(Integer page, Integer size, String keyword, 
@@ -153,8 +156,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         post.setContentText(extractTextFromMarkdown(postCreateDTO.getContentMd()));
         post.setSummary(postCreateDTO.getSummary());
         post.setPostTypeId(postCreateDTO.getPostTypeId());
-        // 直接使用SQL更新系列字段，确保null值能正确处理
-        postMapper.updatePostSeries(id, postCreateDTO.getSeriesId(), userId);
+        post.setSeriesId(postCreateDTO.getSeriesId());
         post.setChapterNo(postCreateDTO.getChapterNo());
         post.setCoverAssetId(postCreateDTO.getCoverAssetId());
         post.setSortOrder(postCreateDTO.getSortOrder());
@@ -178,7 +180,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         
         post.setUpdatedBy(userId);
         
-        // 使用updateById，确保包含null值的字段也能被更新
+        // 先使用SQL更新系列字段（确保null值能正确处理）
+        postMapper.updatePostSeries(id, postCreateDTO.getSeriesId(), userId);
+        
+        // 然后更新其他字段
         postMapper.updateById(post);
         
         System.out.println("更新后系列ID: " + post.getSeriesId());
@@ -365,12 +370,64 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
      */
     private Integer calculateChapterReadingTime(Long postId) {
         try {
-            // 这里应该查询章节内容并计算字数
-            // 暂时返回一个默认值，避免显示0分钟
-            return 3; // 默认3分钟
+            // 查询文章的章节前内容和所有章节内容
+            Post post = postMapper.selectById(postId);
+            if (post == null) {
+                return 1;
+            }
+            
+            int totalWords = 0;
+            
+            // 计算章节前内容字数
+            if (post.getPreChapterContent() != null) {
+                totalWords += countWords(post.getPreChapterContent());
+            }
+            
+            // 查询所有章节内容并计算字数
+            List<PostChapter> chapters = postChapterMapper.selectChaptersByPostId(postId);
+            for (PostChapter chapter : chapters) {
+                if (chapter.getContent() != null) {
+                    totalWords += countWords(chapter.getContent());
+                }
+                if (chapter.getBackgroundText() != null) {
+                    totalWords += countWords(chapter.getBackgroundText());
+                }
+            }
+            
+            // 按每分钟200字计算，最少1分钟
+            return Math.max(1, (int) Math.ceil(totalWords / 200.0));
         } catch (Exception e) {
             return 1; // 出错时返回1分钟
         }
+    }
+    
+    /**
+     * 计算文本字数
+     */
+    private int countWords(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            return 0;
+        }
+        
+        // 移除Markdown语法和HTML标签
+        String cleanText = text
+            .replaceAll("[#*_~`]", "") // 移除Markdown标记
+            .replaceAll("<[^>]*>", "") // 移除HTML标签
+            .replaceAll("!\\[.*?\\]\\(.*?\\)", "") // 移除图片语法
+            .replaceAll("\\[.*?\\]\\(.*?\\)", "") // 移除链接语法
+            .trim();
+        
+        // 中文字符和英文单词分别计数
+        int chineseChars = (int) cleanText.chars().filter(c -> c >= 0x4e00 && c <= 0x9fa5).count();
+        String[] englishWords = cleanText.replaceAll("[\\u4e00-\\u9fa5]", " ").split("\\s+");
+        int englishWordCount = 0;
+        for (String word : englishWords) {
+            if (word.matches("[a-zA-Z]+")) {
+                englishWordCount++;
+            }
+        }
+        
+        return chineseChars + englishWordCount;
     }
     
     // 内部类用于目录项

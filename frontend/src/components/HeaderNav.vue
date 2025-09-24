@@ -30,6 +30,9 @@
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
+                  <el-dropdown-item>
+                    <router-link to="/settings">个人设置</router-link>
+                  </el-dropdown-item>
                   <el-dropdown-item v-if="authStore.isAuthor">
                     <router-link to="/admin">管理后台</router-link>
                   </el-dropdown-item>

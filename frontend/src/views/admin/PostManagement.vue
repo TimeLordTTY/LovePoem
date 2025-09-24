@@ -724,7 +724,7 @@
       width="90%"
       :style="{ maxWidth: '1000px' }"
       :show-close="true"
-      :close-on-click-modal="false"
+      :close-on-click-modal="true"
     >
       <div class="preview-content" v-if="previewData">
         <!-- 文章标题 -->
