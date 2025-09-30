@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+import request from './request'
 
 /**
  * 获取系列的章节树（用于选择章节）

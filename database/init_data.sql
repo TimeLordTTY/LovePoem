@@ -86,11 +86,13 @@ INSERT INTO settings (setting_key, value, description, group_name, is_system) VA
 ('db_version_009', 'completed', '数据库版本009：文章壁纸', '系统设置', 1),
 ('db_version_010', 'completed', '数据库版本010：文章注解', '系统设置', 1),
 ('db_version_011', 'completed', '数据库版本011：章节和目录', '系统设置', 1),
-('db_version_012', 'completed', '数据库版本012：章节体系', '系统设置', 1);
-
--- 插入数据库版本记录
-INSERT INTO settings (setting_key, value, description, group_name, is_system) VALUES 
-('db_version_014', 'completed', '数据库版本014：评论和催更系统', '系统设置', 1);
+('db_version_012', 'completed', '数据库版本012：章节体系', '系统设置', 1),
+('db_version_013', 'completed', '数据库版本013：系统优化', '系统设置', 1),
+('db_version_014', 'completed', '数据库版本014：评论和催更系统', '系统设置', 1),
+('db_version_015', 'completed', '数据库版本015：系统增强', '系统设置', 1),
+('db_version_016', 'completed', '数据库版本016：功能扩展', '系统设置', 1),
+('db_version_017', 'completed', '数据库版本017：确保用户资料字段一致性', '系统设置', 1),
+('db_version_018', 'completed', '数据库版本018：转换为富文本HTML格式', '系统设置', 1);
 
 -- 插入评论系统配置
 INSERT INTO settings (setting_key, value, description, group_name, is_system) VALUES 

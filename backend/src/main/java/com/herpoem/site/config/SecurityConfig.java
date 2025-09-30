@@ -89,6 +89,8 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/post-chapters/**").permitAll()
                 // 允许所有人访问统计接口
                 .requestMatchers(HttpMethod.GET, "/api/statistics/**").permitAll()
+                // 允许所有人访问内容分页接口
+                .requestMatchers(HttpMethod.GET, "/api/content/**").permitAll()
                 // 管理员接口需要认证
                 .requestMatchers("/api/admin/**", "/api/files/**", "/api/assets/**").authenticated()
                 // POST、PUT、DELETE请求需要认证（除了已经允许的）

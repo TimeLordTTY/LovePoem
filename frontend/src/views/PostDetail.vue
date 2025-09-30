@@ -61,14 +61,14 @@
             <div v-if="post.hasChapters">
               <!-- 引言 -->
               <div v-if="post.preChapterContent" class="toc-item" 
-                   :class="{ active: currentPageInfo?.title === '引言' }"
+                   :class="{ active: currentPageInfo?.contentType === 'preface' }"
                    @click="goToChapterFirstPage('引言')">
                 <span class="toc-title">引言</span>
               </div>
               
               <!-- 章节列表 -->
               <div v-for="chapter in flattenedChapters" :key="chapter.id" class="toc-item"
-                   :class="{ active: currentPageInfo?.chapterId === chapter.id }"
+                   :class="{ active: currentPageInfo?.chapterId == chapter.id }"
                    @click="goToChapterFirstPage(chapter.id)">
                 <span class="toc-title">{{ chapter.title }}</span>
               </div>
@@ -101,6 +101,20 @@
 
           <!-- 底部分页导航 -->
           <div v-if="needsPagination" class="page-navigation">
+            <!-- 移动端目录按钮 (仅在有章节时显示) -->
+            <div v-if="post.hasChapters" class="mobile-toc-toggle">
+              <el-button 
+                @click="showMobileToc = !showMobileToc"
+                type="info"
+                plain
+                class="toc-toggle-btn"
+              >
+                <el-icon><List /></el-icon>
+                目录
+              </el-button>
+            </div>
+
+            <!-- 分页控制 -->
             <div class="page-nav-controls">
               <el-button 
                 v-if="currentPage > 1"
@@ -131,8 +145,8 @@
               </el-button>
             </div>
             
-            <!-- 页码跳转 -->
-            <div class="page-jump">
+            <!-- 页码跳转 (桌面端显示) -->
+            <div class="page-jump desktop-only">
               <span>跳转到第</span>
               <el-input-number
                 v-model="tempPageNumber"
@@ -153,6 +167,46 @@
               </el-button>
             </div>
           </div>
+
+          <!-- 移动端目录弹窗 -->
+          <el-drawer
+            v-model="showMobileToc"
+            title="目录"
+            direction="btt"
+            size="60%"
+            class="mobile-toc-drawer"
+          >
+            <div class="mobile-toc-content">
+              <!-- 引言 -->
+              <div v-if="post.preChapterContent" 
+                   class="mobile-toc-item" 
+                   :class="{ active: currentPageInfo?.contentType === 'preface' }"
+                   @click="goToChapterFirstPage('引言'); showMobileToc = false">
+                <div class="toc-item-content">
+                  <div class="toc-item-info">
+                    <span class="toc-item-number">引言</span>
+                    <span class="toc-item-title">引言</span>
+                  </div>
+                  <el-icon class="toc-item-arrow"><ArrowRight /></el-icon>
+                </div>
+              </div>
+              
+              <!-- 章节列表 -->
+              <div v-for="(chapter, index) in flattenedChapters" 
+                   :key="chapter.id" 
+                   class="mobile-toc-item"
+                   :class="{ active: currentPageInfo?.chapterId == chapter.id }"
+                   @click="goToChapterFirstPage(chapter.id); showMobileToc = false">
+                <div class="toc-item-content">
+                  <div class="toc-item-info">
+                    <span class="toc-item-number">第{{ index + 1 }}章</span>
+                    <span class="toc-item-title">{{ chapter.title || '章节' + (index + 1) }}</span>
+                  </div>
+                  <el-icon class="toc-item-arrow"><ArrowRight /></el-icon>
+                </div>
+              </div>
+            </div>
+          </el-drawer>
         </div>
       </div>
     </div>
@@ -319,9 +373,10 @@ const isFavorited = ref(false)
 
 // 分页相关数据
 const currentPage = ref(1)
-const wordsPerPage = ref(600) // 每页字数限制（进一步降低以确保无滚动条）
-const allPages = ref([]) // 所有页面的内容数组
+const wordsPerPage = ref(500) // 每页字数限制（优化分页效果）
+const allPages = ref([]) // 所有页面的内容数组（从后台获取）
 const tempPageNumber = ref(1) // 临时页码输入
+const paginationLoading = ref(false) // 分页加载状态
 
 // 评论和催更相关数据
 const showCommentForm = ref(false)
@@ -358,145 +413,41 @@ const flattenedChapters = computed(() => {
   return flattened
 })
 
-// 生成所有页面内容
-const generateAllPages = () => {
-  const pages = []
-  
-  if (post.value?.hasChapters) {
-    // 带章节的文章
-    
-    // 添加引言页面
-    if (post.value.preChapterContent) {
-      // 为引言添加特殊样式，并处理换行
-      let prefaceContent = post.value.preChapterContent
-      // 将换行符转换为HTML换行标签
-      prefaceContent = prefaceContent.replace(/\n/g, '<br>')
-      const styledPreface = `<div class="preface-content" style="font-style: italic; color: #555; line-height: 1.8; padding: 20px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border-left: 4px solid #6c757d; margin-bottom: 20px;">${prefaceContent}</div>`
-      const prePages = splitContent(styledPreface, '引言', null, 'preface')
-      pages.push(...prePages)
-    }
-    
-    // 添加章节页面
-    flattenedChapters.value.forEach(chapter => {
-      // 组合背景说明和章节内容
-      let combinedContent = ''
-      
-      // 添加背景说明（斜体样式）
-      if (chapter.backgroundText) {
-        // 处理背景说明的换行
-        let backgroundText = chapter.backgroundText.replace(/\n/g, '<br>')
-        combinedContent += `<div class="chapter-background-text" style="font-style: italic; color: #666; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">${backgroundText}</div>`
-      }
-      
-      // 添加章节正文内容
-      const mainContent = chapter.contentHtml || chapter.content || ''
-      if (mainContent) {
-        combinedContent += mainContent
-      }
-      
-      if (combinedContent) {
-        const chapterPages = splitContent(combinedContent, chapter.title, chapter.id, 'chapter')
-        pages.push(...chapterPages)
-      }
-    })
-    
-  } else {
-    // 普通文章
-    let content = post.value?.contentHtml || ''
-    if (content) {
-      // 如果内容不包含HTML标签，处理换行
-      if (!content.includes('<')) {
-        content = content.replace(/\n/g, '<br>')
-      }
-      const regularPages = splitContent(content, post.value?.title || '文章', null, 'article')
-      pages.push(...regularPages)
-    }
+// 从后台加载分页内容
+const loadPaginatedContent = async () => {
+  if (!post.value?.id) {
+    return
   }
   
-  return pages
-}
-
-// 分割内容为页面
-const splitContent = (content, title, chapterId = null, contentType = 'article') => {
-  if (!content) return []
-  
-  // 提取纯文本用于分页计算
-  let textContent = content
-  if (content.includes('<')) {
-    const tempDiv = document.createElement('div')
-    tempDiv.innerHTML = content
-    textContent = tempDiv.textContent || tempDiv.innerText || ''
-  }
-  
-  const pages = []
-  let startIndex = 0
-  let pageNumber = 1
-  
-  // 如果内容很短，直接作为一页
-  if (textContent.length <= wordsPerPage.value) {
-    pages.push({
-      content: content,
-      title: title,
-      chapterId: chapterId,
-      pageNumber: 1,
-      isFirstPage: true,
-      contentType: contentType
-    })
-    return pages
-  }
-  
-  while (startIndex < textContent.length) {
-    let endIndex = startIndex + wordsPerPage.value
+  try {
+    paginationLoading.value = true
+    const { getPostPaginatedContent } = await import('@/api/pagination')
     
-    // 智能断页：在合适的位置断开
-    if (endIndex < textContent.length) {
-      let breakPoint = endIndex
-      for (let i = endIndex; i >= startIndex + wordsPerPage.value * 0.8; i--) {
-        if (textContent[i] === '\n' && textContent[i + 1] === '\n') {
-          breakPoint = i + 2
-          break
-        } else if (textContent[i] === '。' || textContent[i] === '！' || textContent[i] === '？') {
-          breakPoint = i + 1
-          break
-        }
-      }
-      endIndex = breakPoint
-    }
+    // 不传递wordsPerPage参数，让API根据设备类型自动设置
+    const response = await getPostPaginatedContent(post.value.id)
     
-    // 对应的HTML内容片段
-    let pageContent
-    if (content.includes('<')) {
-      const ratio = endIndex / textContent.length
-      const htmlStartIndex = Math.floor(startIndex * content.length / textContent.length)
-      const htmlEndIndex = Math.min(content.length, Math.floor(endIndex * content.length / textContent.length))
-      pageContent = content.substring(htmlStartIndex, htmlEndIndex).trim()
-    } else {
-      pageContent = textContent.substring(startIndex, endIndex).trim()
-    }
-    
-    if (pageContent) {
-      pages.push({
-        content: pageContent,
-        title: title,
-        chapterId: chapterId,
-        pageNumber: pageNumber,
-        isFirstPage: pageNumber === 1,
-        contentType: contentType
+    if (response.data) {
+      allPages.value = response.data
+      console.log('分页内容加载成功:', {
+        postId: post.value.id,
+        totalPages: allPages.value.length,
+        deviceType: window.innerWidth <= 768 ? 'mobile' : 'desktop'
       })
-      pageNumber++
+    } else {
+      console.error('分页内容加载失败:', response.message)
+      allPages.value = []
     }
-    
-    startIndex = endIndex
+  } catch (error) {
+    console.error('分页内容加载异常:', error)
+    allPages.value = []
+  } finally {
+    paginationLoading.value = false
   }
-  
-  return pages
 }
 
-// 计算所有页面
+// 计算所有页面（从后台获取）
 const allPagesComputed = computed(() => {
-  if (!post.value) return []
-  const pages = generateAllPages()
-  return pages
+  return allPages.value || []
 })
 
 // 总页数
@@ -518,7 +469,20 @@ const currentPageInfo = computed(() => {
   const pages = allPagesComputed.value
   if (pages.length === 0) return null
   
-  return pages[currentPage.value - 1] || null
+  const pageInfo = pages[currentPage.value - 1] || null
+  
+  // 调试信息（可选）
+  if (pageInfo && process.env.NODE_ENV === 'development') {
+    console.log('当前页面信息:', {
+      pageNumber: currentPage.value,
+      title: pageInfo.title,
+      contentType: pageInfo.contentType,
+      chapterId: pageInfo.chapterId,
+      isFirstPage: pageInfo.isFirstPage
+    })
+  }
+  
+  return pageInfo
 })
 
 // 是否需要分页
@@ -596,6 +560,11 @@ const checkFavoriteStatus = async () => {
 onMounted(async () => {
   await loadPost()
   
+  // 加载分页内容
+  if (post.value) {
+    await loadPaginatedContent()
+  }
+  
   // 加载完成后检查收藏状态
   if (authStore.isLoggedIn && post.value) {
     await checkFavoriteStatus()
@@ -633,21 +602,14 @@ onMounted(async () => {
   if (route.hash) {
     const hashValue = route.hash.replace('#', '')
     
-    if (hashValue.includes('-page-')) {
-      // 处理章节分页跳转 (格式: chapterId-page-pageNumber)
-      const [chapterId, , pageNumber] = hashValue.split('-')
-      const pageNum = parseInt(pageNumber)
-      if (chapterId && pageNum > 0) {
-        setTimeout(() => goToChapterPage(chapterId, pageNum), 500)
-      }
-    } else if (hashValue.startsWith('page-')) {
+    if (hashValue.startsWith('page-')) {
       // 处理普通文章页面跳转
       const pageNumber = parseInt(hashValue.replace('page-', ''))
-      if (pageNumber > 0 && totalPages.value > 0) {
+      if (pageNumber > 0) {
         setTimeout(() => goToPage(pageNumber), 500)
       }
     } else {
-      // 处理章节跳转
+      // 处理章节跳转（对于有章节的文章）
       setTimeout(() => scrollToChapter(hashValue), 500)
     }
   } else {
@@ -1070,7 +1032,7 @@ const goToChapterFirstPage = (chapterIdOrTitle) => {
   
   if (chapterIdOrTitle === '引言') {
     // 查找引言页面
-    targetPageIndex = pages.findIndex(page => page.title === '引言')
+    targetPageIndex = pages.findIndex(page => page.contentType === 'preface')
   } else {
     // 查找章节的第一页
     targetPageIndex = pages.findIndex(page => 
@@ -1366,6 +1328,16 @@ const jumpToPage = () => {
   background: var(--accent-light);
   border-left-color: var(--accent-primary);
   color: var(--accent-primary);
+}
+
+.toc-title {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.toc-item.active .toc-title {
+  color: var(--accent-primary);
+  font-weight: 600;
 }
 
 .toc-item.pre-chapter {
@@ -1708,15 +1680,9 @@ const jumpToPage = () => {
     padding: 0 15px;
   }
   
+  /* 移动端隐藏侧边目录 */
   .toc-sidebar {
-    width: 100%;
-    position: static;
-    margin-bottom: 20px;
-    max-height: 200px;
-  }
-  
-  .toc-content {
-    max-height: 150px;
+    display: none;
   }
   
   .page-container {
@@ -1964,6 +1930,116 @@ const jumpToPage = () => {
   min-height: 400px;
 }
 
+/* 移动端目录按钮 */
+.mobile-toc-toggle {
+  display: none;
+  margin-bottom: 16px;
+}
+
+.toc-toggle-btn {
+  width: 100%;
+  height: 44px;
+  font-size: 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 移动端目录弹窗样式 */
+.mobile-toc-drawer :deep(.el-drawer__body) {
+  padding: 0;
+  background: var(--bg-primary);
+}
+
+.mobile-toc-content {
+  padding: 20px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.mobile-toc-item {
+  margin-bottom: 12px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.mobile-toc-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mobile-toc-item.active {
+  background: linear-gradient(135deg, #409eff, #79bbff) !important;
+  color: #ffffff !important;
+  border: 1px solid #409eff !important;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3) !important;
+}
+
+.toc-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  cursor: pointer;
+}
+
+.toc-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toc-item-number {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.mobile-toc-item.active .toc-item-number {
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-weight: 600 !important;
+}
+
+.toc-item-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #333333;
+}
+
+.mobile-toc-item.active .toc-item-title {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
+}
+
+.mobile-toc-item.active .toc-item-number,
+.mobile-toc-item.active .toc-item-title,
+.mobile-toc-item.active .toc-item-arrow {
+  color: #ffffff !important;
+}
+
+.toc-item-arrow {
+  color: var(--text-secondary);
+  transition: transform 0.3s ease;
+}
+
+.mobile-toc-item.active .toc-item-arrow {
+  color: white !important;
+}
+
+.mobile-toc-item:hover .toc-item-arrow {
+  transform: translateX(4px);
+}
+
+/* 桌面端专用元素 */
+.desktop-only {
+  display: block;
+}
+
 @media (max-width: 768px) {
   .pagination-nav {
     flex-direction: column;
@@ -1973,6 +2049,46 @@ const jumpToPage = () => {
   .page-nav-btn {
     width: 100%;
     max-width: 200px;
+  }
+  
+  /* 移动端显示目录按钮 */
+  .mobile-toc-toggle {
+    display: block;
+  }
+  
+  /* 移动端隐藏页码跳转 */
+  .desktop-only {
+    display: none;
+  }
+  
+  /* 优化移动端分页导航 */
+  .page-navigation {
+    background: var(--bg-secondary);
+    padding: 20px;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .page-nav-controls {
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+  }
+  
+  .page-info {
+    background: var(--bg-primary);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .page-nav-btn {
+    height: 44px;
+    border-radius: 12px;
+    font-weight: 600;
+    min-width: 100px;
   }
 }
 </style>
