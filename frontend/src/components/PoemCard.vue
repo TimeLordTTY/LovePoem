@@ -15,7 +15,7 @@
         <router-link :to="`/post/${post.slug}`">{{ post.title }}</router-link>
       </h3>
       
-      <p class="post-excerpt">{{ post.excerpt }}</p>
+      <p class="post-excerpt">{{ post.excerpt || post.summary }}</p>
       
       <div class="post-tags" v-if="post.tags && post.tags.length">
         <span 

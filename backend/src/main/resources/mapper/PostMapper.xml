@@ -9,7 +9,10 @@
             p.slug,
             p.title,
             p.summary,
-            LEFT(p.summary, 200) as excerpt,
+            CASE 
+                WHEN p.summary IS NOT NULL AND p.summary != '' THEN LEFT(p.summary, 200)
+                ELSE LEFT(REGEXP_REPLACE(p.content_html, '&lt;[^&gt;]*&gt;', ''), 200)
+            END as excerpt,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,
             p.chapter_no as chapterNo,
@@ -164,7 +167,10 @@
             p.slug,
             p.title,
             p.summary,
-            LEFT(p.summary, 200) as excerpt,
+            CASE 
+                WHEN p.summary IS NOT NULL AND p.summary != '' THEN LEFT(p.summary, 200)
+                ELSE LEFT(REGEXP_REPLACE(p.content_html, '&lt;[^&gt;]*&gt;', ''), 200)
+            END as excerpt,
             p.chapter_no as chapterNo,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,

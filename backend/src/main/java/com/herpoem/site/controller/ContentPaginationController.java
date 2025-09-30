@@ -45,11 +45,11 @@ public class ContentPaginationController {
             if ("mobile".equalsIgnoreCase(deviceType)) {
                 // 移动端每页字数更少，适合小屏幕
                 if (wordsPerPage == null || wordsPerPage == 500) {
-                    wordsPerPage = 150; // 移动端默认150字
+                    wordsPerPage = 250; // 移动端默认250字
                 }
                 // 限制移动端最大字数
-                if (wordsPerPage > 200) {
-                    wordsPerPage = 200;
+                if (wordsPerPage > 300) {
+                    wordsPerPage = 300;
                 }
             } else {
                 // 桌面端
@@ -60,7 +60,19 @@ public class ContentPaginationController {
             
             List<PageContentVO> pages = contentPaginationService.getPostPaginatedContent(postId, wordsPerPage);
             
-            log.info("文章分页内容获取成功: postId={}, totalPages={}, actualWordsPerPage={}", postId, pages.size(), wordsPerPage);
+            // 添加详细的调试信息
+            log.info("文章分页内容获取成功: postId={}, totalPages={}, actualWordsPerPage={}, deviceType={}", 
+                    postId, pages.size(), wordsPerPage, deviceType);
+            
+            // 记录每一页的基本信息
+            for (int i = 0; i < Math.min(pages.size(), 3); i++) {
+                PageContentVO page = pages.get(i);
+                String content = page.getContent();
+                String textContent = content != null ? content.replaceAll("<[^>]*>", "") : "";
+                log.info("页面 {}: 字数={}, HTML长度={}", 
+                        i + 1, textContent.length(), content != null ? content.length() : 0);
+            }
+            
             return Result.success(pages);
             
         } catch (Exception e) {
@@ -74,16 +86,18 @@ public class ContentPaginationController {
      * @param postId 文章ID
      * @param pageNumber 页码
      * @param wordsPerPage 每页字数（可选，默认500）
+     * @param deviceType 设备类型（可选，mobile/desktop，默认desktop）
      * @return 页面内容
      */
     @GetMapping("/page/{postId}/{pageNumber}")
     public Result<PageContentVO> getPageContent(
             @PathVariable Long postId,
             @PathVariable Integer pageNumber,
-            @RequestParam(defaultValue = "500") Integer wordsPerPage) {
+            @RequestParam(defaultValue = "500") Integer wordsPerPage,
+            @RequestParam(defaultValue = "desktop") String deviceType) {
         
         try {
-            log.info("获取指定页面内容: postId={}, pageNumber={}, wordsPerPage={}", postId, pageNumber, wordsPerPage);
+            log.info("获取指定页面内容: postId={}, pageNumber={}, wordsPerPage={}, deviceType={}", postId, pageNumber, wordsPerPage, deviceType);
             
             // 验证参数
             if (postId == null || postId <= 0) {
@@ -94,8 +108,21 @@ public class ContentPaginationController {
                 return Result.error("页码无效");
             }
             
-            if (wordsPerPage == null || wordsPerPage < 100 || wordsPerPage > 2000) {
-                wordsPerPage = 500;
+            // 根据设备类型调整每页字数
+            if ("mobile".equalsIgnoreCase(deviceType)) {
+                // 移动端每页字数更少，适合小屏幕
+                if (wordsPerPage == null || wordsPerPage == 500) {
+                    wordsPerPage = 250; // 移动端默认250字
+                }
+                // 限制移动端最大字数
+                if (wordsPerPage > 300) {
+                    wordsPerPage = 300;
+                }
+            } else {
+                // 桌面端
+                if (wordsPerPage == null || wordsPerPage < 100 || wordsPerPage > 2000) {
+                    wordsPerPage = 500; // 桌面端默认500字
+                }
             }
             
             List<PageContentVO> pages = contentPaginationService.getPostPaginatedContent(postId, wordsPerPage);

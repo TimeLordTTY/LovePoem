@@ -401,9 +401,12 @@ public class ContentPaginationServiceImpl implements ContentPaginationService {
         // 使用更简单可靠的分页逻辑
         List<String> htmlPages = splitHtmlContentReliably(htmlContent, textContent, wordsPerPage);
         
+        log.debug("分页结果: 期望字数={}, 实际页数={}", wordsPerPage, htmlPages.size());
+        
         for (int i = 0; i < htmlPages.size(); i++) {
             String pageContent = htmlPages.get(i);
             if (pageContent != null && !pageContent.trim().isEmpty()) {
+                String pageText = extractTextContent(pageContent);
                 PageContentVO page;
                 if (chapterId != null) {
                     page = new PageContentVO(pageContent, title, chapterId, i + 1, contentType);
@@ -412,7 +415,9 @@ public class ContentPaginationServiceImpl implements ContentPaginationService {
                     page.setContentType(contentType);
                 }
                 pages.add(page);
-                log.debug("添加页面 {}: 内容长度={}", i + 1, pageContent.length());
+                log.debug("添加页面 {}: HTML长度={}, 文本长度={}, 文本内容: {}", 
+                        i + 1, pageContent.length(), pageText.length(), 
+                        pageText.length() > 50 ? pageText.substring(0, 50) + "..." : pageText);
             }
         }
         
@@ -553,22 +558,65 @@ public class ContentPaginationServiceImpl implements ContentPaginationService {
     private List<String> splitHtmlContentReliably(String htmlContent, String textContent, int wordsPerPage) {
         List<String> pages = new ArrayList<>();
         
-        // 计算需要的页数
-        int totalTextLength = textContent.length();
-        int numPages = (int) Math.ceil((double) totalTextLength / wordsPerPage);
+        log.debug("开始分割HTML内容: 原始长度={}, 文本长度={}, 每页字数={}", 
+                htmlContent.length(), textContent.length(), wordsPerPage);
         
-        if (numPages <= 1) {
+        // 如果内容很短，直接返回一页
+        if (textContent.length() <= wordsPerPage) {
             pages.add(htmlContent);
+            log.debug("内容较短，返回单页");
             return pages;
         }
         
-        // 尝试按段落分割
-        if (htmlContent.contains("<p>") && htmlContent.contains("</p>")) {
-            return splitByParagraphs(htmlContent, wordsPerPage);
+        // 使用简单的按比例分割方法，确保内容不丢失
+        int totalTextLength = textContent.length();
+        int numPages = (int) Math.ceil((double) totalTextLength / wordsPerPage);
+        log.debug("预计需要页数: {}", numPages);
+        
+        // 按比例分割HTML内容
+        int htmlLength = htmlContent.length();
+        int htmlPerPage = htmlLength / numPages;
+        
+        for (int i = 0; i < numPages; i++) {
+            int start = i * htmlPerPage;
+            int end = (i == numPages - 1) ? htmlLength : (i + 1) * htmlPerPage;
+            
+            if (start < htmlLength) {
+                String pageContent = htmlContent.substring(start, end);
+                
+                // 尝试在合适的位置断开（避免在HTML标签中间断开）
+                if (i < numPages - 1 && end < htmlLength) {
+                    pageContent = adjustBreakPoint(htmlContent, start, end);
+                }
+                
+                pages.add(pageContent);
+                log.debug("添加页面 {}: 起始位置={}, 结束位置={}, 内容长度={}", 
+                        i + 1, start, end, pageContent.length());
+            }
         }
         
-        // 如果没有段落标签，按句子分割
-        return splitBySentences(htmlContent, wordsPerPage);
+        log.debug("HTML分割完成: 实际页数={}", pages.size());
+        return pages;
+    }
+    
+    /**
+     * 调整断点位置，避免在HTML标签中间断开
+     */
+    private String adjustBreakPoint(String htmlContent, int start, int originalEnd) {
+        int end = originalEnd;
+        
+        // 向后查找合适的断点（句号、感叹号、问号、段落结束）
+        for (int i = originalEnd; i < Math.min(originalEnd + 100, htmlContent.length()); i++) {
+            char c = htmlContent.charAt(i);
+            if (c == '。' || c == '！' || c == '？' || 
+                (c == '>' && i > 0 && htmlContent.charAt(i-1) == 'p' && 
+                 i >= 3 && htmlContent.substring(i-3, i+1).equals("</p>"))) {
+                end = i + 1;
+                break;
+            }
+        }
+        
+        return htmlContent.substring(start, end);
     }
     
     /**

@@ -62,10 +62,10 @@ const recommendedSeries = ref([])
 
 const loadData = async () => {
   try {
-    // 加载最新文章作为精选文章
+    // 加载最新文章作为精选文章（只显示前3篇）
     const postsResponse = await getPosts({ 
       page: 1, 
-      size: 6, 
+      size: 3, 
       status: 'PUBLISHED',
       visibility: 'PUBLIC' 
     })
@@ -160,9 +160,6 @@ onMounted(() => {
 .post-item:nth-child(1) { animation-delay: 0.1s; }
 .post-item:nth-child(2) { animation-delay: 0.2s; }
 .post-item:nth-child(3) { animation-delay: 0.3s; }
-.post-item:nth-child(4) { animation-delay: 0.4s; }
-.post-item:nth-child(5) { animation-delay: 0.5s; }
-.post-item:nth-child(6) { animation-delay: 0.6s; }
 
 .series-grid {
   display: grid;

@@ -109,7 +109,14 @@ const loadSiteSettings = async () => {
 const getPoemTypeId = async () => {
   try {
     const postTypeResponse = await getPostTypeByName('诗歌')
-    return postTypeResponse.data?.id
+    console.log('诗歌类型查询结果:', postTypeResponse)
+    if (postTypeResponse.data) {
+      console.log('找到诗歌类型ID:', postTypeResponse.data.id)
+      return postTypeResponse.data.id
+    } else {
+      console.warn('诗歌类型不存在，将显示所有文章类型')
+      return null
+    }
   } catch (error) {
     console.warn('获取诗歌类型失败，将显示所有文章:', error)
     return null
@@ -146,17 +153,28 @@ const loadPoemArticles = async () => {
     console.log('诗歌查询参数:', queryParams)
     
     const response = await getPosts(queryParams)
+    console.log('诗歌API响应:', response)
     
     const posts = response.data?.records || []
+    console.log('获取到的文章数量:', posts.length)
+    console.log('文章列表:', posts)
     
-    poemList.value = posts.map(post => ({
-      id: post.id,
-      slug: post.slug,
-      title: post.title,
-      author: post.authorName || '白秦',
-      lines: extractPoemLines(post.excerpt || post.contentText || post.content || ''),
-      originalPost: post
-    })).filter(poem => poem.lines.length > 0)
+    poemList.value = posts.map(post => {
+      const content = post.excerpt || post.summary || ''
+      const lines = extractPoemLines(content)
+      console.log(`文章 "${post.title}" 内容: "${content}", 提取的诗句:`, lines)
+      
+      return {
+        id: post.id,
+        slug: post.slug,
+        title: post.title,
+        author: post.authorName || '白秦',
+        lines: lines,
+        originalPost: post
+      }
+    }).filter(poem => poem.lines.length > 0)
+    
+    console.log('过滤后的诗歌列表:', poemList.value)
     
     if (poemList.value.length > 0) {
       currentPoem.value = poemList.value[0]
@@ -369,13 +387,13 @@ const getStarStyle = (index) => {
 .image-container {
   width: 100%;
   max-width: 400px;
-  aspect-ratio: 1;
+  min-height: 300px;
   position: relative;
 }
 
 .image-placeholder {
   width: 100%;
-  height: 100%;
+  min-height: 300px;
   background: var(--card-bg);
   border: 2px dashed var(--border-color);
   border-radius: 20px;
@@ -383,18 +401,21 @@ const getStarStyle = (index) => {
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
+  padding: 20px;
+  box-sizing: border-box;
 }
 
 .poem-preview {
   text-align: center;
-  padding: 40px 20px;
+  padding: 20px;
   cursor: pointer;
   transition: all 0.3s ease;
-  height: 100%;
+  width: 100%;
+  min-height: 260px;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
 }
 
 .poem-preview:hover {
@@ -415,6 +436,9 @@ const getStarStyle = (index) => {
   margin-bottom: 16px;
   opacity: 0;
   animation: fadeInUp 0.8s ease forwards;
+  line-height: 1.4;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .poem-content {
@@ -432,6 +456,9 @@ const getStarStyle = (index) => {
   line-height: 1.6;
   opacity: 0;
   animation: fadeInUp 0.8s ease forwards;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
 }
 
 .poem-author {
@@ -503,10 +530,17 @@ const getStarStyle = (index) => {
   
   .image-container {
     max-width: 300px;
+    min-height: 250px;
   }
   
   .poem-preview {
-    padding: 30px 15px;
+    padding: 15px;
+    min-height: 210px;
+  }
+  
+  .poem-title {
+    font-size: 16px;
+    margin-bottom: 12px;
   }
   
   .poem-line {

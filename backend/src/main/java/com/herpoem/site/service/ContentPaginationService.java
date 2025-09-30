@@ -38,3 +38,5 @@ public interface ContentPaginationService {
     List<PageContentVO> getPostPaginatedContent(Long postId, int wordsPerPage);
 }
 
+
+
