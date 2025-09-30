@@ -6,6 +6,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.herpoem.site.common.Result;
 import com.herpoem.site.model.entity.*;
 import com.herpoem.site.service.*;
+import com.herpoem.site.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -35,6 +36,7 @@ public class SystemController {
     private final PostTypeService postTypeService;
     private final PostTagService postTagService;
     private final UserService userService;
+    private final UserMapper userMapper;
     
     /**
      * 获取系统统计数据
@@ -103,7 +105,7 @@ public class SystemController {
             backupData.put("postTags", postTags);
             
             // 导出用户数据（不包含密码）
-            List<User> users = userService.list().stream()
+            List<User> users = userMapper.selectList(null).stream()
                 .peek(user -> user.setPasswordHash("***"))
                 .collect(Collectors.toList());
             backupData.put("users", users);

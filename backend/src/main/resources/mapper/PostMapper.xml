@@ -9,7 +9,7 @@
             p.slug,
             p.title,
             p.summary,
-            LEFT(p.content_text, 200) as excerpt,
+            LEFT(p.summary, 200) as excerpt,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,
             p.chapter_no as chapterNo,
@@ -24,7 +24,7 @@
             pt.name as postTypeName,
             s.name as seriesName,
             u.display_name as authorName,
-            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+            CEIL(CHAR_LENGTH(p.content_html) / 500) as readingTime
         FROM post p
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
         LEFT JOIN series s ON p.series_id = s.id
@@ -39,7 +39,7 @@
         <if test="keyword != null and keyword != ''">
             AND (p.title LIKE CONCAT('%', #{keyword}, '%') 
                  OR p.summary LIKE CONCAT('%', #{keyword}, '%')
-                 OR LEFT(p.content_text, 500) LIKE CONCAT('%', #{keyword}, '%'))
+                 OR LEFT(REGEXP_REPLACE(p.content_html, '&lt;[^&gt;]*&gt;', ''), 500) LIKE CONCAT('%', #{keyword}, '%'))
         </if>
         <if test="tagId != null">
             AND EXISTS (
@@ -75,7 +75,7 @@
             p.updated_at as updatedAt,
             pt.name as postTypeName,
             u.display_name as authorName,
-            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+            CEIL(CHAR_LENGTH(p.content_html) / 500) as readingTime
         FROM post p
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
         LEFT JOIN users u ON p.created_by = u.id
@@ -92,8 +92,7 @@
             p.id,
             p.slug,
             p.title,
-            p.content_md as contentMd,
-            p.content_text as contentText,
+            p.content_html as contentHtml,
             p.summary,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,
@@ -108,7 +107,7 @@
             p.updated_at as updatedAt,
             pt.name as postTypeName,
             u.display_name as authorName,
-            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+            CEIL(CHAR_LENGTH(p.content_html) / 500) as readingTime
         FROM post p
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
         LEFT JOIN users u ON p.created_by = u.id
@@ -131,8 +130,7 @@
             p.id,
             p.slug,
             p.title,
-            p.content_md as contentMd,
-            p.content_text as contentText,
+            p.content_html as contentHtml,
             p.summary,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,
@@ -150,7 +148,7 @@
             pt.name as postTypeName,
             s.name as seriesName,
             u.display_name as authorName,
-            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+            CEIL(CHAR_LENGTH(p.content_html) / 500) as readingTime
         FROM post p
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
         LEFT JOIN series s ON p.series_id = s.id
@@ -166,14 +164,14 @@
             p.slug,
             p.title,
             p.summary,
-            LEFT(p.content_text, 200) as excerpt,
+            LEFT(p.summary, 200) as excerpt,
             p.chapter_no as chapterNo,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,
             p.publish_date as publishDate,
             p.created_at as createdAt,
             pt.name as postTypeName,
-            CEIL(CHAR_LENGTH(p.content_text) / 200) as readingTime
+            CEIL(CHAR_LENGTH(p.content_html) / 500) as readingTime
         FROM post p
         LEFT JOIN post_type pt ON p.post_type_id = pt.id
         WHERE p.series_id = #{seriesId}
@@ -250,5 +248,13 @@
     <select id="selectMaxSortOrder" resultType="java.lang.Integer">
         SELECT MAX(sort_order) FROM post WHERE deleted = 0
     </select>
+    
+    <!-- 为置顶操作增加排序值 -->
+    <update id="incrementSortOrderForTopPost">
+        UPDATE post 
+        SET sort_order = sort_order + 1 
+        WHERE deleted = 0 
+        AND sort_order &lt; #{currentSortOrder}
+    </update>
 
 </mapper>

@@ -27,8 +27,8 @@ public class PostCreateDTO {
     @Size(max = 200, message = "别名长度不能超过200字符")
     private String slug;
     
-    // 当hasChapters为false时，contentMd不能为空
-    private String contentMd;
+    // 富文本HTML内容
+    private String contentHtml;
     
     @Size(max = 500, message = "作者自述长度不能超过500字符")
     private String summary;

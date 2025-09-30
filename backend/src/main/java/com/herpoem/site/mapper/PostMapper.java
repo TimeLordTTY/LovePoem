@@ -71,4 +71,9 @@ public interface PostMapper extends BaseMapper<Post> {
      * 获取最大排序值
      */
     Integer selectMaxSortOrder();
+    
+    /**
+     * 为置顶操作增加排序值
+     */
+    int incrementSortOrderForTopPost(@Param("currentSortOrder") Integer currentSortOrder);
 }

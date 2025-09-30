@@ -74,6 +74,11 @@ public interface PostService extends IService<Post> {
     void updatePostSeries(Long postId, Long seriesId, Long userId);
     
     /**
+     * 置顶文章
+     */
+    void topPost(Long postId, Long userId);
+    
+    /**
      * 更新文章排序
      */
     void updatePostSortOrder(Long id, Integer sortOrder, Long userId);
@@ -86,7 +91,7 @@ public interface PostService extends IService<Post> {
     /**
      * 自动生成文章目录
      */
-    String generateTableOfContents(String contentMd);
+    String generateTableOfContents(String contentHtml);
     
     /**
      * 获取系列的章节列表

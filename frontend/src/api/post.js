@@ -59,3 +59,8 @@ export function generateTableOfContents(contentMd) {
 export function getChaptersBySeries(seriesId) {
   return request.get(`/posts/series/${seriesId}/chapters`)
 }
+
+// 置顶文章
+export function topPost(id) {
+  return request.put(`/posts/${id}/top`)
+}

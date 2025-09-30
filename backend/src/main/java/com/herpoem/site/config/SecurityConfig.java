@@ -90,7 +90,7 @@ public class SecurityConfig {
                 // 允许所有人访问统计接口
                 .requestMatchers(HttpMethod.GET, "/api/statistics/**").permitAll()
                 // 管理员接口需要认证
-                .requestMatchers("/api/admin/**", "/api/files/**").authenticated()
+                .requestMatchers("/api/admin/**", "/api/files/**", "/api/assets/**").authenticated()
                 // POST、PUT、DELETE请求需要认证（除了已经允许的）
                 .requestMatchers(HttpMethod.POST, "/api/posts/**", "/api/favorites/**", "/api/annotations/**", "/api/post-chapters/**", "/api/chapters/**").authenticated()
                 .requestMatchers(HttpMethod.PUT, "/api/posts/**", "/api/favorites/**", "/api/annotations/**", "/api/post-chapters/**", "/api/chapters/**").authenticated()

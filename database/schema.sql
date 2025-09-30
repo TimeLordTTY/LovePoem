@@ -7,7 +7,10 @@ CREATE TABLE users (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
     username VARCHAR(50) NOT NULL UNIQUE COMMENT '用户名',
     display_name VARCHAR(100) NOT NULL COMMENT '显示名称',
-    role ENUM('ADMIN', 'AUTHOR') NOT NULL DEFAULT 'AUTHOR' COMMENT '用户角色',
+    email VARCHAR(100) COMMENT '邮箱地址',
+    bio TEXT COMMENT '用户简介',
+    avatar_url VARCHAR(500) COMMENT '用户头像URL',
+    role ENUM('ADMIN', 'AUTHOR', 'USER') NOT NULL DEFAULT 'USER' COMMENT '用户角色',
     password_hash VARCHAR(255) NOT NULL COMMENT '密码哈希',
     status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1-正常，0-禁用',
     last_login_at DATETIME COMMENT '最后登录时间',
@@ -15,7 +18,8 @@ CREATE TABLE users (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
-    INDEX idx_deleted_status (deleted, status)
+    INDEX idx_deleted_status (deleted, status),
+    INDEX idx_email (email)
 ) COMMENT '用户表';
 
 -- 系列表
@@ -51,8 +55,7 @@ CREATE TABLE post (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '文章ID',
     slug VARCHAR(200) NOT NULL UNIQUE COMMENT '文章别名（URL友好）',
     title VARCHAR(300) NOT NULL COMMENT '文章标题',
-    content_md LONGTEXT NOT NULL COMMENT 'Markdown内容',
-    content_text LONGTEXT NOT NULL COMMENT '纯文本内容（用于搜索）',
+    content_html LONGTEXT NOT NULL COMMENT '富文本HTML内容',
     summary VARCHAR(500) COMMENT '作者自述（文章摘要）',
     post_type_id BIGINT NOT NULL COMMENT '文章类型ID',
     series_id BIGINT COMMENT '所属系列ID',
@@ -86,8 +89,8 @@ CREATE TABLE post (
     INDEX idx_deleted_type_status (deleted, post_type_id, status),
     INDEX idx_deleted_created_by_status (deleted, created_by, status),
     
-    -- 全文搜索索引
-    FULLTEXT INDEX ft_search_content (title, summary, content_text)
+    -- 全文搜索索引 (注意：content_html包含HTML标签，搜索时需要处理)
+    FULLTEXT INDEX ft_search_content (title, summary)
 ) COMMENT '文章表';
 
 -- 文章类型表
@@ -172,7 +175,8 @@ CREATE TABLE post_chapter (
     post_id BIGINT NOT NULL COMMENT '所属文章ID',
     parent_id BIGINT DEFAULT NULL COMMENT '父章节ID（用于节，NULL表示章）',
     title VARCHAR(200) NOT NULL COMMENT '章节标题',
-    content TEXT NOT NULL COMMENT '章节内容',
+    content TEXT COMMENT '章节内容（纯文本备份）',
+    content_html LONGTEXT NOT NULL COMMENT '章节富文本HTML内容',
     background_text TEXT COMMENT '章节背景说明',
     order_no INT NOT NULL DEFAULT 0 COMMENT '排序号（同层内从小到大）',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

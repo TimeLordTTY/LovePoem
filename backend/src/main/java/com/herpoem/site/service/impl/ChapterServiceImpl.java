@@ -191,7 +191,7 @@ public class ChapterServiceImpl implements ChapterService {
         // 如果有关联的文章，设置文章信息
         if (chapter.getPost() != null) {
             content.setPostTitle(chapter.getPost().getTitle());
-            content.setContentMd(chapter.getPost().getContentMd());
+            content.setContentHtml(chapter.getPost().getContentHtml());
             content.setSummary(chapter.getPost().getSummary());
             content.setPublishDate(chapter.getPost().getPublishDate());
         }

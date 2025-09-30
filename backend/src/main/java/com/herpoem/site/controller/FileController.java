@@ -1,6 +1,8 @@
 package com.herpoem.site.controller;
 
 import com.herpoem.site.common.Result;
+import com.herpoem.site.model.vo.AssetVO;
+import com.herpoem.site.service.AssetService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +25,8 @@ import java.util.UUID;
 @RequestMapping("/api/files")
 @RequiredArgsConstructor
 public class FileController {
+    
+    private final AssetService assetService;
     
     @Value("${app.upload.path:uploads}")
     private String uploadPath;
@@ -51,48 +55,20 @@ public class FileController {
         }
         
         try {
-            // 创建上传目录 - 使用绝对路径
-            String dateFolder = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+            // 使用AssetService上传图片
+            AssetVO asset = assetService.uploadImage(file, file.getOriginalFilename());
             
-            // 确保uploadPath是绝对路径
-            File baseUploadDir = new File(uploadPath);
-            if (!baseUploadDir.isAbsolute()) {
-                // 如果是相对路径，基于当前工作目录
-                baseUploadDir = new File(System.getProperty("user.dir"), uploadPath);
-            }
-            
-            File uploadDir = new File(baseUploadDir, dateFolder);
-            if (!uploadDir.exists()) {
-                boolean created = uploadDir.mkdirs();
-                if (!created) {
-                    return Result.error("无法创建上传目录: " + uploadDir.getAbsolutePath());
-                }
-            }
-            
-            // 生成唯一文件名
-            String originalFilename = file.getOriginalFilename();
-            String extension = "";
-            if (originalFilename != null && originalFilename.contains(".")) {
-                extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-            }
-            String filename = UUID.randomUUID().toString() + extension;
-            
-            // 保存文件
-            File destFile = new File(uploadDir, filename);
-            file.transferTo(destFile);
-            
-            // 返回文件信息
+            // 返回兼容的格式
             Map<String, Object> result = new HashMap<>();
-            result.put("filename", filename);
-            result.put("originalName", originalFilename);
-            result.put("url", urlPrefix + "/" + dateFolder + "/" + filename);
+            result.put("id", asset.getId());
+            result.put("url", asset.getUrl());
+            result.put("filename", asset.getTitle());
+            result.put("originalName", asset.getTitle());
             result.put("size", file.getSize());
-            result.put("id", UUID.randomUUID().toString()); // 添加ID字段供前端使用
             
             return Result.success(result);
-            
-        } catch (IOException e) {
-            return Result.error("文件上传失败: " + e.getMessage());
+        } catch (Exception e) {
+            return Result.error(e.getMessage());
         }
     }
     

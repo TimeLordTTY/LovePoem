@@ -123,6 +123,15 @@
               
               <el-button 
                 size="small" 
+                type="primary" 
+                @click="topPostAction(post.id)"
+              >
+                <el-icon><Top /></el-icon>
+                置顶
+              </el-button>
+              
+              <el-button 
+                size="small" 
                 type="danger" 
                 @click="deletePost(post.id)"
               >
@@ -200,7 +209,7 @@
           </template>
         </el-table-column>
         
-        <el-table-column label="操作" min-width="280" fixed="right" align="center" class-name="action-column">
+        <el-table-column label="操作" min-width="320" fixed="right" align="center" class-name="action-column">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button size="small" @click="editPost(row.id)">
@@ -225,6 +234,15 @@
               >
                 <el-icon><DocumentCopy /></el-icon>
                 转草稿
+              </el-button>
+              
+              <el-button 
+                size="small" 
+                type="primary" 
+                @click="topPostAction(row.id)"
+              >
+                <el-icon><Top /></el-icon>
+                置顶
               </el-button>
               
               <el-button 
@@ -397,27 +415,6 @@
                 </el-select>
               </el-form-item>
               
-              <el-form-item label="封面图片">
-                <el-upload
-                  ref="coverUploadRef"
-                  :show-file-list="false"
-                  :before-upload="() => false"
-                  :on-change="handleCoverUpload"
-                  accept="image/*"
-                  class="cover-upload"
-                >
-                  <div v-if="postForm.coverUrl" class="cover-preview">
-                    <img :src="postForm.coverUrl" alt="封面预览" />
-                    <div class="cover-overlay">
-                      <el-button size="small" @click.stop="removeCover">删除</el-button>
-                    </div>
-                  </div>
-                  <div v-else class="upload-placeholder">
-                    <el-icon><Plus /></el-icon>
-                    <div>上传封面</div>
-                  </div>
-                </el-upload>
-              </el-form-item>
             </el-form>
           </el-card>
 
@@ -542,8 +539,8 @@
             </template>
             
             <!-- 章节编辑模式 -->
-            <div v-if="currentEditingChapter" class="chapter-editor">
-              <el-form :model="chapterForm" label-width="80px">
+            <div v-if="currentEditingChapter" class="chapter-editor" :class="{ 'mobile-optimized': isMobile }">
+              <el-form :model="chapterForm" :label-width="isMobile ? '70px' : '80px'">
                 <el-form-item label="章节标题" required>
                   <el-input v-model="chapterForm.title" placeholder="请输入章节标题" />
                 </el-form-item>
@@ -552,34 +549,45 @@
                   <el-input
                     v-model="chapterForm.backgroundText"
                     type="textarea"
-                    :rows="3"
+                    :rows="isMobile ? 2 : 3"
                     placeholder="章节背景说明（可选）"
                   />
                 </el-form-item>
                 
                 <el-form-item label="章节内容" required>
-                  <div class="chapter-editor-toolbar">
+                  <div class="chapter-editor-toolbar" :class="{ 'mobile-toolbar': isMobile }">
+                    <el-button size="small" @click="openChapterImageSelector">
+                      <el-icon><Picture /></el-icon>
+                      <span v-if="!isMobile">插入图片</span>
+                    </el-button>
+                    
                     <el-upload
                       ref="chapterImageUploadRef"
                       :show-file-list="false"
                       :before-upload="() => false"
                       :on-change="handleChapterImageUpload"
                       accept="image/*"
-                      style="display: inline-block;"
+                      style="display: inline-block; margin-left: 8px;"
                     >
                       <el-button size="small">
-                        <el-icon><Picture /></el-icon>
-                        插入图片
+                        <el-icon><Upload /></el-icon>
+                        <span v-if="!isMobile">上传图片</span>
                       </el-button>
                     </el-upload>
+                    
+                    <el-button size="small" @click="openChapterAnnotationDialog">
+                      <el-icon><EditPen /></el-icon>
+                      <span v-if="!isMobile">添加注解</span>
+                    </el-button>
                   </div>
                   
-                  <el-input
-                    v-model="chapterForm.content"
-                    type="textarea"
-                    :rows="18"
-                    placeholder="请输入章节内容"
-                    class="content-textarea"
+                  <!-- 章节富文本编辑器 -->
+                  <RichTextEditor
+                    ref="chapterRichTextEditorRef"
+                    v-model="chapterForm.contentHtml"
+                    placeholder="请输入章节内容..."
+                    height="400px"
+                    @change="handleChapterContentChange"
                   />
                   
                   <div class="word-count-info">
@@ -590,47 +598,72 @@
             </div>
             
             <!-- 普通文章编辑模式 -->
-            <div v-else class="article-editor">
+            <div v-else class="article-editor" :class="{ 'mobile-hidden': isMobile && postForm.hasChapters }">
               <div class="editor-toolbar">
-                <el-upload
-                  ref="imageUploadRef"
-                  :show-file-list="false"
-                  :before-upload="() => false"
-                  :on-change="handleImageUpload"
-                  accept="image/*"
-                  style="display: inline-block; margin-right: 8px;"
-                >
-                  <el-button size="small">
-                    <el-icon><Picture /></el-icon>
-                    插入图片
-                  </el-button>
-                </el-upload>
+                <div class="toolbar-group">
+                  <el-dropdown @command="handleImageAction">
+                    <el-button size="small" type="primary">
+                      <el-icon><Picture /></el-icon>
+                      图片工具
+                      <el-icon class="el-icon--right"><arrow-down /></el-icon>
+                    </el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="select">
+                          <el-icon><Picture /></el-icon>
+                          选择图片
+                        </el-dropdown-item>
+                        <el-dropdown-item command="upload">
+                          <el-icon><Upload /></el-icon>
+                          上传图片
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                  
+                  <el-upload
+                    ref="imageUploadRef"
+                    :show-file-list="false"
+                    :before-upload="() => false"
+                    :on-change="handleImageUpload"
+                    accept="image/*"
+                    style="display: none;"
+                  />
+                  
+                  <el-upload
+                    ref="articleWordUploadRef"
+                    :show-file-list="false"
+                    :before-upload="() => false"
+                    :on-change="handleArticleWordUpload"
+                    accept=".doc,.docx"
+                    style="display: inline-block;"
+                  >
+                    <el-button size="small">
+                      <el-icon><DocumentAdd /></el-icon>
+                      导入Word
+                    </el-button>
+                  </el-upload>
+                </div>
                 
-                <el-upload
-                  ref="articleWordUploadRef"
-                  :show-file-list="false"
-                  :before-upload="() => false"
-                  :on-change="handleArticleWordUpload"
-                  accept=".doc,.docx"
-                  style="display: inline-block;"
-                >
-                  <el-button size="small">
-                    <el-icon><DocumentAdd /></el-icon>
-                    导入Word
+                <div class="toolbar-group">
+                  <el-button size="small" @click="openAnnotationDialog">
+                    <el-icon><EditPen /></el-icon>
+                    添加注解
                   </el-button>
-                </el-upload>
-                
-                <div class="word-count">
-                  字数：{{ articleWordCount }}
+                  
+                  <div class="word-count">
+                    字数：{{ articleWordCount }}
+                  </div>
                 </div>
               </div>
               
-              <el-input
-                v-model="postForm.contentMd"
-                type="textarea"
-                :rows="23"
-                placeholder="请输入文章内容"
-                class="content-textarea"
+              <!-- 富文本编辑器 -->
+              <RichTextEditor
+                ref="richTextEditorRef"
+                v-model="postForm.contentHtml"
+                placeholder="请输入文章内容..."
+                height="600px"
+                @change="handleContentChange"
               />
             </div>
           </el-card>
@@ -742,8 +775,8 @@
         </div>
         
         <!-- 普通文章内容 -->
-        <div v-if="!previewData.hasChapters && previewData.contentMd" class="preview-body">
-          <div class="markdown-content" v-html="renderSimpleMarkdown(previewData.contentMd)"></div>
+        <div v-if="!previewData.hasChapters && previewData.contentHtml" class="preview-body">
+          <div class="html-content" v-html="previewData.contentHtml"></div>
         </div>
         
         <!-- 章节文章 -->
@@ -760,8 +793,8 @@
             <div v-if="chapter.backgroundText" class="chapter-background">
               <div class="markdown-content" v-html="renderSimpleMarkdown(chapter.backgroundText)"></div>
             </div>
-            <div v-if="chapter.content" class="chapter-text">
-              <div class="markdown-content" v-html="renderSimpleMarkdown(chapter.content)"></div>
+            <div v-if="chapter.contentHtml" class="chapter-text">
+              <div class="html-content" v-html="chapter.contentHtml"></div>
             </div>
           </div>
         </div>
@@ -771,6 +804,116 @@
         <el-button @click="showPreview = false">关闭预览</el-button>
       </template>
     </el-dialog>
+
+    <!-- 图片选择器对话框 -->
+    <el-dialog
+      v-model="showImageSelector"
+      title="选择图片"
+      width="80%"
+      :style="{ maxWidth: '1200px' }"
+    >
+      <div class="image-selector">
+        <!-- 搜索和筛选 -->
+        <div class="selector-toolbar">
+          <el-input
+            v-model="imageSearch"
+            placeholder="搜索图片..."
+            @input="loadImages"
+            style="width: 300px; margin-right: 10px;"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          
+          <el-upload
+            ref="quickUploadRef"
+            :show-file-list="false"
+            :before-upload="() => false"
+            :on-change="handleQuickUpload"
+            accept="image/*"
+          >
+            <el-button type="primary">
+              <el-icon><Upload /></el-icon>
+              快速上传
+            </el-button>
+          </el-upload>
+        </div>
+        
+        <!-- 图片网格 -->
+        <div class="image-grid" v-loading="imagesLoading">
+          <div
+            v-for="image in images"
+            :key="image.id"
+            class="image-item"
+            @click="selectImage(image)"
+          >
+            <img :src="image.url" :alt="image.title" />
+            <div class="image-overlay">
+              <div class="image-title">{{ image.title }}</div>
+              <div class="image-actions">
+                <el-button size="small" @click.stop="insertImage(image)">插入</el-button>
+                <el-button size="small" type="danger" @click.stop="deleteImage(image)">删除</el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 分页 -->
+        <div class="selector-pagination">
+          <el-pagination
+            v-model:current-page="imagePage"
+            :page-size="imagePageSize"
+            :total="imageTotal"
+            layout="prev, pager, next"
+            @current-change="loadImages"
+          />
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showImageSelector = false">取消</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 注解编辑对话框 -->
+    <el-dialog
+      v-model="showAnnotationDialog"
+      title="添加注解"
+      width="500px"
+    >
+      <div class="annotation-editor">
+        <div class="selected-text">
+          <label>选中文本：</label>
+          <div class="text-preview">{{ selectedText }}</div>
+        </div>
+        
+        <el-form :model="annotationForm" label-width="80px">
+          <el-form-item label="注解内容" required>
+            <el-input
+              v-model="annotationForm.content"
+              type="textarea"
+              :rows="4"
+              placeholder="请输入注解内容"
+            />
+          </el-form-item>
+          
+          <el-form-item label="注解类型">
+            <el-select v-model="annotationForm.type" style="width: 100%">
+              <el-option label="说明" value="note" />
+              <el-option label="引用" value="quote" />
+              <el-option label="警告" value="warning" />
+              <el-option label="提示" value="tip" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showAnnotationDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveAnnotation">保存注解</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -778,8 +921,9 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import Sortable from 'sortablejs'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, RefreshLeft, Edit, Delete, Document, DocumentAdd, Rank, Upload, ArrowDown, Setting, Picture, DocumentCopy, Lock, Unlock, ArrowLeft } from '@element-plus/icons-vue'
+import { Plus, Search, RefreshLeft, Edit, Delete, Document, DocumentAdd, Rank, Upload, ArrowDown, Setting, Picture, DocumentCopy, Lock, Unlock, ArrowLeft, Top, EditPen } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
+import RichTextEditor from '@/components/RichTextEditor.vue'
 
 // API imports
 import { 
@@ -794,6 +938,8 @@ import { getSeries } from '@/api/series'
 import { getTags } from '@/api/tag'
 import { uploadImage } from '@/api/file'
 import { publishPost, updatePostVisibility } from '@/api/admin'
+import { topPost } from '@/api/post'
+import { getAssets, uploadImage as uploadAssetImage, deleteAsset } from '@/api/asset'
 import { 
   getChapterTree, 
   createChapter, 
@@ -820,7 +966,6 @@ const selectedPosts = ref([])
 const availableTags = ref([])
 const batchVisibilityDialogVisible = ref(false)
 const visibilityDialogVisible = ref(false)
-const coverUploadRef = ref()
 const imageUploadRef = ref()
 const chapterImageUploadRef = ref()
 const articleWordUploadRef = ref()
@@ -845,7 +990,7 @@ const postForm = reactive({
   id: null,
   title: '',
   summary: '',
-  contentMd: '',
+  contentHtml: '',
   postTypeId: null,
   seriesId: null,
   status: 'DRAFT',
@@ -853,9 +998,7 @@ const postForm = reactive({
   hasChapters: false,
   preChapterContent: '',
   publishDate: null,
-  tags: [],
-  coverUrl: '',
-  coverAssetId: null
+  tags: []
 })
 
 // 批量可见性表单
@@ -875,16 +1018,43 @@ const chapterForm = reactive({
   parentId: null,
   title: '',
   content: '',
+  contentHtml: '',
   backgroundText: '',
   orderNo: 0
 })
 
 // 计算属性
 const articleWordCount = computed(() => {
-  return countWords(postForm.contentMd)
+  // 从富文本HTML中提取纯文本计算字数
+  if (postForm.contentHtml) {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = postForm.contentHtml
+    return countWords(tempDiv.textContent || tempDiv.innerText || '')
+  }
+  return countWords(postForm.contentHtml)
 })
 
+// 处理富文本内容变化
+const handleContentChange = (html) => {
+  postForm.contentHtml = html
+}
+
+// 处理章节富文本内容变化
+const handleChapterContentChange = (html) => {
+  chapterForm.contentHtml = html
+  // 同时更新content字段用于向后兼容
+  if (chapterRichTextEditorRef.value) {
+    chapterForm.content = chapterRichTextEditorRef.value.getText() || ''
+  }
+}
+
 const chapterWordCount = computed(() => {
+  // 从富文本HTML中提取纯文本计算字数
+  if (chapterForm.contentHtml) {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = chapterForm.contentHtml
+    return countWords(tempDiv.textContent || tempDiv.innerText || '')
+  }
   return countWords(chapterForm.content)
 })
 
@@ -1085,7 +1255,7 @@ const editPost = async (postId) => {
       id: post.id,
       title: post.title,
       summary: post.summary || '',
-      contentMd: post.contentMd || '',
+      contentHtml: post.contentHtml || '',
       postTypeId: post.postTypeId,
       seriesId: post.seriesId,
       status: post.status,
@@ -1093,9 +1263,7 @@ const editPost = async (postId) => {
       hasChapters: Boolean(post.hasChapters),
       preChapterContent: post.preChapterContent || '',
       publishDate: post.publishDate,
-      tags: post.tags || [],
-      coverUrl: post.coverUrl || '',
-      coverAssetId: post.coverAssetId || null
+      tags: post.tags || []
     })
     
     console.log('Form data after loading:', postForm)
@@ -1149,6 +1317,7 @@ const addChapter = () => {
     parentId: null,
     title: '新章节',
     content: '',
+    contentHtml: '',
     backgroundText: '',
     orderNo: chapters.value.length,
     children: []
@@ -1168,6 +1337,7 @@ const addSection = (parentChapter) => {
     parentId: parentChapter.id,
     title: '新节',
     content: '',
+    contentHtml: '',
     backgroundText: '',
     orderNo: parentChapter.children.length
   }
@@ -1184,6 +1354,7 @@ const editChapter = (chapter) => {
     parentId: chapter.parentId,
     title: chapter.title,
     content: chapter.content,
+    contentHtml: chapter.contentHtml || '',
     backgroundText: chapter.backgroundText,
     orderNo: chapter.orderNo
   })
@@ -1195,7 +1366,7 @@ const saveCurrentChapter = () => {
     return
   }
   
-  if (!chapterForm.content.trim()) {
+  if (!chapterForm.contentHtml.trim()) {
     ElMessage.error('请输入章节内容')
     return
   }
@@ -1204,6 +1375,7 @@ const saveCurrentChapter = () => {
   Object.assign(currentEditingChapter.value, {
     title: chapterForm.title,
     content: chapterForm.content,
+    contentHtml: chapterForm.contentHtml,
     backgroundText: chapterForm.backgroundText
   })
   
@@ -1279,7 +1451,8 @@ const handleWordUpload = async (file) => {
         postId: postForm.id,
         parentId: null,
         title: result.title || '导入的章节',
-        content: result.contentMd || result.content,
+        content: result.content || '',
+        contentHtml: result.contentHtml || result.content,
         backgroundText: '',
         orderNo: chapters.value.length,
         children: []
@@ -1289,7 +1462,7 @@ const handleWordUpload = async (file) => {
       ElMessage.success('Word文档导入为新章节成功')
     } else {
       // 普通模式：将Word内容填充到文章内容
-      postForm.contentMd = result.contentMd || result.content
+      postForm.contentHtml = result.contentHtml || result.content
       ElMessage.success('Word文档导入成功')
     }
   } catch (error) {
@@ -1312,7 +1485,7 @@ const savePost = async () => {
     
     // 验证内容：如果没有启用章节，必须有文章内容；如果启用章节，必须有章节
     if (!postForm.hasChapters) {
-      if (!postForm.contentMd.trim()) {
+      if (!postForm.contentHtml.trim()) {
         ElMessage.error('请输入文章内容')
         return
       }
@@ -1333,7 +1506,7 @@ const savePost = async () => {
       hasChapters: postForm.hasChapters,
       preChapterContent: postForm.preChapterContent || '',
       publishDate: postForm.publishDate || null,
-      contentMd: postForm.hasChapters ? '' : (postForm.contentMd || '')
+      contentHtml: postForm.hasChapters ? '' : (postForm.contentHtml || '')
     }
     
     console.log('Submitting data:', submitData)
@@ -1394,7 +1567,7 @@ const saveChapters = async (postId) => {
       if (!chapter.title || !chapter.title.trim()) {
         throw new Error(`第${chapterIndex + 1}章缺少标题`)
       }
-      if (!chapter.content || !chapter.content.trim()) {
+      if (!chapter.contentHtml || !chapter.contentHtml.trim()) {
         throw new Error(`第${chapterIndex + 1}章缺少内容`)
       }
       
@@ -1404,6 +1577,7 @@ const saveChapters = async (postId) => {
         parentId: null,
         title: chapter.title,
         content: chapter.content,
+        contentHtml: chapter.contentHtml,
         backgroundText: chapter.backgroundText || '',
         orderNo: chapterIndex
       })
@@ -1413,7 +1587,7 @@ const saveChapters = async (postId) => {
           if (!section.title || !section.title.trim()) {
             throw new Error(`第${chapterIndex + 1}章第${sectionIndex + 1}节缺少标题`)
           }
-          if (!section.content || !section.content.trim()) {
+          if (!section.contentHtml || !section.contentHtml.trim()) {
             throw new Error(`第${chapterIndex + 1}章第${sectionIndex + 1}节缺少内容`)
           }
           
@@ -1423,6 +1597,7 @@ const saveChapters = async (postId) => {
             parentId: chapter.id,
             title: section.title,
             content: section.content,
+            contentHtml: section.contentHtml,
             backgroundText: section.backgroundText || '',
             orderNo: sectionIndex
           })
@@ -1439,6 +1614,7 @@ const saveChapters = async (postId) => {
         parentId: chapter.parentId,
         title: chapter.title,
         content: chapter.content,
+        contentHtml: chapter.contentHtml,
         backgroundText: chapter.backgroundText,
         orderNo: chapter.orderNo
       }
@@ -1478,7 +1654,7 @@ const resetForm = () => {
     id: null,
     title: '',
     summary: '',
-    contentMd: '',
+    contentHtml: '',
     postTypeId: null,
     seriesId: null,
     status: 'DRAFT',
@@ -1486,9 +1662,7 @@ const resetForm = () => {
     hasChapters: false,
     preChapterContent: '',
     publishDate: null,
-    tags: [],
-    coverUrl: '',
-    coverAssetId: null
+    tags: []
   })
   
   chapters.value = []
@@ -1558,7 +1732,7 @@ const draftSinglePost = async (postId) => {
     const updateData = {
       title: post.title,
       summary: post.summary || '',
-      contentMd: post.contentMd || post.content || '',
+      contentHtml: post.contentHtml || post.content || '',
       postTypeId: post.postTypeId,
       seriesId: post.seriesId,
       status: 'DRAFT',
@@ -1596,6 +1770,17 @@ const setPublic = async (postId) => {
   }
 }
 
+const topPostAction = async (postId) => {
+  try {
+    await topPost(postId)
+    ElMessage.success('置顶成功')
+    loadPosts()
+  } catch (error) {
+    ElMessage.error('置顶失败')
+    console.error('Top post error:', error)
+  }
+}
+
 const batchPublish = async () => {
   try {
     await ElMessageBox.confirm(`确定发布选中的 ${selectedPosts.value.length} 篇文章吗？`, '批量发布', {
@@ -1630,7 +1815,7 @@ const batchDraft = async () => {
         const updateData = {
           title: currentPost.title,
           summary: currentPost.summary || '',
-          contentMd: currentPost.contentMd || currentPost.content || '',
+          contentHtml: currentPost.contentHtml || currentPost.content || '',
           postTypeId: currentPost.postTypeId,
           seriesId: currentPost.seriesId,
           status: 'DRAFT',
@@ -1709,37 +1894,6 @@ const confirmVisibility = async () => {
 }
 
 // 文件上传方法
-const handleCoverUpload = async (file) => {
-  try {
-    console.log('Uploading cover file:', file)
-    
-    // 确保file.raw存在
-    if (!file.raw) {
-      ElMessage.error('文件上传失败：无效的文件对象')
-      return
-    }
-    
-    const response = await uploadImage(file.raw)
-    console.log('Cover upload response:', response)
-    
-    if (response.data) {
-      postForm.coverUrl = response.data.url
-      postForm.coverAssetId = response.data.id
-      ElMessage.success('封面上传成功')
-    } else {
-      throw new Error('上传响应数据格式错误')
-    }
-  } catch (error) {
-    ElMessage.error('封面上传失败: ' + (error.message || error))
-    console.error('Cover upload error:', error)
-  }
-}
-
-const removeCover = () => {
-  postForm.coverUrl = ''
-  postForm.coverAssetId = null
-  ElMessage.success('封面已删除')
-}
 
 const handleImageUpload = async (file) => {
   try {
@@ -1754,9 +1908,10 @@ const handleImageUpload = async (file) => {
     const response = await uploadImage(file.raw)
     const imageUrl = response.data.url
     
-    // 在光标位置插入图片Markdown语法
-    const imageMarkdown = `![图片描述](${imageUrl})\n`
-    postForm.contentMd += imageMarkdown
+    // 插入富文本编辑器中
+    if (richTextEditorRef.value) {
+      richTextEditorRef.value.insertImage(imageUrl)
+    }
     
     ElMessage.success('图片上传成功')
   } catch (error) {
@@ -1807,7 +1962,7 @@ const handleArticleWordUpload = async (file) => {
     }
     
     // 将Word内容填充到文章内容
-    postForm.contentMd = result.contentMd || result.content
+    postForm.contentHtml = result.contentHtml || result.content
     
     ElMessage.success('Word文档导入成功')
   } catch (error) {
@@ -1819,6 +1974,34 @@ const handleArticleWordUpload = async (file) => {
 const showPreview = ref(false)
 const previewData = ref(null)
 
+// 图片选择器相关
+const showImageSelector = ref(false)
+const showChapterImageSelector = ref(false)
+const images = ref([])
+const imagesLoading = ref(false)
+const imageSearch = ref('')
+const imagePage = ref(1)
+const imagePageSize = ref(20)
+const imageTotal = ref(0)
+const quickUploadRef = ref()
+
+// 注解功能相关
+const annotationMode = ref(false)
+const chapterAnnotationMode = ref(false)
+const showAnnotationDialog = ref(false)
+const selectedText = ref('')
+const selectedRange = ref(null)
+const currentTextarea = ref(null)
+const articleTextareaRef = ref()
+const richTextEditorRef = ref()
+const chapterRichTextEditorRef = ref()
+const chapterTextareaRef = ref()
+
+const annotationForm = reactive({
+  content: '',
+  type: 'note'
+})
+
 const previewPost = () => {
   if (!postForm.title) {
     ElMessage.warning('请先输入文章标题')
@@ -1829,7 +2012,7 @@ const previewPost = () => {
   previewData.value = {
     title: postForm.title,
     summary: postForm.summary || '',
-    contentMd: postForm.contentMd || '',
+    contentHtml: postForm.contentHtml || '',
     hasChapters: postForm.hasChapters,
     preChapterContent: postForm.preChapterContent || '',
     chapters: postForm.hasChapters ? chapters.value : []
@@ -1856,6 +2039,263 @@ const renderSimpleMarkdown = (content) => {
     .replace(/^## (.*$)/gim, '<h2>$1</h2>')
     .replace(/^# (.*$)/gim, '<h1>$1</h1>')
 }
+
+// 图片选择器方法
+const loadImages = async () => {
+  try {
+    imagesLoading.value = true
+    const params = {
+      page: imagePage.value,
+      size: imagePageSize.value,
+      type: 'image',
+      keyword: imageSearch.value || undefined
+    }
+    const response = await getAssets(params)
+    images.value = response.data.records || []
+    imageTotal.value = response.data.total || 0
+  } catch (error) {
+    ElMessage.error('加载图片列表失败')
+    console.error('Load images error:', error)
+  } finally {
+    imagesLoading.value = false
+  }
+}
+
+const selectImage = (image) => {
+  insertImage(image)
+}
+
+const insertImage = (image) => {
+  const imageMarkdown = `![${image.title || '图片'}](${image.url})\n`
+  
+  if (showChapterImageSelector.value) {
+    // 插入到章节内容
+    chapterForm.content += imageMarkdown
+    showChapterImageSelector.value = false
+  } else {
+    // 插入到富文本编辑器
+    if (richTextEditorRef.value) {
+      richTextEditorRef.value.insertImage(imageUrl)
+    }
+    showImageSelector.value = false
+  }
+}
+
+const handleQuickUpload = async (file) => {
+  try {
+    const response = await uploadAssetImage(file.raw, file.name)
+    ElMessage.success('图片上传成功')
+    
+    // 重新加载图片列表
+    await loadImages()
+    
+    // 自动插入新上传的图片
+    insertImage(response.data)
+  } catch (error) {
+    ElMessage.error('图片上传失败: ' + (error.message || error))
+    console.error('Quick upload error:', error)
+  }
+}
+
+const deleteImage = async (image) => {
+  try {
+    await ElMessageBox.confirm('确定要删除这张图片吗？', '删除图片', {
+      type: 'warning'
+    })
+    
+    await deleteAsset(image.id)
+    ElMessage.success('图片删除成功')
+    
+    // 重新加载图片列表
+    await loadImages()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除图片失败')
+      console.error('Delete image error:', error)
+    }
+  }
+}
+
+// 处理图片工具下拉菜单
+const handleImageAction = (command) => {
+  if (command === 'select') {
+    openImageSelector()
+  } else if (command === 'upload') {
+    imageUploadRef.value?.clearFiles()
+    imageUploadRef.value?.$el.querySelector('input').click()
+  }
+}
+
+// 打开图片选择器
+const openImageSelector = () => {
+  showChapterImageSelector.value = false
+  showImageSelector.value = true
+  loadImages()
+}
+
+const openChapterImageSelector = () => {
+  showImageSelector.value = false
+  showChapterImageSelector.value = true
+  loadImages()
+}
+
+// 注解功能方法 - 简化版本，直接选中文字添加注解
+const openAnnotationDialog = () => {
+  const textarea = articleTextareaRef.value?.textarea
+  if (!textarea) {
+    ElMessage.warning('请先选择文章内容区域')
+    return
+  }
+  
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  
+  if (start === end) {
+    ElMessage.warning('请先选择要注解的文字')
+    return
+  }
+  
+  selectedText.value = textarea.value.substring(start, end)
+  selectedRange.value = { start, end }
+  currentTextarea.value = { ref: articleTextareaRef.value, type: 'article' }
+  
+  // 重置表单
+  annotationForm.content = ''
+  annotationForm.type = 'note'
+  
+  showAnnotationDialog.value = true
+}
+
+const openChapterAnnotationDialog = () => {
+  const textarea = chapterTextareaRef.value?.textarea
+  if (!textarea) {
+    ElMessage.warning('请先选择章节内容区域')
+    return
+  }
+  
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  
+  if (start === end) {
+    ElMessage.warning('请先选择要注解的文字')
+    return
+  }
+  
+  selectedText.value = textarea.value.substring(start, end)
+  selectedRange.value = { start, end }
+  currentTextarea.value = { ref: chapterTextareaRef.value, type: 'chapter' }
+  
+  // 重置表单
+  annotationForm.content = ''
+  annotationForm.type = 'note'
+  
+  showAnnotationDialog.value = true
+}
+
+const setupTextSelection = (textareaRef, type) => {
+  if (!textareaRef || !textareaRef.textarea) return
+  
+  const textarea = textareaRef.textarea
+  currentTextarea.value = { ref: textareaRef, type }
+  
+  // 添加选择事件监听
+  textarea.addEventListener('mouseup', handleTextSelection)
+  textarea.addEventListener('keyup', handleTextSelection)
+  
+  // 添加右键菜单
+  textarea.addEventListener('contextmenu', handleContextMenu)
+}
+
+const removeTextSelection = () => {
+  if (currentTextarea.value && currentTextarea.value.ref && currentTextarea.value.ref.textarea) {
+    const textarea = currentTextarea.value.ref.textarea
+    textarea.removeEventListener('mouseup', handleTextSelection)
+    textarea.removeEventListener('keyup', handleTextSelection)
+    textarea.removeEventListener('contextmenu', handleContextMenu)
+  }
+  currentTextarea.value = null
+}
+
+const handleTextSelection = (event) => {
+  const textarea = event.target
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  
+  if (start !== end) {
+    selectedText.value = textarea.value.substring(start, end)
+    selectedRange.value = { start, end }
+  } else {
+    selectedText.value = ''
+    selectedRange.value = null
+  }
+}
+
+const handleContextMenu = (event) => {
+  if (selectedText.value) {
+    event.preventDefault()
+    openAnnotationDialog()
+  }
+}
+
+const saveAnnotation = () => {
+  if (!annotationForm.content.trim()) {
+    ElMessage.error('请输入注解内容')
+    return
+  }
+  
+  if (!selectedRange.value || !currentTextarea.value) {
+    ElMessage.error('请重新选择文字')
+    return
+  }
+  
+  const { start, end } = selectedRange.value
+  const { ref: textareaRef, type } = currentTextarea.value
+  
+  // 构建注解标记
+  const annotationId = Date.now()
+  const annotationMarkdown = `<span class="annotation" data-id="${annotationId}" data-type="${annotationForm.type}" title="${annotationForm.content}">${selectedText.value}</span>`
+  
+  // 替换选中的文字
+  if (type === 'article') {
+    const content = postForm.contentHtml
+    const newContent = content.substring(0, start) + annotationMarkdown + content.substring(end)
+    postForm.contentHtml = newContent
+  } else if (type === 'chapter') {
+    const content = chapterForm.content
+    const newContent = content.substring(0, start) + annotationMarkdown + content.substring(end)
+    chapterForm.content = newContent
+  }
+  
+  // 保存注解到文章的annotations字段（JSON格式）
+  const annotation = {
+    id: annotationId,
+    text: selectedText.value,
+    content: annotationForm.content,
+    type: annotationForm.type,
+    position: { start, end }
+  }
+  
+  // 更新文章的annotations字段
+  try {
+    const annotations = postForm.annotations ? JSON.parse(postForm.annotations) : []
+    annotations.push(annotation)
+    postForm.annotations = JSON.stringify(annotations)
+  } catch (error) {
+    const annotations = [annotation]
+    postForm.annotations = JSON.stringify(annotations)
+  }
+  
+  showAnnotationDialog.value = false
+  selectedText.value = ''
+  selectedRange.value = null
+  
+  ElMessage.success('注解添加成功')
+}
+
+// 清理事件监听器
+onUnmounted(() => {
+  removeTextSelection()
+})
 </script>
 
 <style scoped>
@@ -2154,67 +2594,23 @@ const renderSimpleMarkdown = (content) => {
   color: var(--text-secondary);
 }
 
-.cover-upload {
-  width: 120px;
-  height: 80px;
-}
-
-.cover-preview {
-  position: relative;
-  width: 120px;
-  height: 80px;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.cover-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.cover-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.cover-preview:hover .cover-overlay {
-  opacity: 1;
-}
-
-.upload-placeholder {
-  width: 120px;
-  height: 80px;
-  border: 2px dashed var(--border-color);
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: border-color 0.3s ease;
-}
-
-.upload-placeholder:hover {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-}
 
 .editor-toolbar,
 .chapter-editor-toolbar {
   margin-bottom: 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .form-tip {
@@ -2862,6 +3258,260 @@ const renderSimpleMarkdown = (content) => {
   border-radius: 4px;
   font-family: 'Monaco', 'Consolas', monospace;
   font-size: 0.9em;
+}
+
+/* 图片选择器样式 */
+.image-selector {
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.selector-toolbar {
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 15px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 10px 0;
+  flex: 1;
+}
+
+.image-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.3s ease;
+}
+
+.image-item:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  color: white;
+  padding: 10px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.image-item:hover .image-overlay {
+  opacity: 1;
+}
+
+.image-title {
+  font-size: 12px;
+  margin-bottom: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.image-actions .el-button {
+  padding: 2px 8px;
+  font-size: 11px;
+  height: auto;
+}
+
+.selector-pagination {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: center;
+}
+
+/* 注解功能样式 */
+.annotation-editor {
+  padding: 10px 0;
+}
+
+.selected-text {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border-left: 4px solid var(--accent-primary);
+}
+
+.selected-text label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.text-preview {
+  background: var(--bg-primary);
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-family: monospace;
+  word-break: break-all;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+/* 注解模式下的textarea样式 */
+.content-textarea.annotation-mode :deep(.el-textarea__inner) {
+  cursor: text;
+  user-select: text;
+}
+
+.content-textarea.annotation-mode :deep(.el-textarea__inner)::-moz-selection {
+  background: rgba(var(--accent-primary-rgb), 0.3);
+}
+
+.content-textarea.annotation-mode :deep(.el-textarea__inner)::selection {
+  background: rgba(var(--accent-primary-rgb), 0.3);
+}
+
+/* 文章中的注解样式（预览时使用） */
+:deep(.annotation) {
+  background: linear-gradient(120deg, #a8e6cf 0%, #dcedc1 100%);
+  padding: 2px 4px;
+  border-radius: 3px;
+  cursor: help;
+  border-bottom: 2px dotted var(--accent-primary);
+  position: relative;
+}
+
+:deep(.annotation[data-type="quote"]) {
+  background: linear-gradient(120deg, #ffd3a5 0%, #fd9853 100%);
+}
+
+:deep(.annotation[data-type="warning"]) {
+  background: linear-gradient(120deg, #ffeaa7 0%, #fab1a0 100%);
+}
+
+:deep(.annotation[data-type="tip"]) {
+  background: linear-gradient(120deg, #a8e6cf 0%, #88d8a3 100%);
+}
+
+/* 手机端优化样式 */
+.mobile-hidden {
+  display: none;
+}
+
+.mobile-optimized {
+  padding: 15px;
+}
+
+.mobile-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.mobile-toolbar .el-button {
+  padding: 6px 10px;
+  font-size: 12px;
+  min-width: auto;
+}
+
+.mobile-chapter-textarea :deep(.el-textarea__inner) {
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px;
+}
+
+/* 手机端章节编辑器样式 */
+@media (max-width: 768px) {
+  .chapter-editor.mobile-optimized {
+    background: var(--bg-primary);
+    border-radius: 8px;
+    margin: 10px 0;
+  }
+  
+  .chapter-editor.mobile-optimized .el-form-item__label {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  
+  .chapter-editor.mobile-optimized .el-input__inner {
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+  
+  .chapter-editor.mobile-optimized .el-textarea__inner {
+    font-size: 14px;
+    padding: 10px 12px;
+    line-height: 1.6;
+  }
+  
+  /* 手机端工具栏优化 */
+  .mobile-toolbar {
+    background: var(--bg-secondary);
+    padding: 8px;
+    border-radius: 6px;
+    justify-content: space-around;
+  }
+  
+  .mobile-toolbar .el-button {
+    flex: 1;
+    max-width: 80px;
+    padding: 8px 4px;
+    font-size: 11px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  
+  .mobile-toolbar .el-button .el-icon {
+    font-size: 16px;
+  }
+  
+  /* 隐藏桌面端总文章内容编辑器 */
+  .article-editor.mobile-hidden {
+    display: none !important;
+  }
+  
+  /* 手机端章节编辑时的内容区域样式优化 */
+  .chapter-editor.mobile-optimized .content-textarea {
+    border-radius: 8px;
+  }
+  
+  .chapter-editor.mobile-optimized .word-count-info {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 8px;
+    padding: 5px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+  }
 }
 </style>
 

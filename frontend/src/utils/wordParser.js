@@ -33,7 +33,7 @@ export class WordParser {
       return {
         title,
         slug,
-        contentMd: result.value,
+        contentHtml: result.value,
         originalFilename: file.name,
         fileSize: file.size,
         messages: result.messages // 解析过程中的消息

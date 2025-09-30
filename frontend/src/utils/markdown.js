@@ -1,8 +1,10 @@
 import { marked } from 'marked'
 import config from '@/config'
 
-// 配置marked
+// 配置marked - 让回车直接换行
 marked.setOptions({
+  breaks: true, // 让单个回车符直接换行
+  gfm: true, // 启用GitHub风格的Markdown
   highlight: function(code, lang) {
     if (typeof hljs !== 'undefined' && hljs.getLanguage(lang)) {
       try {
@@ -18,11 +20,14 @@ const renderer = new marked.Renderer()
 
 // 重写图片渲染方法
 renderer.image = function(href, title, text) {
+  // 确保href是字符串
+  const imageHref = typeof href === 'string' ? href : String(href || '')
+  
   // 处理相对路径的图片
-  let imageUrl = href
-  if (href && href.startsWith('/uploads/')) {
+  let imageUrl = imageHref
+  if (imageHref && imageHref.startsWith('/uploads/')) {
     // 如果是相对路径，转换为完整的URL
-    imageUrl = config.API_BASE_URL.replace('/api', '') + href
+    imageUrl = config.API_BASE_URL.replace('/api', '') + imageHref
   }
   
   return `<img src="${imageUrl}" alt="${text || ''}" title="${title || ''}" style="max-width: 100%; height: auto;" />`
@@ -38,7 +43,15 @@ marked.use({ renderer })
  */
 export function renderMarkdown(content) {
   if (!content) return ''
-  return marked(content)
+  
+  // 预处理内容，确保单个换行符能正确显示
+  let processedContent = content
+    // 将连续的空行保持为段落分隔
+    .replace(/\n\s*\n/g, '\n\n')
+    // 确保单个换行符在marked中能正确处理
+    .replace(/([^\n])\n([^\n])/g, '$1  \n$2')
+  
+  return marked(processedContent)
 }
 
 /**

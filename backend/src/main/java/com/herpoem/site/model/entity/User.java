@@ -25,6 +25,10 @@ public class User {
     
     private String email;
     
+    private String bio;
+    
+    private String avatarUrl;
+    
     @TableField("role")
     private UserRole role;
     

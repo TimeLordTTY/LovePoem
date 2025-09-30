@@ -40,10 +40,16 @@ public class PostChapter {
     private String title;
     
     /**
-     * 章节内容
+     * 章节内容（纯文本备份）
      */
     @TableField("content")
     private String content;
+    
+    /**
+     * 章节富文本HTML内容
+     */
+    @TableField("content_html")
+    private String contentHtml;
     
     /**
      * 章节背景说明

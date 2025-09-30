@@ -48,9 +48,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .authorities(Collections.emptyList()) // 简化处理，不设置具体权限
                     .build();
                 
-                // 创建认证对象
+                // 创建认证对象，将userId设置为principal
                 UsernamePasswordAuthenticationToken authentication = 
-                    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+                    new UsernamePasswordAuthenticationToken(userId.toString(), null, userDetails.getAuthorities());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 
                 // 设置到安全上下文

@@ -33,10 +33,15 @@ public class PostChapterDTO {
     private String title;
     
     /**
-     * 章节内容
+     * 章节内容（纯文本备份）
+     */
+    private String content;
+    
+    /**
+     * 章节富文本HTML内容
      */
     @NotBlank(message = "章节内容不能为空")
-    private String content;
+    private String contentHtml;
     
     /**
      * 章节背景说明

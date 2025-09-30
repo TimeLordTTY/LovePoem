@@ -93,8 +93,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         Post post = new Post();
         post.setTitle(postCreateDTO.getTitle());
         post.setSlug(generateSlug(postCreateDTO.getSlug(), postCreateDTO.getTitle()));
-        post.setContentMd(postCreateDTO.getContentMd());
-        post.setContentText(extractTextFromMarkdown(postCreateDTO.getContentMd()));
+        post.setContentHtml(postCreateDTO.getContentHtml());
         post.setSummary(postCreateDTO.getSummary());
         post.setPostTypeId(postCreateDTO.getPostTypeId());
         post.setSeriesId(postCreateDTO.getSeriesId());
@@ -152,8 +151,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         
         post.setTitle(postCreateDTO.getTitle());
         post.setSlug(generateSlug(postCreateDTO.getSlug(), postCreateDTO.getTitle()));
-        post.setContentMd(postCreateDTO.getContentMd());
-        post.setContentText(extractTextFromMarkdown(postCreateDTO.getContentMd()));
+        post.setContentHtml(postCreateDTO.getContentHtml());
         post.setSummary(postCreateDTO.getSummary());
         post.setPostTypeId(postCreateDTO.getPostTypeId());
         post.setSeriesId(postCreateDTO.getSeriesId());
@@ -306,20 +304,20 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
     }
     
     @Override
-    public String generateTableOfContents(String contentMd) {
-        if (!StringUtils.hasText(contentMd)) {
+    public String generateTableOfContents(String contentHtml) {
+        if (!StringUtils.hasText(contentHtml)) {
             return "[]";
         }
         
         List<TocItem> tocItems = new ArrayList<>();
-        Pattern pattern = Pattern.compile("^(#{1,6})\\s+(.+)$", Pattern.MULTILINE);
-        Matcher matcher = pattern.matcher(contentMd);
+        Pattern pattern = Pattern.compile("<h([1-6])[^>]*>([^<]+)</h[1-6]>", Pattern.CASE_INSENSITIVE);
+        Matcher matcher = pattern.matcher(contentHtml);
         
         int counter = 1;
         while (matcher.find()) {
-            String hashes = matcher.group(1);
+            String levelStr = matcher.group(1);
             String title = matcher.group(2);
-            int level = hashes.length();
+            int level = Integer.parseInt(levelStr);
             String id = "heading-" + counter++;
             
             TocItem item = new TocItem();
@@ -363,6 +361,29 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         
         // 直接使用SQL更新，确保null值能够被正确设置
         postMapper.updatePostSeries(postId, seriesId, userId);
+    }
+    
+    /**
+     * 置顶文章
+     */
+    @Override
+    @Transactional
+    public void topPost(Long postId, Long userId) {
+        Post post = postMapper.selectById(postId);
+        if (post == null) {
+            throw new RuntimeException("文章不存在");
+        }
+
+        // 获取当前最大排序值
+        Integer maxSortOrder = postMapper.selectMaxSortOrder();
+        if (maxSortOrder == null) {
+            maxSortOrder = 0;
+        }
+
+        // 将当前文章设置为最大值+1，确保它排在最前面
+        post.setSortOrder(maxSortOrder + 1);
+        post.setUpdatedBy(userId);
+        postMapper.updateById(post);
     }
     
     /**

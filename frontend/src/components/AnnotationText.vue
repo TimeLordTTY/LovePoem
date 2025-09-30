@@ -306,6 +306,10 @@ onMounted(() => {
 .text-preview {
   color: var(--text-primary);
   font-style: italic;
+  background: rgba(255, 235, 59, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
 }
 
 .annotation-popup {

@@ -8,6 +8,8 @@ import com.herpoem.site.model.vo.PostListVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 /**
  * 用户收藏Mapper接口
  * 
@@ -25,4 +27,12 @@ public interface UserFavoriteMapper extends BaseMapper<UserFavorite> {
      * 检查用户是否收藏了某篇文章
      */
     boolean checkUserFavorite(@Param("userId") Long userId, @Param("postId") Long postId);
+    
+    /**
+     * 查询用户收藏列表（包含文章信息）
+     */
+    List<com.herpoem.site.model.vo.UserFavoriteVO> selectUserFavoritesWithPostInfo(
+            @Param("userId") Long userId, 
+            @Param("offset") Integer offset, 
+            @Param("size") Integer size);
 } 

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herpoem.site.mapper.AssetMapper">
+    
+    <!-- 分页查询资源列表 -->
+    <select id="selectAssetPage" resultType="com.herpoem.site.model.vo.AssetVO">
+        SELECT 
+            id,
+            url,
+            type,
+            title,
+            created_at as createdAt
+        FROM asset
+        WHERE deleted = 0
+        <if test="type != null">
+            AND type = #{type}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (title LIKE CONCAT('%', #{keyword}, '%') 
+                 OR url LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY created_at DESC
+    </select>
+    
+    <!-- 根据URL查询资源 -->
+    <select id="selectByUrl" resultType="com.herpoem.site.model.entity.Asset">
+        SELECT id, url, type, title, created_at, deleted
+        FROM asset
+        WHERE url = #{url} AND deleted = 0
+        LIMIT 1
+    </select>
+    
+    <!-- 查询最近上传的图片 -->
+    <select id="selectRecentImages" resultType="com.herpoem.site.model.vo.AssetVO">
+        SELECT 
+            id,
+            url,
+            type,
+            title,
+            created_at as createdAt
+        FROM asset
+        WHERE deleted = 0 AND type = 'image'
+        ORDER BY created_at DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
+    </select>
+    
+</mapper>
+
+

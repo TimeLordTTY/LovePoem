@@ -31,9 +31,14 @@ public class PostChapterVO {
     private String title;
     
     /**
-     * 章节内容
+     * 章节内容（Markdown格式）
      */
     private String content;
+    
+    /**
+     * 章节富文本HTML内容
+     */
+    private String contentHtml;
     
     /**
      * 章节背景说明

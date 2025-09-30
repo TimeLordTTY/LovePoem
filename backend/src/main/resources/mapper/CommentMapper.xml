@@ -150,5 +150,23 @@
         </if>
         ORDER BY c.created_at DESC
     </select>
+    
+    <!-- 查询用户评论列表（包含文章信息） -->
+    <select id="selectUserCommentsWithPostInfo" resultType="com.herpoem.site.model.vo.UserCommentVO">
+        SELECT 
+            c.id,
+            c.content,
+            c.post_id as postId,
+            p.title as postTitle,
+            p.slug as postSlug,
+            c.created_at as createdAt
+        FROM comment c
+        INNER JOIN post p ON c.post_id = p.id
+        WHERE c.user_id = #{userId}
+        AND c.deleted = 0
+        AND p.deleted = 0
+        ORDER BY c.created_at DESC
+        LIMIT #{offset}, #{size}
+    </select>
 
 </mapper> 

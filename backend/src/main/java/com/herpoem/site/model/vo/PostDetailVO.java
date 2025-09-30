@@ -21,9 +21,7 @@ public class PostDetailVO {
     
     private String title;
     
-    private String contentMd;
-    
-    private String contentText;
+    private String contentHtml;
     
     private Long postTypeId;
     

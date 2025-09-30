@@ -130,11 +130,6 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public void changePassword(Long userId, ChangePasswordDTO changePasswordDTO) {
-        // 验证新密码确认
-        if (!changePasswordDTO.getNewPassword().equals(changePasswordDTO.getConfirmPassword())) {
-            throw new RuntimeException("两次输入的新密码不一致");
-        }
-        
         // 获取用户信息
         User user = userMapper.selectById(userId);
         if (user == null) {
@@ -142,7 +137,7 @@ public class AuthServiceImpl implements AuthService {
         }
         
         // 验证原密码
-        if (!passwordEncoder.matches(changePasswordDTO.getOldPassword(), user.getPasswordHash())) {
+        if (!passwordEncoder.matches(changePasswordDTO.getCurrentPassword(), user.getPasswordHash())) {
             throw new RuntimeException("原密码错误");
         }
         

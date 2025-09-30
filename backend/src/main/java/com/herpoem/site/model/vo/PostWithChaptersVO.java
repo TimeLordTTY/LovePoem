@@ -36,9 +36,9 @@ public class PostWithChaptersVO {
     private String preChapterContent;
     
     /**
-     * 文章内容（当没有章节时）
+     * 富文本HTML内容（当没有章节时）
      */
-    private String contentMd;
+    private String contentHtml;
     
     /**
      * 所属系列ID

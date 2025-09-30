@@ -35,9 +35,9 @@ public class ChapterContentVO {
     private String postTitle;
     
     /**
-     * 文章内容（Markdown）
+     * 文章内容（HTML）
      */
-    private String contentMd;
+    private String contentHtml;
     
     /**
      * 文章摘要

@@ -120,7 +120,7 @@
             </el-form-item>
             
             <el-form-item>
-              <el-button type="primary" @click="changePassword" :loading="changingPassword">
+                <el-button type="primary" @click="changeUserPassword" :loading="changingPassword">
                 修改密码
               </el-button>
             </el-form-item>
@@ -165,7 +165,7 @@
                   size="small" 
                   type="danger" 
                   text
-                  @click="removeFavorite(favorite.id)"
+                  @click="removeUserFavorite(favorite.postId)"
                 >
                   <el-icon><Delete /></el-icon>
                   取消收藏
@@ -238,6 +238,16 @@ import {
   Delete 
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
+import { 
+  getUserProfile, 
+  updateUserProfile, 
+  uploadAvatar, 
+  changePassword,
+  getUserFavorites,
+  removeFavorite,
+  getUserComments,
+  deleteUserComment
+} from '@/api/user'
 
 const authStore = useAuthStore()
 
@@ -291,56 +301,51 @@ const passwordRules = {
 // 方法
 const loadUserProfile = async () => {
   try {
-    // TODO: 调用API获取用户信息
-    // const response = await getUserProfile()
-    // Object.assign(userForm, response.data)
-    
-    // 临时使用mock数据
+    const response = await getUserProfile()
+    Object.assign(userForm, response.data)
+  } catch (error) {
+    console.error('加载用户信息失败:', error)
+    ElMessage.error('加载用户信息失败')
+    // 使用默认数据作为fallback
     Object.assign(userForm, {
       displayName: authStore.user?.displayName || '用户',
       email: authStore.user?.email || 'user@example.com',
       bio: '这个人很懒，什么都没有写...',
       avatarUrl: ''
     })
-  } catch (error) {
-    ElMessage.error('加载用户信息失败')
   }
 }
 
 const loadUserFavorites = async () => {
   try {
-    // TODO: 调用API获取用户收藏
-    // const response = await getUserFavorites()
-    // favorites.value = response.data
-    
-    // 临时使用mock数据
-    favorites.value = []
+    const response = await getUserFavorites()
+    favorites.value = response.data || []
   } catch (error) {
+    console.error('加载收藏列表失败:', error)
     ElMessage.error('加载收藏列表失败')
+    favorites.value = []
   }
 }
 
 const loadUserComments = async () => {
   try {
-    // TODO: 调用API获取用户评论
-    // const response = await getUserComments()
-    // comments.value = response.data
-    
-    // 临时使用mock数据
-    comments.value = []
+    const response = await getUserComments()
+    comments.value = response.data || []
   } catch (error) {
+    console.error('加载评论列表失败:', error)
     ElMessage.error('加载评论列表失败')
+    comments.value = []
   }
 }
 
 const handleAvatarUpload = async (file) => {
   try {
-    // TODO: 实现头像上传
-    // const response = await uploadAvatar(file)
-    // userForm.avatarUrl = response.data.url
+    const response = await uploadAvatar(file)
+    userForm.avatarUrl = response.data
     ElMessage.success('头像上传成功')
     return false // 阻止默认上传行为
   } catch (error) {
+    console.error('头像上传失败:', error)
     ElMessage.error('头像上传失败')
     return false
   }
@@ -349,26 +354,25 @@ const handleAvatarUpload = async (file) => {
 const updateProfile = async () => {
   try {
     updating.value = true
-    // TODO: 调用API更新用户信息
-    // await updateUserProfile(userForm)
+    await updateUserProfile(userForm)
     ElMessage.success('个人信息更新成功')
   } catch (error) {
+    console.error('更新失败:', error)
     ElMessage.error('更新失败：' + (error.message || error))
   } finally {
     updating.value = false
   }
 }
 
-const changePassword = async () => {
+const changeUserPassword = async () => {
   try {
     await passwordFormRef.value.validate()
     
     changingPassword.value = true
-    // TODO: 调用API修改密码
-    // await changeUserPassword({
-    //   currentPassword: passwordForm.currentPassword,
-    //   newPassword: passwordForm.newPassword
-    // })
+    await changePassword({
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword
+    })
     
     ElMessage.success('密码修改成功')
     
@@ -379,15 +383,14 @@ const changePassword = async () => {
       confirmPassword: ''
     })
   } catch (error) {
-    if (error.message) {
-      ElMessage.error('密码修改失败：' + error.message)
-    }
+    console.error('密码修改失败:', error)
+    ElMessage.error('密码修改失败：' + (error.message || error))
   } finally {
     changingPassword.value = false
   }
 }
 
-const removeFavorite = async (favoriteId) => {
+const removeUserFavorite = async (favoriteId) => {
   try {
     await ElMessageBox.confirm('确定要取消收藏这篇文章吗？', '提示', {
       confirmButtonText: '确定',
@@ -395,13 +398,12 @@ const removeFavorite = async (favoriteId) => {
       type: 'warning'
     })
     
-    // TODO: 调用API取消收藏
-    // await removeFavoritePost(favoriteId)
-    
-    favorites.value = favorites.value.filter(f => f.id !== favoriteId)
+    await removeFavorite(favoriteId)
+    favorites.value = favorites.value.filter(f => f.postId !== favoriteId)
     ElMessage.success('已取消收藏')
   } catch (error) {
     if (error !== 'cancel') {
+      console.error('取消收藏失败:', error)
       ElMessage.error('操作失败')
     }
   }
@@ -415,13 +417,12 @@ const deleteComment = async (commentId) => {
       type: 'warning'
     })
     
-    // TODO: 调用API删除评论
-    // await deleteUserComment(commentId)
-    
+    await deleteUserComment(commentId)
     comments.value = comments.value.filter(c => c.id !== commentId)
     ElMessage.success('评论已删除')
   } catch (error) {
     if (error !== 'cancel') {
+      console.error('删除评论失败:', error)
       ElMessage.error('删除失败')
     }
   }

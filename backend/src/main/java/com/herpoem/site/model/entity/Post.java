@@ -24,9 +24,10 @@ public class Post {
     
     private String title;
     
-    private String contentMd;
-    
-    private String contentText;
+    /**
+     * 富文本HTML内容
+     */
+    private String contentHtml;
     
     /**
      * 作者自述（文章摘要）

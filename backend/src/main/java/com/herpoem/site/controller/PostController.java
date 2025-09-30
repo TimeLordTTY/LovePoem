@@ -17,13 +17,13 @@ import java.util.Map;
 
 /**
  * 文章控制器
- *
+ * 
  * @author TimeLord
  */
 @RestController
 @RequestMapping("/api/posts")
 @RequiredArgsConstructor
-public class PostController {
+public class PostController extends BaseController {
     
     private final PostService postService;
     
@@ -88,12 +88,11 @@ public class PostController {
     public Result<Long> createPost(@Valid @RequestBody PostCreateDTO postCreateDTO) {
         // 自定义验证：如果没有启用章节，内容不能为空
         if (!Boolean.TRUE.equals(postCreateDTO.getHasChapters()) && 
-            (postCreateDTO.getContentMd() == null || postCreateDTO.getContentMd().trim().isEmpty())) {
+            (postCreateDTO.getContentHtml() == null || postCreateDTO.getContentHtml().trim().isEmpty())) {
             return Result.error("文章内容不能为空");
         }
         
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         Long postId = postService.createPost(postCreateDTO, userId);
         return Result.success(postId);
@@ -108,12 +107,11 @@ public class PostController {
         // 自定义验证：只有在没有启用章节且状态为PUBLISHED时，内容才不能为空
         if (!Boolean.TRUE.equals(postCreateDTO.getHasChapters()) && 
             "PUBLISHED".equals(postCreateDTO.getStatus()) &&
-            (postCreateDTO.getContentMd() == null || postCreateDTO.getContentMd().trim().isEmpty())) {
+            (postCreateDTO.getContentHtml() == null || postCreateDTO.getContentHtml().trim().isEmpty())) {
             return Result.error("发布的文章内容不能为空");
         }
         
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         postService.updatePost(id, postCreateDTO, userId);
         return Result.success(id);
@@ -124,8 +122,7 @@ public class PostController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> deletePost(@PathVariable Long id) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         postService.deletePost(id, userId);
         return Result.success();
@@ -136,10 +133,20 @@ public class PostController {
      */
     @PostMapping("/{id}/publish")
     public Result<Void> publishPost(@PathVariable Long id) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         postService.publishPost(id, userId);
+        return Result.success();
+    }
+    
+    /**
+     * 置顶文章
+     */
+    @PutMapping("/{id}/top")
+    public Result<Void> topPost(@PathVariable Long id) {
+        Long userId = getCurrentUserId();
+        
+        postService.topPost(id, userId);
         return Result.success();
     }
     
@@ -148,8 +155,7 @@ public class PostController {
      */
     @PutMapping("/{id}/toggle-status")
     public Result<String> toggleStatus(@PathVariable Long id) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         try {
             // 获取当前文章状态
@@ -181,8 +187,7 @@ public class PostController {
      */
     @PutMapping("/{id}/toggle-visibility")
     public Result<String> toggleVisibility(@PathVariable Long id) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         try {
             // 获取当前文章
@@ -208,8 +213,7 @@ public class PostController {
      */
     @PutMapping("/batch-publish")
     public Result<String> batchPublish(@RequestBody List<Long> postIds) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         if (postIds == null || postIds.isEmpty()) {
             return Result.error("请选择要发布的文章");
@@ -245,8 +249,7 @@ public class PostController {
     @PostMapping("/{id}/visibility")
     public Result<Void> updateVisibility(@PathVariable Long id, 
                                         @RequestBody Post.Visibility visibility) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         postService.updateVisibility(id, visibility, userId);
         return Result.success();
@@ -258,8 +261,7 @@ public class PostController {
     @PostMapping("/{id}/sort-order")
     public Result<Void> updateSortOrder(@PathVariable Long id, 
                                        @RequestBody Map<String, Integer> request) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         Integer sortOrder = request.get("sortOrder");
         if (sortOrder == null) {
@@ -275,8 +277,7 @@ public class PostController {
      */
     @PostMapping("/batch-sort")
     public Result<Void> batchUpdateSortOrder(@RequestBody List<Long> postIds) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         if (postIds == null || postIds.isEmpty()) {
             return Result.error("请选择要排序的文章");
@@ -291,12 +292,12 @@ public class PostController {
      */
     @PostMapping("/generate-toc")
     public Result<String> generateTableOfContents(@RequestBody Map<String, String> request) {
-        String contentMd = request.get("contentMd");
-        if (contentMd == null) {
+        String contentHtml = request.get("contentHtml");
+        if (contentHtml == null) {
             return Result.error("文章内容不能为空");
         }
         
-        String toc = postService.generateTableOfContents(contentMd);
+        String toc = postService.generateTableOfContents(contentHtml);
         return Result.success(toc);
     }
     
@@ -314,8 +315,7 @@ public class PostController {
      */
     @PutMapping("/{id}/series")
     public Result<Void> updatePostSeries(@PathVariable Long id, @RequestBody Map<String, Long> request) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         Long seriesId = request.get("seriesId");
         postService.updatePostSeries(id, seriesId, userId);

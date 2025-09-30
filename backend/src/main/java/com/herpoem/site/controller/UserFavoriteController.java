@@ -17,7 +17,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/favorites")
 @RequiredArgsConstructor
-public class UserFavoriteController {
+public class UserFavoriteController extends BaseController {
     
     private final UserFavoriteService userFavoriteService;
     
@@ -26,8 +26,7 @@ public class UserFavoriteController {
      */
     @PostMapping("/{postId}")
     public Result<Void> addFavorite(@PathVariable Long postId) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         try {
             userFavoriteService.addFavorite(userId, postId);
@@ -42,8 +41,7 @@ public class UserFavoriteController {
      */
     @DeleteMapping("/{postId}")
     public Result<Void> removeFavorite(@PathVariable Long postId) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         userFavoriteService.removeFavorite(userId, postId);
         return Result.success();
@@ -54,8 +52,7 @@ public class UserFavoriteController {
      */
     @GetMapping("/{postId}/check")
     public Result<Map<String, Boolean>> checkFavorite(@PathVariable Long postId) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         boolean isFavorited = userFavoriteService.isFavorited(userId, postId);
         return Result.success(Map.of("isFavorited", isFavorited));
@@ -68,8 +65,7 @@ public class UserFavoriteController {
     public Result<PageResult<PostListVO>> getUserFavorites(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size) {
-        // TODO: 从JWT token中获取用户ID
-        Long userId = 2L; // 临时硬编码，实际应从认证信息中获取
+        Long userId = getCurrentUserId();
         
         PageResult<PostListVO> result = userFavoriteService.getUserFavorites(userId, page, size);
         return Result.success(result);

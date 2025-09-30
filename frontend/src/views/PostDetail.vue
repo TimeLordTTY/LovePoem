@@ -49,227 +49,111 @@
         <p v-if="post.summary" class="post-summary">{{ post.summary }}</p>
       </div>
 
-      <!-- 有章节的文章 -->
-      <div v-if="post.hasChapters" class="chaptered-post">
-        <!-- 桌面端布局 -->
-        <div class="desktop-layout">
-          <!-- 左侧目录 -->
-          <div class="toc-sidebar">
-            <div class="toc-header">
-              <h3>目录</h3>
-            </div>
-            <div class="toc-content">
-              <!-- 章节前内容 -->
-              <div v-if="post.preChapterContent" class="toc-item pre-chapter" @click="scrollToPreChapter">
+      <!-- 书页式阅读布局 -->
+      <div class="book-reader">
+        <!-- 左侧目录 -->
+        <div v-if="post.hasChapters || needsPagination" class="toc-sidebar">
+          <div class="toc-header">
+            <h3>{{ post.hasChapters ? '目录' : '页面导航' }}</h3>
+          </div>
+          <div class="toc-content">
+            <!-- 章节目录 -->
+            <div v-if="post.hasChapters">
+              <!-- 引言 -->
+              <div v-if="post.preChapterContent" class="toc-item" 
+                   :class="{ active: currentPageInfo?.title === '引言' }"
+                   @click="goToChapterFirstPage('引言')">
                 <span class="toc-title">引言</span>
               </div>
               
-              <!-- 章节目录 -->
-              <div v-for="chapter in post.chapters" :key="chapter.id" class="toc-chapter">
-                <div 
-                  class="toc-item chapter-item"
-                  :class="{ active: currentChapterId === chapter.id }"
-                  @click="scrollToChapter(chapter.id)"
-                >
-                  <span class="toc-title">{{ chapter.title }}</span>
-                </div>
-                
-                <!-- 子节 -->
-                <div v-if="chapter.children && chapter.children.length > 0" class="toc-sections">
-                  <div 
-                    v-for="section in chapter.children" 
-                    :key="section.id"
-                    class="toc-item section-item"
-                    :class="{ active: currentChapterId === section.id }"
-                    @click="scrollToChapter(section.id)"
-                  >
-                    <span class="toc-title">{{ section.title }}</span>
-                  </div>
-                </div>
+              <!-- 章节列表 -->
+              <div v-for="chapter in flattenedChapters" :key="chapter.id" class="toc-item"
+                   :class="{ active: currentPageInfo?.chapterId === chapter.id }"
+                   @click="goToChapterFirstPage(chapter.id)">
+                <span class="toc-title">{{ chapter.title }}</span>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- 右侧内容 -->
-          <div class="content-area">
-            <!-- 文章内容 -->
-            <div v-if="!post.hasChapters && post.contentMd" class="post-content">
+        <!-- 右侧内容区域 -->
+        <div class="content-area">
+          <!-- 当前页面内容 -->
+          <div class="page-container">
+            <!-- 页面标题 -->
+            <div v-if="currentPageInfo?.title" class="page-header">
+              <h2 class="page-title">{{ currentPageInfo.title }}</h2>
+              <div v-if="currentPageInfo?.isFirstPage && currentPageInfo?.chapterId" class="chapter-indicator">
+                第{{ getChapterIndex(currentPageInfo.chapterId) }}章
+              </div>
+            </div>
+
+            <!-- 页面内容 -->
+            <div class="page-content">
               <AnnotationText 
-                :content="renderedContent" 
+                :content="currentPageContent" 
                 :post-id="post.id"
                 :editable="authStore.isLoggedIn"
                 @annotation-added="handleAnnotationAdded"
               />
             </div>
+          </div>
 
-            <!-- 章节前内容 -->
-            <div 
-              v-if="post.hasChapters && post.preChapterContent" 
-              ref="preChapterRef" 
-              id="pre-chapter"
-              class="pre-chapter-content"
-            >
-              <h3 class="chapter-title">引言</h3>
-              <AnnotationText 
-                :content="post.preChapterContent" 
-                :post-id="post.id"
-                :editable="authStore.isLoggedIn"
-                @annotation-added="handleAnnotationAdded"
-              />
-            </div>
-
-            <!-- 章节内容 -->
-            <div 
-              v-for="chapter in flattenedChapters" 
-              :key="chapter.id" 
-              :ref="el => setChapterRef(el, chapter.id)" 
-              :data-chapter-id="chapter.id"
-              class="chapter-content"
-            >
-              <!-- 章节背景 -->
-              <div v-if="chapter.backgroundText" class="chapter-background">
-                <h4>背景说明</h4>
-                <AnnotationText 
-                  :content="chapter.backgroundText" 
-                  :post-id="post.id"
-                  :editable="authStore.isLoggedIn"
-                  @annotation-added="handleAnnotationAdded"
-                />
-              </div>
-
-              <!-- 章节标题 -->
-              <h3 :id="`chapter-${chapter.id}`" class="chapter-title">
-                {{ getChapterTitle(chapter) }}
-              </h3>
-
-              <!-- 章节正文 -->
-              <div class="chapter-text">
-                <AnnotationText 
-                  :content="chapter.content" 
-                  :post-id="post.id"
-                  :editable="authStore.isLoggedIn"
-                  @annotation-added="handleAnnotationAdded"
-                />
-              </div>
-            </div>
-
-            <!-- 章节导航 -->
-            <div class="chapter-navigation">
+          <!-- 底部分页导航 -->
+          <div v-if="needsPagination" class="page-navigation">
+            <div class="page-nav-controls">
               <el-button 
-                v-if="prevChapter" 
-                @click="goToChapter(prevChapter.id)"
-                class="nav-btn prev-btn"
+                v-if="currentPage > 1"
+                @click="goToPage(currentPage - 1)"
+                class="page-nav-btn"
+                type="primary"
+                plain
               >
                 <el-icon><ArrowLeft /></el-icon>
-                上一章: {{ prevChapter.title }}
+                上一页
               </el-button>
               
+              <div class="page-info">
+                <span class="page-current">第 {{ currentPage }} 页</span>
+                <span class="page-separator">/</span>
+                <span class="page-total">共 {{ totalPages }} 页</span>
+              </div>
+              
               <el-button 
-                v-if="nextChapter" 
-                @click="goToChapter(nextChapter.id)"
-                class="nav-btn next-btn"
+                v-if="currentPage < totalPages"
+                @click="goToPage(currentPage + 1)"
+                class="page-nav-btn"
+                type="primary"
+                plain
               >
-                下一章: {{ nextChapter.title }}
+                下一页
                 <el-icon><ArrowRight /></el-icon>
               </el-button>
             </div>
-          </div>
-        </div>
-
-        <!-- 移动端布局 -->
-        <div class="mobile-layout">
-          <!-- 顶部章节导航 -->
-          <div class="mobile-chapter-nav">
-            <el-button @click="showMobileToc = true" class="toc-btn">
-              <el-icon><List /></el-icon>
-              目录
-            </el-button>
-            <span class="current-chapter">{{ currentChapterTitle }}</span>
-          </div>
-
-          <!-- 内容区域 -->
-          <div class="mobile-content">
-            <!-- 章节前内容 -->
-            <div v-if="post.preChapterContent && currentChapterId === 'pre'" class="content-block">
-              <h2>引言</h2>
-              <div class="content-text" v-html="formatContent(post.preChapterContent)"></div>
-            </div>
-
-            <!-- 当前章节内容 -->
-            <div v-else-if="currentChapterData" class="content-block">
-              <div v-if="currentChapterData.backgroundText" class="chapter-background">
-                <div class="background-text" v-html="formatContent(currentChapterData.backgroundText)"></div>
-              </div>
-              
-              <h2 class="chapter-title">{{ currentChapterData.title }}</h2>
-              <div class="content-text" v-html="formatContent(currentChapterData.content)"></div>
-            </div>
-          </div>
-
-          <!-- 底部章节导航 -->
-          <div class="mobile-chapter-footer">
-            <el-button 
-              v-if="prevChapter" 
-              @click="goToChapter(prevChapter.id)"
-              class="nav-btn"
-              size="small"
-            >
-              <el-icon><ArrowLeft /></el-icon>
-              上一章
-            </el-button>
             
-            <el-button @click="showMobileToc = true" class="toc-btn" size="small">
-              <el-icon><List /></el-icon>
-              目录
-            </el-button>
-            
-            <el-button 
-              v-if="nextChapter" 
-              @click="goToChapter(nextChapter.id)"
-              class="nav-btn"
-              size="small"
-            >
-              下一章
-              <el-icon><ArrowRight /></el-icon>
-            </el-button>
-          </div>
-        </div>
-
-        <!-- 移动端目录抽屉 -->
-        <el-drawer v-model="showMobileToc" title="目录" direction="ltr" size="300px">
-          <div class="mobile-toc">
-            <div v-if="post.preChapterContent" class="toc-item pre-chapter" @click="goToChapter('pre')">
-              <span class="toc-title">引言</span>
-            </div>
-            
-            <div v-for="chapter in post.chapters" :key="chapter.id" class="toc-chapter">
-              <div 
-                class="toc-item chapter-item"
-                :class="{ active: currentChapterId === chapter.id }"
-                @click="goToChapter(chapter.id)"
+            <!-- 页码跳转 -->
+            <div class="page-jump">
+              <span>跳转到第</span>
+              <el-input-number
+                v-model="tempPageNumber"
+                :min="1"
+                :max="totalPages"
+                size="small"
+                style="width: 80px; margin: 0 8px;"
+                @keyup.enter="jumpToPage"
+              />
+              <span>页</span>
+              <el-button 
+                size="small" 
+                type="primary" 
+                @click="jumpToPage"
+                style="margin-left: 8px;"
               >
-                <span class="toc-title">{{ chapter.title }}</span>
-              </div>
-              
-              <div v-if="chapter.children && chapter.children.length > 0" class="toc-sections">
-                <div 
-                  v-for="section in chapter.children" 
-                  :key="section.id"
-                  class="toc-item section-item"
-                  :class="{ active: currentChapterId === section.id }"
-                  @click="goToChapter(section.id)"
-                >
-                  <span class="toc-title">{{ section.title }}</span>
-                </div>
-              </div>
+                跳转
+              </el-button>
             </div>
           </div>
-        </el-drawer>
-      </div>
-
-      <!-- 普通文章 -->
-      <div v-else class="regular-post">
-        <div class="content-text" v-html="formatContent(post.contentMd)"></div>
+        </div>
       </div>
     </div>
 
@@ -433,6 +317,12 @@ const chapterRefs = reactive({})
 const preChapterRef = ref(null)
 const isFavorited = ref(false)
 
+// 分页相关数据
+const currentPage = ref(1)
+const wordsPerPage = ref(600) // 每页字数限制（进一步降低以确保无滚动条）
+const allPages = ref([]) // 所有页面的内容数组
+const tempPageNumber = ref(1) // 临时页码输入
+
 // 评论和催更相关数据
 const showCommentForm = ref(false)
 const comments = ref([])
@@ -468,10 +358,178 @@ const flattenedChapters = computed(() => {
   return flattened
 })
 
+// 生成所有页面内容
+const generateAllPages = () => {
+  const pages = []
+  
+  if (post.value?.hasChapters) {
+    // 带章节的文章
+    
+    // 添加引言页面
+    if (post.value.preChapterContent) {
+      // 为引言添加特殊样式，并处理换行
+      let prefaceContent = post.value.preChapterContent
+      // 将换行符转换为HTML换行标签
+      prefaceContent = prefaceContent.replace(/\n/g, '<br>')
+      const styledPreface = `<div class="preface-content" style="font-style: italic; color: #555; line-height: 1.8; padding: 20px; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 8px; border-left: 4px solid #6c757d; margin-bottom: 20px;">${prefaceContent}</div>`
+      const prePages = splitContent(styledPreface, '引言', null, 'preface')
+      pages.push(...prePages)
+    }
+    
+    // 添加章节页面
+    flattenedChapters.value.forEach(chapter => {
+      // 组合背景说明和章节内容
+      let combinedContent = ''
+      
+      // 添加背景说明（斜体样式）
+      if (chapter.backgroundText) {
+        // 处理背景说明的换行
+        let backgroundText = chapter.backgroundText.replace(/\n/g, '<br>')
+        combinedContent += `<div class="chapter-background-text" style="font-style: italic; color: #666; margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-left: 4px solid #007bff; border-radius: 4px;">${backgroundText}</div>`
+      }
+      
+      // 添加章节正文内容
+      const mainContent = chapter.contentHtml || chapter.content || ''
+      if (mainContent) {
+        combinedContent += mainContent
+      }
+      
+      if (combinedContent) {
+        const chapterPages = splitContent(combinedContent, chapter.title, chapter.id, 'chapter')
+        pages.push(...chapterPages)
+      }
+    })
+    
+  } else {
+    // 普通文章
+    let content = post.value?.contentHtml || ''
+    if (content) {
+      // 如果内容不包含HTML标签，处理换行
+      if (!content.includes('<')) {
+        content = content.replace(/\n/g, '<br>')
+      }
+      const regularPages = splitContent(content, post.value?.title || '文章', null, 'article')
+      pages.push(...regularPages)
+    }
+  }
+  
+  return pages
+}
+
+// 分割内容为页面
+const splitContent = (content, title, chapterId = null, contentType = 'article') => {
+  if (!content) return []
+  
+  // 提取纯文本用于分页计算
+  let textContent = content
+  if (content.includes('<')) {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = content
+    textContent = tempDiv.textContent || tempDiv.innerText || ''
+  }
+  
+  const pages = []
+  let startIndex = 0
+  let pageNumber = 1
+  
+  // 如果内容很短，直接作为一页
+  if (textContent.length <= wordsPerPage.value) {
+    pages.push({
+      content: content,
+      title: title,
+      chapterId: chapterId,
+      pageNumber: 1,
+      isFirstPage: true,
+      contentType: contentType
+    })
+    return pages
+  }
+  
+  while (startIndex < textContent.length) {
+    let endIndex = startIndex + wordsPerPage.value
+    
+    // 智能断页：在合适的位置断开
+    if (endIndex < textContent.length) {
+      let breakPoint = endIndex
+      for (let i = endIndex; i >= startIndex + wordsPerPage.value * 0.8; i--) {
+        if (textContent[i] === '\n' && textContent[i + 1] === '\n') {
+          breakPoint = i + 2
+          break
+        } else if (textContent[i] === '。' || textContent[i] === '！' || textContent[i] === '？') {
+          breakPoint = i + 1
+          break
+        }
+      }
+      endIndex = breakPoint
+    }
+    
+    // 对应的HTML内容片段
+    let pageContent
+    if (content.includes('<')) {
+      const ratio = endIndex / textContent.length
+      const htmlStartIndex = Math.floor(startIndex * content.length / textContent.length)
+      const htmlEndIndex = Math.min(content.length, Math.floor(endIndex * content.length / textContent.length))
+      pageContent = content.substring(htmlStartIndex, htmlEndIndex).trim()
+    } else {
+      pageContent = textContent.substring(startIndex, endIndex).trim()
+    }
+    
+    if (pageContent) {
+      pages.push({
+        content: pageContent,
+        title: title,
+        chapterId: chapterId,
+        pageNumber: pageNumber,
+        isFirstPage: pageNumber === 1,
+        contentType: contentType
+      })
+      pageNumber++
+    }
+    
+    startIndex = endIndex
+  }
+  
+  return pages
+}
+
+// 计算所有页面
+const allPagesComputed = computed(() => {
+  if (!post.value) return []
+  const pages = generateAllPages()
+  return pages
+})
+
+// 总页数
+const totalPages = computed(() => {
+  return Math.max(1, allPagesComputed.value.length)
+})
+
+// 当前页内容
+const currentPageContent = computed(() => {
+  const pages = allPagesComputed.value
+  if (pages.length === 0) return ''
+  
+  const page = pages[currentPage.value - 1]
+  return page ? page.content : ''
+})
+
+// 当前页信息
+const currentPageInfo = computed(() => {
+  const pages = allPagesComputed.value
+  if (pages.length === 0) return null
+  
+  return pages[currentPage.value - 1] || null
+})
+
+// 是否需要分页
+const needsPagination = computed(() => {
+  return allPagesComputed.value.length > 1
+})
+
 // 计算总阅读时间（包含所有章节）
 const totalReadingTime = computed(() => {
   if (!post.value?.hasChapters) {
-    return post.value?.readingTime || Math.ceil(countWords(post.value?.contentMd || '') / 200) || 1
+    return post.value?.readingTime || Math.ceil(countWords(post.value?.contentHtml || '') / 200) || 1
   }
   
   let totalWords = 0
@@ -520,29 +578,6 @@ const countWords = (text) => {
   return chineseChars + englishWords
 }
 
-const currentChapterData = computed(() => {
-  if (currentChapterId.value === 'pre') {
-    return { title: '引言', content: post.value?.preChapterContent }
-  }
-  return flattenedChapters.value.find(c => c.id === currentChapterId.value)
-})
-
-const currentChapterTitle = computed(() => {
-  if (currentChapterId.value === 'pre') return '引言'
-  return currentChapterData.value?.title || ''
-})
-
-const prevChapter = computed(() => {
-  const flattened = flattenedChapters.value
-  const currentIndex = flattened.findIndex(c => c.id === currentChapterId.value)
-  return currentIndex > 0 ? flattened[currentIndex - 1] : null
-})
-
-const nextChapter = computed(() => {
-  const flattened = flattenedChapters.value
-  const currentIndex = flattened.findIndex(c => c.id === currentChapterId.value)
-  return currentIndex >= 0 && currentIndex < flattened.length - 1 ? flattened[currentIndex + 1] : null
-})
 
 // 检查收藏状态
 const checkFavoriteStatus = async () => {
@@ -594,22 +629,30 @@ onMounted(async () => {
   // 等待DOM更新后再设置章节跳转
   await nextTick()
   
-  // 如果URL中有章节ID，滚动到对应位置
+  // 如果URL中有hash，处理章节或页面跳转
   if (route.hash) {
-    const chapterId = route.hash.replace('#', '')
-    setTimeout(() => scrollToChapter(chapterId), 500) // 延迟执行确保DOM已渲染
-  } else if (post.value?.hasChapters) {
-    // 默认显示引言或第一章
-    setTimeout(() => {
-      if (post.value.preChapterContent) {
-        currentChapterId.value = 'pre'
-        scrollToChapter('pre')
-      } else if (flattenedChapters.value.length > 0) {
-        const firstChapter = flattenedChapters.value[0]
-        currentChapterId.value = firstChapter.id
-        scrollToChapter(firstChapter.id)
+    const hashValue = route.hash.replace('#', '')
+    
+    if (hashValue.includes('-page-')) {
+      // 处理章节分页跳转 (格式: chapterId-page-pageNumber)
+      const [chapterId, , pageNumber] = hashValue.split('-')
+      const pageNum = parseInt(pageNumber)
+      if (chapterId && pageNum > 0) {
+        setTimeout(() => goToChapterPage(chapterId, pageNum), 500)
       }
-    }, 500)
+    } else if (hashValue.startsWith('page-')) {
+      // 处理普通文章页面跳转
+      const pageNumber = parseInt(hashValue.replace('page-', ''))
+      if (pageNumber > 0 && totalPages.value > 0) {
+        setTimeout(() => goToPage(pageNumber), 500)
+      }
+    } else {
+      // 处理章节跳转
+      setTimeout(() => scrollToChapter(hashValue), 500)
+    }
+  } else {
+    // 默认显示第一页
+    currentPage.value = 1
   }
 })
 
@@ -664,31 +707,71 @@ const scrollToChapter = (chapterId) => {
   console.log('Scrolling to chapter:', chapterId)
   console.log('Available chapter refs:', Object.keys(chapterRefs))
   
+  let targetElement = null
+  
   if (chapterId === 'pre') {
-    if (preChapterRef.value) {
-      preChapterRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      currentChapterId.value = 'pre'
-    } else {
-      console.warn('Pre-chapter ref not found')
+    targetElement = preChapterRef.value
+    if (!targetElement) {
+      // 备用方案：通过ID查找
+      targetElement = document.getElementById('pre-chapter')
     }
-  } else if (chapterRefs[chapterId]) {
-    chapterRefs[chapterId].scrollIntoView({ behavior: 'smooth', block: 'start' })
-    currentChapterId.value = chapterId
   } else {
-    console.warn('Chapter ref not found for:', chapterId)
-    // 尝试通过DOM选择器查找
-    const element = document.querySelector(`[data-chapter-id="${chapterId}"]`)
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      currentChapterId.value = chapterId
+    // 首先尝试使用ref
+    targetElement = chapterRefs[chapterId]
+    
+    if (!targetElement) {
+      // 备用方案1：通过data-chapter-id属性查找
+      targetElement = document.querySelector(`[data-chapter-id="${chapterId}"]`)
+    }
+    
+    if (!targetElement) {
+      // 备用方案2：通过章节内容ID查找
+      targetElement = document.getElementById(`chapter-content-${chapterId}`)
+    }
+    
+    if (!targetElement) {
+      // 备用方案3：通过章节标题ID查找
+      targetElement = document.getElementById(`chapter-${chapterId}`)
+    }
+    
+    if (!targetElement) {
+      // 备用方案4：等待DOM更新后再次尝试
+      setTimeout(() => {
+        const element = document.querySelector(`[data-chapter-id="${chapterId}"]`) || 
+                      document.getElementById(`chapter-content-${chapterId}`) ||
+                      document.getElementById(`chapter-${chapterId}`)
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          currentChapterId.value = chapterId
+          // 移动端关闭目录
+          showMobileToc.value = false
+          // 更新URL
+          router.replace({ hash: `#${chapterId}` })
+        } else {
+          console.error('Chapter element not found after retry:', chapterId)
+        }
+      }, 100)
+      return
     }
   }
   
-  // 移动端关闭目录
-  showMobileToc.value = false
-  
-  // 更新URL
-  router.replace({ hash: `#${chapterId}` })
+  if (targetElement) {
+    // 确保元素在视口中可见
+    targetElement.scrollIntoView({ 
+      behavior: 'smooth', 
+      block: 'start',
+      inline: 'nearest'
+    })
+    currentChapterId.value = chapterId
+    
+    // 移动端关闭目录
+    showMobileToc.value = false
+    
+    // 更新URL
+    router.replace({ hash: `#${chapterId}` })
+  } else {
+    console.error('Failed to find chapter element:', chapterId)
+  }
 }
 
 // 评论相关方法
@@ -836,7 +919,45 @@ const scrollToPreChapter = () => {
 
 const goToChapter = (chapterId) => {
   console.log('Going to chapter:', chapterId)
+  
+  // 移动端直接切换显示的章节
+  if (window.innerWidth <= 768) {
+    currentChapterId.value = chapterId
+    showMobileToc.value = false
+    router.replace({ hash: `#${chapterId}` })
+    return
+  }
+  
+  // 桌面端滚动到对应章节
   scrollToChapter(chapterId)
+}
+
+// 获取页面字数
+const getPageWordCount = (content) => {
+  if (post.value?.contentHtml) {
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = content
+    return (tempDiv.textContent || tempDiv.innerText || '').length
+  }
+  return content.length
+}
+
+// 页面导航方法
+const goToPage = (pageNumber) => {
+  if (pageNumber < 1 || pageNumber > totalPages.value) {
+    return
+  }
+  
+  currentPage.value = pageNumber
+  
+  // 滚动到页面顶部
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  })
+  
+  // 更新URL hash
+  router.replace({ hash: `#page-${pageNumber}` })
 }
 
 const toggleFavorite = async () => {
@@ -874,26 +995,39 @@ const handleScroll = () => {
   if (window.innerWidth <= 768) return
   
   const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+  let activeChapterId = null
   
   // 检查引言
   if (preChapterRef.value) {
     const rect = preChapterRef.value.getBoundingClientRect()
-    if (rect.top <= 100 && rect.bottom > 100) {
-      currentChapterId.value = 'pre'
-      return
+    if (rect.top <= 150 && rect.bottom > 50) {
+      activeChapterId = 'pre'
     }
   }
 
-  // 检查章节
+  // 检查章节 - 从上到下遍历，找到最接近顶部的章节
   for (const chapter of flattenedChapters.value) {
-    const element = chapterRefs[chapter.id]
+    let element = chapterRefs[chapter.id]
+    
+    // 如果ref不存在，尝试通过选择器查找
+    if (!element) {
+      element = document.querySelector(`[data-chapter-id="${chapter.id}"]`) ||
+                document.getElementById(`chapter-content-${chapter.id}`)
+    }
+    
     if (element) {
       const rect = element.getBoundingClientRect()
-      if (rect.top <= 100 && rect.bottom > 100) {
-        currentChapterId.value = chapter.id
-        break
+      // 如果章节在视口内，标记为活跃章节
+      if (rect.top <= 150 && rect.bottom > 50) {
+        activeChapterId = chapter.id
+        // 不要break，继续检查后面的章节，以找到最接近顶部的那个
       }
     }
+  }
+  
+  // 更新当前章节ID
+  if (activeChapterId && activeChapterId !== currentChapterId.value) {
+    currentChapterId.value = activeChapterId
   }
 }
 
@@ -921,15 +1055,46 @@ const handleAnnotationAdded = (annotation) => {
 }
 
 const renderedContent = computed(() => {
-  if (!post.value) return ''
-  if (post.value.hasChapters) {
-    return post.value.contentMd
-  }
-  return post.value.contentMd
+  if (!post.value || !post.value.contentHtml) return ''
+  return post.value.contentHtml
 })
 
 const goBack = () => {
   router.back()
+}
+
+// 跳转到章节第一页
+const goToChapterFirstPage = (chapterIdOrTitle) => {
+  const pages = allPagesComputed.value
+  let targetPageIndex = -1
+  
+  if (chapterIdOrTitle === '引言') {
+    // 查找引言页面
+    targetPageIndex = pages.findIndex(page => page.title === '引言')
+  } else {
+    // 查找章节的第一页
+    targetPageIndex = pages.findIndex(page => 
+      page.chapterId === chapterIdOrTitle && page.isFirstPage
+    )
+  }
+  
+  if (targetPageIndex !== -1) {
+    goToPage(targetPageIndex + 1)
+  }
+}
+
+// 获取章节索引
+const getChapterIndex = (chapterId) => {
+  const index = flattenedChapters.value.findIndex(chapter => chapter.id === chapterId)
+  return index + 1
+}
+
+// 普通文章页码跳转
+const jumpToPage = () => {
+  if (!tempPageNumber.value) return
+  
+  const pageNumber = Math.max(1, Math.min(tempPageNumber.value, totalPages.value))
+  goToPage(pageNumber)
 }
 </script>
 
@@ -1029,11 +1194,132 @@ const goBack = () => {
   margin: 0 auto;
 }
 
-/* 有章节的文章布局 */
-.chaptered-post .desktop-layout {
+/* 书页式阅读布局 */
+.book-reader {
   display: flex;
   gap: 30px;
   padding: 0 20px;
+  min-height: calc(100vh - 200px);
+}
+
+.book-reader .content-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-container {
+  flex: 1;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 20px;
+  height: 70vh;
+  max-height: 70vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.page-title {
+  font-size: 1.6em;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.chapter-indicator {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--accent-light);
+  padding: 3px 10px;
+  border-radius: 15px;
+  display: inline-block;
+}
+
+.page-content {
+  flex: 1;
+  overflow: hidden;
+  line-height: 1.6;
+  font-size: 16px;
+  color: var(--text-primary);
+  max-height: calc(70vh - 160px);
+  word-wrap: break-word;
+}
+
+/* 引言内容样式 */
+.page-content :deep(.preface-content) {
+  font-style: italic;
+  color: #555;
+  line-height: 1.8;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 8px;
+  border-left: 4px solid #6c757d;
+  margin-bottom: 20px;
+}
+
+/* 章节背景说明样式 */
+.page-content :deep(.chapter-background-text) {
+  font-style: italic;
+  color: #666;
+  margin-bottom: 20px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-left: 4px solid #007bff;
+  border-radius: 4px;
+  line-height: 1.6;
+}
+
+.page-navigation {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: auto;
+}
+
+.page-nav-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.page-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.page-current {
+  color: var(--accent-primary);
+}
+
+.page-separator {
+  color: var(--text-secondary);
+}
+
+.page-total {
+  color: var(--text-secondary);
+}
+
+.page-jump {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
 }
 
 .toc-sidebar {
@@ -1417,20 +1703,49 @@ const goBack = () => {
     font-size: 1.8em;
   }
   
-  .chaptered-post .desktop-layout {
-    display: none;
+  .book-reader {
+    flex-direction: column;
+    padding: 0 15px;
   }
   
-  .mobile-layout {
-    display: block;
+  .toc-sidebar {
+    width: 100%;
+    position: static;
+    margin-bottom: 20px;
+    max-height: 200px;
   }
   
-  .content-text {
+  .toc-content {
+    max-height: 150px;
+  }
+  
+  .page-container {
+    padding: 20px;
+    min-height: 400px;
+    max-height: 60vh;
+  }
+  
+  .page-title {
+    font-size: 1.5em;
+  }
+  
+  .page-content {
     font-size: 15px;
   }
   
-  .chapter-title {
-    font-size: 1.5em;
+  .page-nav-controls {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .page-nav-btn {
+    width: 100%;
+    max-width: 200px;
+  }
+  
+  .page-jump {
+    flex-direction: column;
+    gap: 10px;
   }
 
   .section-header {
@@ -1484,6 +1799,180 @@ const goBack = () => {
   
   .mobile-layout {
     padding: 0 10px;
+  }
+}
+
+/* 分页相关样式 */
+.pagination-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 40px;
+  padding: 20px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.page-nav-btn {
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.page-nav-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-light);
+}
+
+.page-info {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* 页面导航目录样式 */
+.page-navigation {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.page-item {
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-left: 3px solid transparent;
+}
+
+.page-item:hover {
+  background: var(--bg-secondary);
+  border-left-color: var(--accent-primary);
+}
+
+.page-item.active {
+  background: var(--accent-primary);
+  color: white;
+  border-left-color: var(--accent-primary);
+}
+
+/* 悬浮目录优化 */
+.toc-sidebar {
+  position: sticky;
+  top: 80px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+/* 章节分页样式 */
+.chapter-pagination {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.chapter-pagination-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.chapter-page-info {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.page-jump {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* 目录页面指示器 */
+.page-indicator {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+/* 目录子页面 */
+.toc-pages {
+  margin-left: 20px;
+  border-left: 2px solid var(--border-color);
+  padding-left: 10px;
+}
+
+.toc-pages .toc-item {
+  padding: 8px 15px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.toc-pages .toc-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toc-pages .toc-item.active {
+  background: var(--accent-light);
+  color: var(--accent-primary);
+  border-left-color: var(--accent-primary);
+}
+
+/* 字数显示 */
+.word-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.toc-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.toc-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.toc-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.toc-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* 分页内容样式 */
+.paginated-content,
+.single-page-content {
+  min-height: 400px;
+}
+
+@media (max-width: 768px) {
+  .pagination-nav {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .page-nav-btn {
+    width: 100%;
+    max-width: 200px;
   }
 }
 </style>

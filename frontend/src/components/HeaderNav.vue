@@ -94,6 +94,8 @@ const handleScroll = () => {
 const handleLogout = () => {
   authStore.logout()
   ElMessage.success('已退出登录')
+  // 跳转到首页
+  window.location.href = '/'
 }
 
 onMounted(() => {

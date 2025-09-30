@@ -66,4 +66,12 @@ public interface CommentMapper extends BaseMapper<Comment> {
      * 获取管理员评论列表
      */
     IPage<CommentVO> selectAdminComments(Page<CommentVO> page, @Param("status") String status);
+    
+    /**
+     * 查询用户评论列表（包含文章信息）
+     */
+    java.util.List<com.herpoem.site.model.vo.UserCommentVO> selectUserCommentsWithPostInfo(
+            @Param("userId") Long userId, 
+            @Param("offset") Integer offset, 
+            @Param("size") Integer size);
 } 
