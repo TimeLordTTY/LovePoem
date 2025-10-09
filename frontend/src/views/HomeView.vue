@@ -328,11 +328,12 @@ onMounted(() => {
 .page-header {
   text-align: center;
   margin-bottom: 48px;
+  margin-top: 20px;
 }
 
 .page-title {
   font-size: 2.5rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
   margin-bottom: 12px;
   background: var(--accent-gradient);

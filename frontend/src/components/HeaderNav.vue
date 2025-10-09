@@ -2,15 +2,42 @@
   <header class="header" :class="{ 'scrolled': isScrolled }">
     <div class="container">
       <div class="header-content">
-        <!-- Logo区域 -->
-        <div class="logo-section">
-          <router-link to="/" class="logo">
-            <h1>{{ siteInfo.siteName || '我的半截诗' }}</h1>
-            <span class="subtitle">{{ siteInfo.siteDescription || '白秦的文字世界' }}</span>
-          </router-link>
+        <!-- 第一行：Logo和右侧按钮 -->
+        <div class="top-row">
+          <div class="logo-section">
+            <router-link to="/" class="logo">
+              <h1>{{ siteInfo.siteName || '我的半截诗' }}</h1>
+              <span class="subtitle">{{ siteInfo.siteDescription || '白秦的文字世界' }}</span>
+            </router-link>
+          </div>
+          
+          <!-- 右侧操作区 -->
+          <div class="header-actions">
+            <ThemeToggle />
+            <div v-if="authStore.isLoggedIn" class="user-menu">
+              <el-dropdown>
+                <span class="user-info">
+                  {{ authStore.user?.displayName }}
+                  <el-icon><ArrowDown /></el-icon>
+                </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item>
+                      <router-link to="/settings">个人设置</router-link>
+                    </el-dropdown-item>
+                    <el-dropdown-item v-if="authStore.isAuthor">
+                      <router-link to="/admin">管理后台</router-link>
+                    </el-dropdown-item>
+                    <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+            <router-link v-else to="/login" class="login-btn">登录</router-link>
+          </div>
         </div>
         
-        <!-- 导航菜单 -->
+        <!-- 第二行：导航菜单 -->
         <nav class="nav-menu">
           <router-link to="/" class="nav-item">{{ navigation.home || '首页' }}</router-link>
           <router-link to="/posts" class="nav-item">{{ navigation.posts || '文章' }}</router-link>
@@ -18,31 +45,6 @@
           <router-link to="/tags" class="nav-item">{{ navigation.tags || '标签' }}</router-link>
           <router-link to="/archive" class="nav-item">{{ navigation.archive || '归档' }}</router-link>
         </nav>
-        
-        <!-- 右侧操作区 -->
-        <div class="header-actions">
-          <ThemeToggle />
-          <div v-if="authStore.isLoggedIn" class="user-menu">
-            <el-dropdown>
-              <span class="user-info">
-                {{ authStore.user?.displayName }}
-                <el-icon><ArrowDown /></el-icon>
-              </span>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item>
-                    <router-link to="/settings">个人设置</router-link>
-                  </el-dropdown-item>
-                  <el-dropdown-item v-if="authStore.isAuthor">
-                    <router-link to="/admin">管理后台</router-link>
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-          <router-link v-else to="/login" class="login-btn">登录</router-link>
-        </div>
       </div>
     </div>
   </header>
@@ -136,6 +138,13 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   height: 70px;
+}
+
+.top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .logo-section {
@@ -233,28 +242,46 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .header-content {
     flex-direction: column;
-    align-items: center;
     height: auto;
-    padding: 16px 0;
-    gap: 16px;
+    padding: 8px 0;
+    gap: 8px;
   }
   
-  .logo h1 {
-    font-size: 20px;
-  }
-  
-  .nav-menu {
-    flex-direction: column;
-    gap: 12px;
-    text-align: center;
-  }
-  
-  .nav-item {
+  /* 第一行：网站标题在左，主题和登录在右 */
+  .top-row {
+    width: 100%;
     padding: 4px 0;
   }
   
+  .logo h1 {
+    font-size: 18px;
+  }
+  
+  .logo .subtitle {
+    display: none;
+  }
+  
   .header-actions {
-    gap: 12px;
+    gap: 8px;
+  }
+  
+  /* 第二行：导航栏居中 */
+  .nav-menu {
+    justify-content: center;
+    gap: 24px;
+    padding: 8px 0;
+    border-top: 1px solid var(--border-color);
+    width: 100%;
+  }
+  
+  .nav-item {
+    font-size: 14px;
+    padding: 6px 0;
+  }
+  
+  .login-btn {
+    font-size: 13px;
+    padding: 6px 12px;
   }
 }
 </style>
