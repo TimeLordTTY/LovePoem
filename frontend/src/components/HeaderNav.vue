@@ -2,42 +2,15 @@
   <header class="header" :class="{ 'scrolled': isScrolled }">
     <div class="container">
       <div class="header-content">
-        <!-- 第一行：Logo和右侧按钮 -->
-        <div class="top-row">
-          <div class="logo-section">
-            <router-link to="/" class="logo">
-              <h1>{{ siteInfo.siteName || '我的半截诗' }}</h1>
-              <span class="subtitle">{{ siteInfo.siteDescription || '白秦的文字世界' }}</span>
-            </router-link>
-          </div>
-          
-          <!-- 右侧操作区 -->
-          <div class="header-actions">
-            <ThemeToggle />
-            <div v-if="authStore.isLoggedIn" class="user-menu">
-              <el-dropdown>
-                <span class="user-info">
-                  {{ authStore.user?.displayName }}
-                  <el-icon><ArrowDown /></el-icon>
-                </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item>
-                      <router-link to="/settings">个人设置</router-link>
-                    </el-dropdown-item>
-                    <el-dropdown-item v-if="authStore.isAuthor">
-                      <router-link to="/admin">管理后台</router-link>
-                    </el-dropdown-item>
-                    <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
-            </div>
-            <router-link v-else to="/login" class="login-btn">登录</router-link>
-          </div>
+        <!-- Logo区域 -->
+        <div class="logo-section">
+          <router-link to="/" class="logo">
+            <h1>{{ siteInfo.siteName || '我的半截诗' }}</h1>
+            <span class="subtitle">{{ siteInfo.siteDescription || '白秦的文字世界' }}</span>
+          </router-link>
         </div>
         
-        <!-- 第二行：导航菜单 -->
+        <!-- 导航菜单 -->
         <nav class="nav-menu">
           <router-link to="/" class="nav-item">{{ navigation.home || '首页' }}</router-link>
           <router-link to="/posts" class="nav-item">{{ navigation.posts || '文章' }}</router-link>
@@ -45,6 +18,31 @@
           <router-link to="/tags" class="nav-item">{{ navigation.tags || '标签' }}</router-link>
           <router-link to="/archive" class="nav-item">{{ navigation.archive || '归档' }}</router-link>
         </nav>
+        
+        <!-- 右侧操作区 -->
+        <div class="header-actions">
+          <ThemeToggle />
+          <div v-if="authStore.isLoggedIn" class="user-menu">
+            <el-dropdown>
+              <span class="user-info">
+                {{ authStore.user?.displayName }}
+                <el-icon><ArrowDown /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item>
+                    <router-link to="/settings">个人设置</router-link>
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="authStore.isAuthor">
+                    <router-link to="/admin">管理后台</router-link>
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="handleLogout">退出登录</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+          <router-link v-else to="/login" class="login-btn">登录</router-link>
+        </div>
       </div>
     </div>
   </header>
@@ -138,13 +136,6 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   height: 70px;
-}
-
-.top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
 }
 
 .logo-section {
@@ -247,10 +238,21 @@ onUnmounted(() => {
     gap: 8px;
   }
   
-  /* 第一行：网站标题在左，主题和登录在右 */
-  .top-row {
+  /* 第一行：重新排列为 logo-section 和 header-actions */
+  .logo-section {
+    order: 1;
     width: 100%;
-    padding: 4px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .header-actions {
+    order: 2;
+    position: absolute;
+    top: 8px;
+    right: 20px;
+    gap: 8px;
   }
   
   .logo h1 {
@@ -261,12 +263,9 @@ onUnmounted(() => {
     display: none;
   }
   
-  .header-actions {
-    gap: 8px;
-  }
-  
   /* 第二行：导航栏居中 */
   .nav-menu {
+    order: 3;
     justify-content: center;
     gap: 24px;
     padding: 8px 0;
