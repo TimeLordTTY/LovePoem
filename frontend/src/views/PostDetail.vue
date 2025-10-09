@@ -461,8 +461,36 @@ const currentPageContent = computed(() => {
   if (pages.length === 0) return ''
   
   const page = pages[currentPage.value - 1]
-  return page ? page.content : ''
+  if (!page) return ''
+  
+  // 修复HTML结构，确保每一页的HTML都是完整的
+  return fixHtmlStructure(page.content)
 })
+
+// 修复HTML结构的辅助函数
+const fixHtmlStructure = (htmlContent) => {
+  if (!htmlContent) return ''
+  
+  let content = htmlContent.trim()
+  
+  // 如果内容以结束标签开头，需要添加对应的开始标签
+  if (content.startsWith('</p>')) {
+    // 移除开头的</p>标签，因为这是上一页的结束
+    content = content.replace(/^<\/p>\s*/, '')
+  }
+  
+  // 如果内容不以完整的标签开头，包装在p标签中
+  if (content && !content.startsWith('<')) {
+    content = `<p>${content}</p>`
+  }
+  
+  // 确保内容以完整的标签结尾
+  if (content && !content.endsWith('>')) {
+    content = content + '</p>'
+  }
+  
+  return content
+}
 
 // 当前页信息
 const currentPageInfo = computed(() => {

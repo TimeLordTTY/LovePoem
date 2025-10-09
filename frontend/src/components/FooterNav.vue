@@ -88,8 +88,9 @@ onMounted(() => {
 }
 
 .footer-content {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   gap: 60px;
   margin-bottom: 40px;
 }
@@ -112,9 +113,8 @@ onMounted(() => {
 }
 
 .footer-links {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 40px;
+  display: flex;
+  gap: 60px;
 }
 
 .link-group h4 {
@@ -125,11 +125,16 @@ onMounted(() => {
 }
 
 .link-group a {
-  display: block;
+  display: inline-block;
   color: var(--text-secondary);
   text-decoration: none;
+  margin-right: 20px;
   margin-bottom: 8px;
   transition: color 0.3s ease;
+}
+
+.link-group a:last-child {
+  margin-right: 0;
 }
 
 .link-group a:hover {
@@ -146,21 +151,27 @@ onMounted(() => {
   color: var(--text-muted);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 480px) {
   .footer {
     padding: 40px 0 20px;
     margin-top: 60px;
   }
   
   .footer-content {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     gap: 40px;
     margin-bottom: 30px;
   }
   
   .footer-links {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     gap: 30px;
+  }
+  
+  .link-group a {
+    display: block;
+    margin-right: 0;
+    margin-bottom: 8px;
   }
   
   .footer-bottom {

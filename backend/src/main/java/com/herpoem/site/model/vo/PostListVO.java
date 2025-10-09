@@ -61,6 +61,9 @@ public class PostListVO {
     // 文章摘要（作者自述）
     private String summary;
     
+    // 富文本HTML内容（用于生成excerpt）
+    private String contentHtml;
+    
     // 是否有章节
     private Boolean hasChapters;
 }

@@ -12,7 +12,7 @@ INSERT INTO post_type (name, description, sort_order) VALUES
 ('散文', '散文作品', 2),
 ('随笔', '随笔感悟', 3),
 ('小说', '小说作品', 4),
-('日记', '日记记录', 5);
+('同人', '同人作品', 5);
 
 -- 初始化标签数据
 INSERT INTO tag (name, description, created_by) VALUES
@@ -92,7 +92,9 @@ INSERT INTO settings (setting_key, value, description, group_name, is_system) VA
 ('db_version_015', 'completed', '数据库版本015：系统增强', '系统设置', 1),
 ('db_version_016', 'completed', '数据库版本016：功能扩展', '系统设置', 1),
 ('db_version_017', 'completed', '数据库版本017：确保用户资料字段一致性', '系统设置', 1),
-('db_version_018', 'completed', '数据库版本018：转换为富文本HTML格式', '系统设置', 1);
+('db_version_018', 'completed', '数据库版本018：转换为富文本HTML格式', '系统设置', 1),
+('db_version_019', 'completed', '数据库版本019：添加同人文章分类', '系统设置', 1),
+('db_version_020', 'completed', '数据库版本020：移除日记分类，迁移到随笔', '系统设置', 1);
 
 -- 插入评论系统配置
 INSERT INTO settings (setting_key, value, description, group_name, is_system) VALUES 

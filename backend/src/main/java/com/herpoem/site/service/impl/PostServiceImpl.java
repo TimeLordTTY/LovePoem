@@ -46,9 +46,17 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         Page<PostListVO> pageParam = new Page<>(page, size);
         IPage<PostListVO> result = postMapper.selectPostPage(pageParam, keyword, tagId, seriesId, postTypeId, status, visibility);
         
-        // 处理章节文章的阅读时间
+        // 处理章节文章的阅读时间和生成excerpt
         List<PostListVO> records = result.getRecords();
         for (PostListVO post : records) {
+            // 生成excerpt：如果有summary就用summary，否则从contentHtml中提取纯文本
+            if (post.getSummary() != null && !post.getSummary().trim().isEmpty()) {
+                post.setExcerpt(post.getSummary().length() > 200 ? post.getSummary().substring(0, 200) : post.getSummary());
+            } else if (post.getContentHtml() != null) {
+                String cleanText = removeHtmlTags(post.getContentHtml());
+                post.setExcerpt(cleanText.length() > 200 ? cleanText.substring(0, 200) : cleanText);
+            }
+            
             if (Boolean.TRUE.equals(post.getHasChapters()) && (post.getReadingTime() == null || post.getReadingTime() <= 0)) {
                 // 计算章节文章的阅读时间
                 post.setReadingTime(calculateChapterReadingTime(post.getId()));
@@ -276,7 +284,20 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
     
     @Override
     public List<PostListVO> getPostsBySeries(Long seriesId, Post.Status status, Post.Visibility visibility) {
-        return postMapper.selectPostsBySeries(seriesId, status, visibility);
+        List<PostListVO> posts = postMapper.selectPostsBySeries(seriesId, status, visibility);
+        
+        // 为每个文章生成excerpt
+        for (PostListVO post : posts) {
+            // 生成excerpt：如果有summary就用summary，否则从contentHtml中提取纯文本
+            if (post.getSummary() != null && !post.getSummary().trim().isEmpty()) {
+                post.setExcerpt(post.getSummary().length() > 200 ? post.getSummary().substring(0, 200) : post.getSummary());
+            } else if (post.getContentHtml() != null) {
+                String cleanText = removeHtmlTags(post.getContentHtml());
+                post.setExcerpt(cleanText.length() > 200 ? cleanText.substring(0, 200) : cleanText);
+            }
+        }
+        
+        return posts;
     }
     
     @Override
@@ -449,6 +470,21 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         }
         
         return chineseChars + englishWordCount;
+    }
+    
+    /**
+     * 移除HTML标签，严格实现与原本REGEXP_REPLACE(p.content_html, '<[^>]*>', '')完全一样的逻辑
+     * 
+     * @param html HTML内容
+     * @return 清理后的纯文本
+     */
+    private String removeHtmlTags(String html) {
+        if (html == null || html.trim().isEmpty()) {
+            return "";
+        }
+        
+        // 使用正则表达式移除所有HTML标签，与MySQL的REGEXP_REPLACE(p.content_html, '<[^>]*>', '')逻辑完全一致
+        return html.replaceAll("<[^>]*>", "").trim();
     }
     
     // 内部类用于目录项

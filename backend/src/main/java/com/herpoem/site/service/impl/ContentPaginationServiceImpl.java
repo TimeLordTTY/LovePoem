@@ -553,7 +553,7 @@ public class ContentPaginationServiceImpl implements ContentPaginationService {
     }
 
     /**
-     * 可靠的HTML内容分割方法
+     * 可靠的HTML内容分割方法 - 确保不在HTML标签或句子中间断开，且不丢失内容
      */
     private List<String> splitHtmlContentReliably(String htmlContent, String textContent, int wordsPerPage) {
         List<String> pages = new ArrayList<>();
@@ -568,41 +568,313 @@ public class ContentPaginationServiceImpl implements ContentPaginationService {
             return pages;
         }
         
-        // 使用简单的按比例分割方法，确保内容不丢失
-        int totalTextLength = textContent.length();
-        int numPages = (int) Math.ceil((double) totalTextLength / wordsPerPage);
-        log.debug("预计需要页数: {}", numPages);
+        // 使用更安全的段落分页策略，确保HTML结构完整
+        return splitHtmlByCompleteParagraphs(htmlContent, wordsPerPage);
+    }
+    
+    /**
+     * 按完整段落分割HTML内容，确保HTML结构完整且不丢失内容
+     */
+    private List<String> splitHtmlByCompleteParagraphs(String htmlContent, int wordsPerPage) {
+        List<String> pages = new ArrayList<>();
         
-        // 按比例分割HTML内容
-        int htmlLength = htmlContent.length();
-        int htmlPerPage = htmlLength / numPages;
+        // 按<p>标签分割成完整的段落
+        List<String> paragraphs = extractCompleteParagraphs(htmlContent);
         
-        for (int i = 0; i < numPages; i++) {
-            int start = i * htmlPerPage;
-            int end = (i == numPages - 1) ? htmlLength : (i + 1) * htmlPerPage;
-            
-            if (start < htmlLength) {
-                String pageContent = htmlContent.substring(start, end);
-                
-                // 尝试在合适的位置断开（避免在HTML标签中间断开）
-                if (i < numPages - 1 && end < htmlLength) {
-                    pageContent = adjustBreakPoint(htmlContent, start, end);
-                }
-                
-                pages.add(pageContent);
-                log.debug("添加页面 {}: 起始位置={}, 结束位置={}, 内容长度={}", 
-                        i + 1, start, end, pageContent.length());
-            }
+        if (paragraphs.isEmpty()) {
+            pages.add(htmlContent);
+            return pages;
         }
         
-        log.debug("HTML分割完成: 实际页数={}", pages.size());
+        StringBuilder currentPage = new StringBuilder();
+        int currentTextLength = 0;
+        
+        for (String paragraph : paragraphs) {
+            String paragraphText = extractTextContent(paragraph);
+            
+            // 如果单个段落就超过字数限制，需要进一步分割
+            if (paragraphText.length() > wordsPerPage) {
+                // 先保存当前页（如果有内容）
+                if (currentPage.length() > 0) {
+                    pages.add(currentPage.toString().trim());
+                    log.debug("保存页面 {}: 文本长度={}", pages.size(), currentTextLength);
+                    currentPage = new StringBuilder();
+                    currentTextLength = 0;
+                }
+                
+                // 分割大段落
+                List<String> splitParagraphs = splitLargeParagraphBySentences(paragraph, wordsPerPage);
+                for (String splitPart : splitParagraphs) {
+                    pages.add(splitPart.trim());
+                    log.debug("添加分割段落页面: 文本长度={}", extractTextContent(splitPart).length());
+                }
+                continue;
+            }
+            
+            // 检查添加这个段落是否会超出限制
+            if (currentTextLength + paragraphText.length() > wordsPerPage && currentTextLength > 0) {
+                // 当前页已满，保存并开始新页
+                if (currentPage.length() > 0) {
+                    pages.add(currentPage.toString().trim());
+                    log.debug("保存页面 {}: 文本长度={}", pages.size(), currentTextLength);
+                }
+                
+                currentPage = new StringBuilder();
+                currentTextLength = 0;
+            }
+            
+            // 添加段落到当前页
+            currentPage.append(paragraph);
+            currentTextLength += paragraphText.length();
+            
+            log.debug("添加段落: 文本长度={}, 累计长度={}", paragraphText.length(), currentTextLength);
+        }
+        
+        // 添加最后一页
+        if (currentPage.length() > 0) {
+            pages.add(currentPage.toString().trim());
+            log.debug("保存最后页面: 总页数={}, 文本长度={}", pages.size(), currentTextLength);
+        }
+        
+        log.debug("HTML段落分割完成: 总页数={}", pages.size());
         return pages;
     }
     
     /**
-     * 调整断点位置，避免在HTML标签中间断开
+     * 提取完整的HTML段落
      */
-    private String adjustBreakPoint(String htmlContent, int start, int originalEnd) {
+    private List<String> extractCompleteParagraphs(String htmlContent) {
+        List<String> paragraphs = new ArrayList<>();
+        
+        // 使用正则表达式匹配完整的<p>...</p>段落
+        Pattern paragraphPattern = Pattern.compile("<p[^>]*>.*?</p>", Pattern.DOTALL);
+        Matcher matcher = paragraphPattern.matcher(htmlContent);
+        
+        int lastEnd = 0;
+        while (matcher.find()) {
+            // 添加段落前的其他内容（如果有）
+            if (matcher.start() > lastEnd) {
+                String beforeParagraph = htmlContent.substring(lastEnd, matcher.start()).trim();
+                if (!beforeParagraph.isEmpty()) {
+                    paragraphs.add(beforeParagraph);
+                }
+            }
+            
+            // 添加完整的段落
+            paragraphs.add(matcher.group());
+            lastEnd = matcher.end();
+        }
+        
+        // 添加剩余内容
+        if (lastEnd < htmlContent.length()) {
+            String remaining = htmlContent.substring(lastEnd).trim();
+            if (!remaining.isEmpty()) {
+                paragraphs.add(remaining);
+            }
+        }
+        
+        // 如果没有找到<p>标签，将整个内容作为一个段落
+        if (paragraphs.isEmpty() && !htmlContent.trim().isEmpty()) {
+            paragraphs.add(htmlContent);
+        }
+        
+        log.debug("提取到 {} 个段落", paragraphs.size());
+        return paragraphs;
+    }
+    
+    /**
+     * 按句子分割大段落
+     */
+    private List<String> splitLargeParagraphBySentences(String paragraph, int wordsPerPage) {
+        List<String> pages = new ArrayList<>();
+        
+        // 提取段落中的纯文本
+        String paragraphText = extractTextContent(paragraph);
+        
+        // 按句子分割（按句号、感叹号、问号、换行符分割）
+        String[] sentences = paragraphText.split("(?<=[。！？])|(?<=\\n)|(?<=<br>)|(?<=<br/>)");
+        
+        StringBuilder currentPage = new StringBuilder();
+        int currentLength = 0;
+        
+        // 保持HTML结构，先添加段落开始标签
+        boolean isHtmlParagraph = paragraph.trim().startsWith("<p");
+        String paragraphStart = "";
+        String paragraphEnd = "";
+        
+        if (isHtmlParagraph) {
+            int endOfStartTag = paragraph.indexOf('>') + 1;
+            if (endOfStartTag > 0) {
+                paragraphStart = paragraph.substring(0, endOfStartTag);
+                paragraphEnd = "</p>";
+            }
+        }
+        
+        currentPage.append(paragraphStart);
+        
+        for (String sentence : sentences) {
+            sentence = sentence.trim();
+            if (sentence.isEmpty()) continue;
+            
+            // 检查添加这个句子是否会超出限制
+            if (currentLength + sentence.length() > wordsPerPage && currentLength > 0) {
+                // 当前页已满，保存并开始新页
+                currentPage.append(paragraphEnd);
+                pages.add(currentPage.toString().trim());
+                
+                currentPage = new StringBuilder();
+                currentPage.append(paragraphStart);
+                currentLength = 0;
+            }
+            
+            // 添加句子
+            if (currentLength > 0) {
+                currentPage.append(" "); // 句子间添加空格
+            }
+            currentPage.append(sentence);
+            currentLength += sentence.length();
+        }
+        
+        // 添加最后一页
+        if (currentLength > 0) {
+            currentPage.append(paragraphEnd);
+            pages.add(currentPage.toString().trim());
+        }
+        
+        // 如果没有成功分割，返回原段落
+        if (pages.isEmpty()) {
+            pages.add(paragraph);
+        }
+        
+        log.debug("大段落分割完成: 原长度={}, 分割成{}页", paragraphText.length(), pages.size());
+        return pages;
+    }
+    
+    /**
+     * 按句子分割HTML内容，确保完整性
+     */
+    private List<String> splitHtmlBySentences(String htmlContent, int wordsPerPage) {
+        List<String> pages = new ArrayList<>();
+        
+        // 首先提取所有的句子片段（包含HTML标签）
+        List<SentenceFragment> fragments = extractHtmlSentenceFragments(htmlContent);
+        
+        if (fragments.isEmpty()) {
+            pages.add(htmlContent);
+            return pages;
+        }
+        
+        // 按字数限制组合句子片段
+        StringBuilder currentPage = new StringBuilder();
+        int currentTextLength = 0;
+        
+        for (int i = 0; i < fragments.size(); i++) {
+            SentenceFragment fragment = fragments.get(i);
+            String fragmentText = extractTextContent(fragment.getContent());
+            
+            // 检查添加这个片段是否会超出限制
+            if (currentTextLength + fragmentText.length() > wordsPerPage && currentTextLength > 0) {
+                // 当前页已满，保存并开始新页
+                if (currentPage.length() > 0) {
+                    pages.add(currentPage.toString().trim());
+                    log.debug("保存页面 {}: 文本长度={}", pages.size(), currentTextLength);
+                }
+                
+                currentPage = new StringBuilder();
+                currentTextLength = 0;
+            }
+            
+            // 添加片段到当前页
+            currentPage.append(fragment.getContent());
+            currentTextLength += fragmentText.length();
+            
+            log.debug("添加片段 {}: 类型={}, 文本长度={}, 累计长度={}", 
+                    i, fragment.getType(), fragmentText.length(), currentTextLength);
+        }
+        
+        // 添加最后一页
+        if (currentPage.length() > 0) {
+            pages.add(currentPage.toString().trim());
+            log.debug("保存最后页面: 总页数={}, 文本长度={}", pages.size(), currentTextLength);
+        }
+        
+        log.debug("HTML句子分割完成: 总页数={}", pages.size());
+        return pages;
+    }
+    
+    /**
+     * 提取HTML中的句子片段
+     */
+    private List<SentenceFragment> extractHtmlSentenceFragments(String htmlContent) {
+        List<SentenceFragment> fragments = new ArrayList<>();
+        
+        // 使用正则表达式匹配HTML标签和文本内容
+        Pattern htmlPattern = Pattern.compile("(<[^>]*>)|([^<]+)");
+        Matcher matcher = htmlPattern.matcher(htmlContent);
+        
+        StringBuilder currentSentence = new StringBuilder();
+        
+        while (matcher.find()) {
+            String match = matcher.group();
+            
+            if (matcher.group(1) != null) {
+                // 这是一个HTML标签
+                currentSentence.append(match);
+            } else if (matcher.group(2) != null) {
+                // 这是文本内容，需要按句子分割
+                String textContent = match;
+                List<String> sentences = splitTextIntoSentences(textContent);
+                
+                for (int i = 0; i < sentences.size(); i++) {
+                    String sentence = sentences.get(i);
+                    currentSentence.append(sentence);
+                    
+                    // 如果句子以句号、感叹号、问号结尾，或者是最后一个句子，则结束当前片段
+                    if (sentence.matches(".*[。！？]\\s*$") || i == sentences.size() - 1) {
+                        if (currentSentence.length() > 0) {
+                            fragments.add(new SentenceFragment(currentSentence.toString(), "sentence"));
+                            currentSentence = new StringBuilder();
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 添加剩余内容
+        if (currentSentence.length() > 0) {
+            fragments.add(new SentenceFragment(currentSentence.toString(), "sentence"));
+        }
+        
+        return fragments;
+    }
+    
+    /**
+     * 将文本分割为句子
+     */
+    private List<String> splitTextIntoSentences(String text) {
+        List<String> sentences = new ArrayList<>();
+        
+        // 使用正则表达式按句号、感叹号、问号分割
+        String[] parts = text.split("(?<=[。！？])\\s*");
+        
+        for (String part : parts) {
+            if (part != null && !part.trim().isEmpty()) {
+                sentences.add(part);
+            }
+        }
+        
+        // 如果没有找到句子分隔符，将整个文本作为一个句子
+        if (sentences.isEmpty() && !text.trim().isEmpty()) {
+            sentences.add(text);
+        }
+        
+        return sentences;
+    }
+    
+    /**
+     * 寻找更好的断点位置，避免在HTML标签中间断开
+     */
+    private int findBetterBreakPoint(String htmlContent, int start, int originalEnd) {
         int end = originalEnd;
         
         // 向后查找合适的断点（句号、感叹号、问号、段落结束）
@@ -616,7 +888,7 @@ public class ContentPaginationServiceImpl implements ContentPaginationService {
             }
         }
         
-        return htmlContent.substring(start, end);
+        return end;
     }
     
     /**
@@ -819,5 +1091,21 @@ public class ContentPaginationServiceImpl implements ContentPaginationService {
         public String getText() { return text; }
         public int getParagraphIndex() { return paragraphIndex; }
         public boolean isLastInParagraph() { return isLastInParagraph; }
+    }
+    
+    /**
+     * 句子片段内部类 - 用于HTML内容分页
+     */
+    private static class SentenceFragment {
+        private final String content;
+        private final String type;
+        
+        public SentenceFragment(String content, String type) {
+            this.content = content;
+            this.type = type;
+        }
+        
+        public String getContent() { return content; }
+        public String getType() { return type; }
     }
 }

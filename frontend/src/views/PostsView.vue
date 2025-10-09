@@ -85,10 +85,15 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import PoemCard from '@/components/PoemCard.vue'
 import { getPosts } from '@/api/post'
 import { getAllTags } from '@/api/tag'
 import { getAllPostTypes } from '@/api/postType'
+import { useAuthStore } from '@/store/auth'
+
+const route = useRoute()
+const authStore = useAuthStore()
 
 const posts = ref([])
 const postTypes = ref([])
@@ -102,6 +107,19 @@ const filters = ref({
   tag: '',
   keyword: ''
 })
+
+// 从URL参数初始化筛选器
+const initFiltersFromQuery = () => {
+  if (route.query.postTypeId) {
+    filters.value.postType = route.query.postTypeId
+  }
+  if (route.query.tagId) {
+    filters.value.tag = route.query.tagId
+  }
+  if (route.query.keyword) {
+    filters.value.keyword = route.query.keyword
+  }
+}
 
 const loadInitialData = async () => {
   try {
@@ -124,9 +142,18 @@ const loadPosts = async () => {
   try {
     const params = {
       page: currentPage.value,
-      size: pageSize.value,
-      status: 'PUBLISHED',
-      visibility: 'PUBLIC'
+      size: pageSize.value
+    }
+    
+    // 根据用户权限设置可见性和状态
+    if (authStore.isAuthor) {
+      // 作者和管理员可以看到所有状态和可见性的文章
+      console.log('用户是作者/管理员，加载所有文章')
+    } else {
+      // 游客只能看到已发布的公开文章
+      params.status = 'PUBLISHED'
+      params.visibility = 'PUBLIC'
+      console.log('用户是游客，只加载已发布的公开文章')
     }
     
     if (filters.value.postType) {
@@ -167,6 +194,9 @@ const debounceSearch = () => {
 }
 
 onMounted(async () => {
+  // 从URL参数初始化筛选器
+  initFiltersFromQuery()
+  
   await loadInitialData()
   await loadPosts()
 })

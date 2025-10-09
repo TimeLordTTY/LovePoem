@@ -9,10 +9,7 @@
             p.slug,
             p.title,
             p.summary,
-            CASE 
-                WHEN p.summary IS NOT NULL AND p.summary != '' THEN LEFT(p.summary, 200)
-                ELSE LEFT(REGEXP_REPLACE(p.content_html, '&lt;[^&gt;]*&gt;', ''), 200)
-            END as excerpt,
+            p.content_html as contentHtml,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,
             p.chapter_no as chapterNo,
@@ -42,7 +39,7 @@
         <if test="keyword != null and keyword != ''">
             AND (p.title LIKE CONCAT('%', #{keyword}, '%') 
                  OR p.summary LIKE CONCAT('%', #{keyword}, '%')
-                 OR LEFT(REGEXP_REPLACE(p.content_html, '&lt;[^&gt;]*&gt;', ''), 500) LIKE CONCAT('%', #{keyword}, '%'))
+                 OR p.content_html LIKE CONCAT('%', #{keyword}, '%'))
         </if>
         <if test="tagId != null">
             AND EXISTS (
@@ -167,10 +164,8 @@
             p.slug,
             p.title,
             p.summary,
-            CASE 
-                WHEN p.summary IS NOT NULL AND p.summary != '' THEN LEFT(p.summary, 200)
-                ELSE LEFT(REGEXP_REPLACE(p.content_html, '&lt;[^&gt;]*&gt;', ''), 200)
-            END as excerpt,
+            p.summary,
+            p.content_html as contentHtml,
             p.chapter_no as chapterNo,
             p.post_type_id as postTypeId,
             p.series_id as seriesId,

@@ -231,16 +231,30 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
-  .nav-menu {
-    display: none;
+  .header-content {
+    flex-direction: column;
+    align-items: center;
+    height: auto;
+    padding: 16px 0;
+    gap: 16px;
   }
   
   .logo h1 {
     font-size: 20px;
   }
   
-  .header-content {
-    height: 60px;
+  .nav-menu {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+  
+  .nav-item {
+    padding: 4px 0;
+  }
+  
+  .header-actions {
+    gap: 12px;
   }
 }
 </style>
