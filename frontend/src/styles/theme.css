@@ -213,3 +213,86 @@
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) var(--bg-secondary);
 }
+
+/* 全局注解样式 */
+.annotation,
+u.annotation,
+em.annotation {
+  position: relative !important;
+  background-color: rgba(255, 243, 205, 0.3) !important;
+  border-bottom: 2px dotted #856404 !important;
+  cursor: help !important;
+  text-decoration: underline !important;
+  text-decoration-style: dotted !important;
+  text-decoration-color: #856404 !important;
+  padding: 1px 2px !important;
+  border-radius: 2px !important;
+  transition: all 0.3s ease !important;
+  display: inline !important;
+  font-style: normal !important;
+  color: inherit !important;
+  font-weight: inherit !important;
+}
+
+.annotation:hover,
+u.annotation:hover,
+em.annotation:hover {
+  background-color: rgba(255, 234, 167, 0.6) !important;
+  border-bottom-color: #d63031 !important;
+  text-decoration-color: #d63031 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 不同类型的注解样式 */
+.annotation[data-type="note"],
+u.annotation[data-type="note"],
+em.annotation[data-type="note"] {
+  background-color: rgba(227, 242, 253, 0.4) !important;
+  border-bottom-color: #1976d2 !important;
+  text-decoration-color: #1976d2 !important;
+}
+
+.annotation[data-type="note"]:hover,
+u.annotation[data-type="note"]:hover,
+em.annotation[data-type="note"]:hover {
+  background-color: rgba(187, 222, 251, 0.7) !important;
+  border-bottom-color: #0d47a1 !important;
+  text-decoration-color: #0d47a1 !important;
+}
+
+.annotation[data-type="quote"] {
+  background-color: #f3e5f5 !important;
+  border-bottom-color: #7b1fa2 !important;
+  text-decoration-color: #7b1fa2 !important;
+}
+
+.annotation[data-type="quote"]:hover {
+  background-color: #e1bee7 !important;
+  border-bottom-color: #4a148c !important;
+  text-decoration-color: #4a148c !important;
+}
+
+.annotation[data-type="warning"] {
+  background-color: #ffebee !important;
+  border-bottom-color: #d32f2f !important;
+  text-decoration-color: #d32f2f !important;
+}
+
+.annotation[data-type="warning"]:hover {
+  background-color: #ffcdd2 !important;
+  border-bottom-color: #b71c1c !important;
+  text-decoration-color: #b71c1c !important;
+}
+
+.annotation[data-type="tip"] {
+  background-color: #e8f5e8 !important;
+  border-bottom-color: #388e3c !important;
+  text-decoration-color: #388e3c !important;
+}
+
+.annotation[data-type="tip"]:hover {
+  background-color: #c8e6c9 !important;
+  border-bottom-color: #1b5e20 !important;
+  text-decoration-color: #1b5e20 !important;
+}

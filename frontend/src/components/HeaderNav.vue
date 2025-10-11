@@ -25,7 +25,18 @@
           <div v-if="authStore.isLoggedIn" class="user-menu">
             <el-dropdown>
               <span class="user-info">
-                {{ authStore.user?.displayName }}
+                <div class="user-avatar">
+                  <img 
+                    v-if="authStore.user?.avatarUrl" 
+                    :src="authStore.user.avatarUrl" 
+                    :alt="authStore.user?.displayName"
+                    class="avatar-image"
+                  />
+                  <div v-else class="avatar-placeholder">
+                    {{ getAvatarText(authStore.user?.displayName) }}
+                  </div>
+                </div>
+                <span class="user-name">{{ authStore.user?.displayName }}</span>
                 <el-icon><ArrowDown /></el-icon>
               </span>
               <template #dropdown>
@@ -96,6 +107,12 @@ const handleLogout = () => {
   ElMessage.success('已退出登录')
   // 跳转到首页
   window.location.href = '/'
+}
+
+// 获取头像文字（用户名首字符）
+const getAvatarText = (displayName) => {
+  if (!displayName) return '?'
+  return displayName.charAt(0).toUpperCase()
 }
 
 onMounted(() => {
@@ -210,9 +227,39 @@ onUnmounted(() => {
 .user-info {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   color: var(--text-primary);
   font-weight: 500;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.avatar-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  background: var(--accent-gradient);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.user-name {
+  font-size: 14px;
 }
 
 .login-btn {
@@ -281,6 +328,20 @@ onUnmounted(() => {
   .login-btn {
     font-size: 13px;
     padding: 6px 12px;
+  }
+  
+  /* 手机端头像样式调整 */
+  .user-avatar {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .avatar-placeholder {
+    font-size: 12px;
+  }
+  
+  .user-name {
+    font-size: 13px;
   }
 }
 </style>

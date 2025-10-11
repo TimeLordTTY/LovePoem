@@ -93,6 +93,17 @@ const toolbarConfig = {
 
 const editorConfig = {
   placeholder: props.placeholder,
+  // 允许自定义HTML标签和属性
+  customPaste: (editor, event) => {
+    // 允许粘贴自定义HTML
+    return true
+  },
+  // 配置HTML过滤规则
+  hoverbarKeys: {
+    'span': {
+      menuKeys: ['bold', 'italic', 'underline']
+    }
+  },
   MENU_CONF: {
     uploadImage: {
       server: '/api/assets/upload-image',
@@ -269,6 +280,87 @@ defineExpose({
   background: var(--bg-secondary);
   padding: 12px 16px;
   border-radius: 0 8px 8px 0;
+}
+
+/* 编辑器内的注解样式 */
+:deep(.w-e-text-container .annotation),
+:deep(.w-e-text-container u.annotation),
+:deep(.w-e-text-container em.annotation) {
+  position: relative !important;
+  background-color: #fff3cd !important;
+  border-bottom: 2px dotted #856404 !important;
+  cursor: help !important;
+  text-decoration: underline !important;
+  text-decoration-style: dotted !important;
+  text-decoration-color: #856404 !important;
+  padding: 2px 4px !important;
+  border-radius: 3px !important;
+  transition: all 0.3s ease !important;
+  display: inline !important;
+  font-style: normal !important;
+}
+
+:deep(.w-e-text-container .annotation:hover),
+:deep(.w-e-text-container u.annotation:hover),
+:deep(.w-e-text-container em.annotation:hover) {
+  background-color: #ffeaa7 !important;
+  border-bottom-color: #d63031 !important;
+  text-decoration-color: #d63031 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* 不同类型的注解样式 */
+:deep(.w-e-text-container .annotation[data-type="note"]),
+:deep(.w-e-text-container u.annotation[data-type="note"]),
+:deep(.w-e-text-container em.annotation[data-type="note"]) {
+  background-color: #e3f2fd !important;
+  border-bottom-color: #1976d2 !important;
+  text-decoration-color: #1976d2 !important;
+}
+
+:deep(.w-e-text-container .annotation[data-type="note"]:hover),
+:deep(.w-e-text-container u.annotation[data-type="note"]:hover),
+:deep(.w-e-text-container em.annotation[data-type="note"]:hover) {
+  background-color: #bbdefb !important;
+  border-bottom-color: #0d47a1 !important;
+  text-decoration-color: #0d47a1 !important;
+}
+
+:deep(.w-e-text-container .annotation[data-type="quote"]) {
+  background-color: #f3e5f5 !important;
+  border-bottom-color: #7b1fa2 !important;
+  text-decoration-color: #7b1fa2 !important;
+}
+
+:deep(.w-e-text-container .annotation[data-type="quote"]:hover) {
+  background-color: #e1bee7 !important;
+  border-bottom-color: #4a148c !important;
+  text-decoration-color: #4a148c !important;
+}
+
+:deep(.w-e-text-container .annotation[data-type="warning"]) {
+  background-color: #ffebee !important;
+  border-bottom-color: #d32f2f !important;
+  text-decoration-color: #d32f2f !important;
+}
+
+:deep(.w-e-text-container .annotation[data-type="warning"]:hover) {
+  background-color: #ffcdd2 !important;
+  border-bottom-color: #b71c1c !important;
+  text-decoration-color: #b71c1c !important;
+}
+
+:deep(.w-e-text-container .annotation[data-type="tip"]) {
+  background-color: #e8f5e8 !important;
+  border-bottom-color: #388e3c !important;
+  text-decoration-color: #388e3c !important;
+}
+
+:deep(.w-e-text-container .annotation[data-type="tip"]:hover) {
+  background-color: #c8e6c9 !important;
+  border-bottom-color: #1b5e20 !important;
+  text-decoration-color: #1b5e20 !important;
 }
 </style>
 

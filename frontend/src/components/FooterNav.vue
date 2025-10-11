@@ -26,7 +26,7 @@
       
       <div class="footer-bottom">
         <p>{{ footer.copyright || '© 2023 我的半截诗. All rights reserved.' }}</p>
-        <p>用❤️和代码构建 by TimeLord</p>
+        <p>用❤️和代码构建 by TimeLordTTY</p>
       </div>
     </div>
   </footer>

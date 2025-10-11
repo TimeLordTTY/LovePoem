@@ -648,8 +648,9 @@
                 <div class="toolbar-group">
                   <el-button size="small" @click="openAnnotationDialog">
                     <el-icon><EditPen /></el-icon>
-                    添加注解
+                    {{ annotationButtonText }}
                   </el-button>
+                  
                   
                   <div class="word-count">
                     字数：{{ articleWordCount }}
@@ -776,7 +777,7 @@
         
         <!-- 普通文章内容 -->
         <div v-if="!previewData.hasChapters && previewData.contentHtml" class="preview-body">
-          <div class="html-content" v-html="previewData.contentHtml"></div>
+          <div class="html-content annotation-content" v-html="previewData.contentHtml"></div>
         </div>
         
         <!-- 章节文章 -->
@@ -794,7 +795,7 @@
               <div class="markdown-content" v-html="renderSimpleMarkdown(chapter.backgroundText)"></div>
             </div>
             <div v-if="chapter.contentHtml" class="chapter-text">
-              <div class="html-content" v-html="chapter.contentHtml"></div>
+              <div class="html-content annotation-content" v-html="chapter.contentHtml"></div>
             </div>
           </div>
         </div>
@@ -811,6 +812,7 @@
       title="选择图片"
       width="80%"
       :style="{ maxWidth: '1200px' }"
+      v-if="showImageSelector && !showChapterImageSelector"
     >
       <div class="image-selector">
         <!-- 搜索和筛选 -->
@@ -876,16 +878,97 @@
       </template>
     </el-dialog>
 
+    <!-- 章节图片选择器对话框 -->
+    <el-dialog
+      v-model="showChapterImageSelector"
+      title="选择图片（章节）"
+      width="80%"
+      :style="{ maxWidth: '1200px' }"
+    >
+      <div class="image-selector">
+        <!-- 搜索和筛选 -->
+        <div class="selector-toolbar">
+          <el-input
+            v-model="imageSearch"
+            placeholder="搜索图片..."
+            @input="loadImages"
+            style="width: 300px; margin-right: 10px;"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+          
+          <el-upload
+            ref="quickUploadRef"
+            :show-file-list="false"
+            :before-upload="() => false"
+            :on-change="handleQuickUpload"
+            accept="image/*"
+          >
+            <el-button type="primary">
+              <el-icon><Upload /></el-icon>
+              快速上传
+            </el-button>
+          </el-upload>
+        </div>
+        
+        <!-- 图片网格 -->
+        <div class="image-grid" v-loading="imagesLoading">
+          <div
+            v-for="image in images"
+            :key="image.id"
+            class="image-item"
+            @click="selectImage(image)"
+          >
+            <img :src="image.url" :alt="image.title" />
+            <div class="image-overlay">
+              <div class="image-title">{{ image.title }}</div>
+              <div class="image-actions">
+                <el-button size="small" @click.stop="insertImage(image)">插入</el-button>
+                <el-button size="small" type="danger" @click.stop="deleteImage(image)">删除</el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 分页 -->
+        <div class="selector-pagination">
+          <el-pagination
+            v-model:current-page="imagePage"
+            :page-size="imagePageSize"
+            :total="imageTotal"
+            layout="prev, pager, next"
+            @current-change="loadImages"
+          />
+        </div>
+      </div>
+      
+      <template #footer>
+        <el-button @click="showChapterImageSelector = false">取消</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 注解编辑对话框 -->
     <el-dialog
       v-model="showAnnotationDialog"
-      title="添加注解"
-      width="500px"
+      :title="getAnnotationDialogTitle()"
+      width="600px"
     >
       <div class="annotation-editor">
         <div class="selected-text">
           <label>选中文本：</label>
           <div class="text-preview">{{ selectedText }}</div>
+        </div>
+        
+        <!-- 前后文显示 -->
+        <div v-if="selectedRange && (selectedRange.contextBefore || selectedRange.contextAfter)" class="context-display">
+          <label>上下文：</label>
+          <div class="context-preview">
+            <span class="context-before">{{ selectedRange.contextBefore || '' }}</span>
+            <span class="selected-highlight">{{ selectedText }}</span>
+            <span class="context-after">{{ selectedRange.contextAfter || '' }}</span>
+          </div>
         </div>
         
         <el-form :model="annotationForm" label-width="80px">
@@ -948,10 +1031,17 @@ import {
   reorderChapters 
 } from '@/api/postChapter'
 import { parseWordDocument } from '@/utils/wordParser'
+import { useAuthStore } from '@/store/auth'
+import request from '@/api/request'
 
 
 // 响应式数据
+const authStore = useAuthStore()
 const loading = ref(false)
+
+// 注解智能更新相关
+const lastContentSnapshot = ref('')
+const annotationUpdatePending = ref(false)
 const isMobile = ref(false)
 const dialogVisible = ref(false)
 const chapterDialogVisible = ref(false)
@@ -1123,6 +1213,10 @@ onMounted(() => {
   loadTags()
   nextTick(() => {
     initSortable()
+    // 页面加载后设置注解监听器
+    setTimeout(() => {
+      setupAnnotationListeners()
+    }, 500)
   })
 })
 
@@ -1280,6 +1374,21 @@ const editPost = async (postId) => {
     }
     
     dialogVisible.value = true
+    
+    // 加载并显示已有注解
+    nextTick(() => {
+      setTimeout(() => {
+        loadAndDisplayAnnotations()
+        
+        // 初始化内容快照用于变化检测
+        const editor = richTextEditorRef.value?.getEditor()
+        if (editor) {
+          lastContentSnapshot.value = editor.getText()
+          setupContentChangeListener()
+          setupSelectionChangeListener()
+        }
+      }, 500)
+    })
   } catch (error) {
     ElMessage.error('加载文章详情失败')
     console.error('Edit post error:', error)
@@ -1908,9 +2017,18 @@ const handleImageUpload = async (file) => {
     const response = await uploadImage(file.raw)
     const imageUrl = response.data.url
     
-    // 插入富文本编辑器中
+    // 插入富文本编辑器中（在光标位置）
     if (richTextEditorRef.value) {
-      richTextEditorRef.value.insertImage(imageUrl)
+      const editor = richTextEditorRef.value.getEditor()
+      if (editor) {
+        try {
+          // 在光标位置插入图片HTML
+          const imgHtml = `<img src="${imageUrl}" alt="图片" style="max-width: 100%; margin: 10px 0;" />`
+          editor.dangerouslyInsertHtml(imgHtml)
+        } catch (error) {
+          console.error('插入图片HTML失败:', error)
+        }
+      }
     }
     
     ElMessage.success('图片上传成功')
@@ -1933,9 +2051,19 @@ const handleChapterImageUpload = async (file) => {
     const response = await uploadImage(file.raw)
     const imageUrl = response.data.url
     
-    // 在光标位置插入图片Markdown语法
-    const imageMarkdown = `![图片描述](${imageUrl})\n`
-    chapterForm.content += imageMarkdown
+    // 插入章节富文本编辑器中（在光标位置）
+    if (chapterRichTextEditorRef.value) {
+      const editor = chapterRichTextEditorRef.value.getEditor()
+      if (editor) {
+        try {
+          // 在光标位置插入图片HTML
+          const imgHtml = `<img src="${imageUrl}" alt="图片" style="max-width: 100%; margin: 10px 0;" />`
+          editor.dangerouslyInsertHtml(imgHtml)
+        } catch (error) {
+          console.error('插入章节图片HTML失败:', error)
+        }
+      }
+    }
     
     ElMessage.success('图片上传成功')
   } catch (error) {
@@ -2020,10 +2148,855 @@ const previewPost = () => {
   
   // 显示预览弹窗
   showPreview.value = true
+  
+  // 等待DOM更新后添加注解事件监听和加载注解数据
+  nextTick(() => {
+    loadPreviewAnnotations()
+    setupAnnotationListeners()
+  })
+}
+
+// 加载预览界面的注解数据
+const loadPreviewAnnotations = async () => {
+  if (!postForm.id) return
+  
+  try {
+    const response = await request.get(`/annotations/post/${postForm.id}`)
+    const annotations = response.data || []
+    
+    // 为预览界面的内容添加注解高亮
+    annotations.forEach(annotation => {
+      const previewElements = document.querySelectorAll('.preview-body .html-content, .chapter-text .html-content')
+      previewElements.forEach(element => {
+        // 使用精确位置匹配
+        if (annotation.startPosition !== null && annotation.endPosition !== null) {
+          const plainText = element.textContent || element.innerText || ''
+          const textAtPosition = plainText.substring(annotation.startPosition, annotation.endPosition)
+          
+          if (textAtPosition === annotation.selectedText) {
+            // 使用精确位置插入注解标记
+            const annotationHtml = `<span class="annotation-highlight" data-annotation-id="${annotation.id}" data-content="${annotation.annotationContent}" data-type="${annotation.annotationType}" title="${annotation.annotationContent}">${annotation.selectedText}</span>`
+            const updatedHtml = insertAnnotationAtExactPosition(element.innerHTML, annotation, annotationHtml)
+            if (updatedHtml !== element.innerHTML) {
+              element.innerHTML = updatedHtml
+              console.log(`预览界面精确添加注解: ${annotation.selectedText} 在位置 ${annotation.startPosition}`)
+            }
+          } else {
+            console.warn(`预览界面注解位置不匹配: 期望 "${annotation.selectedText}", 实际 "${textAtPosition}"`)
+          }
+        } else {
+          // 如果没有位置信息，使用简单的文本匹配（只匹配第一个）
+          if (element.textContent.includes(annotation.selectedText)) {
+            const regex = new RegExp(escapeRegExp(annotation.selectedText))
+            element.innerHTML = element.innerHTML.replace(regex, (match) => {
+              return `<span class="annotation-highlight" data-annotation-id="${annotation.id}" data-content="${annotation.annotationContent}" data-type="${annotation.annotationType}" title="${annotation.annotationContent}">${match}</span>`
+            })
+          }
+        }
+      })
+    })
+    
+    console.log('预览界面注解加载完成:', annotations)
+  } catch (error) {
+    console.error('加载预览注解失败:', error)
+  }
+}
+
+// 为预览界面和编辑器的注解添加事件监听
+const setupAnnotationListeners = () => {
+  // 预览界面的注解 - 使用更广泛的选择器
+  const previewAnnotations = document.querySelectorAll('.preview-content .annotation, .preview-content u.annotation, .preview-content em.annotation, .preview-content .annotation-highlight')
+  
+  console.log('找到预览界面注解元素:', previewAnnotations.length)
+  
+  previewAnnotations.forEach(element => {
+    // 移除旧的事件监听器
+    element.removeEventListener('click', showAnnotationTooltip)
+    
+    // 添加新的点击事件监听器
+    element.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      showAnnotationTooltip(e)
+    })
+    
+    // 添加视觉提示样式
+    element.style.cursor = 'pointer'
+  })
+  
+  // 编辑器内的注解 - 移除点击事件，因为编辑界面不需要点击注解
+  // 编辑界面通过选择文本然后点击"添加/编辑注解"按钮来操作
+  console.log('编辑界面不设置注解点击事件，通过按钮操作')
+}
+
+// 显示注解提示
+const showAnnotationTooltip = (event) => {
+  const element = event.target
+  const content = element.getAttribute('data-content')
+  const type = element.getAttribute('data-type') || 'note'
+  
+  if (!content) return
+  
+  // 先隐藏已存在的提示框
+  hideAnnotationTooltip()
+  
+  // 创建提示框
+  const tooltip = document.createElement('div')
+  tooltip.className = 'annotation-tooltip'
+  tooltip.innerHTML = `
+    <div class="tooltip-header">
+      <span class="tooltip-type">${getAnnotationTypeLabel(type)}</span>
+      <button class="tooltip-close" onclick="this.parentElement.parentElement.remove()">×</button>
+    </div>
+    <div class="tooltip-content">${content}</div>
+  `
+  
+  // 设置样式
+  tooltip.style.cssText = `
+    position: absolute;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    max-width: 300px;
+    font-size: 14px;
+    line-height: 1.5;
+  `
+  
+  // 设置关闭按钮样式
+  const closeButton = tooltip.querySelector('.tooltip-close')
+  if (closeButton) {
+    closeButton.style.cssText = `
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    `
+    
+    closeButton.addEventListener('mouseenter', () => {
+      closeButton.style.backgroundColor = 'var(--bg-secondary)'
+      closeButton.style.color = 'var(--text-primary)'
+    })
+    
+    closeButton.addEventListener('mouseleave', () => {
+      closeButton.style.backgroundColor = 'transparent'
+      closeButton.style.color = 'var(--text-secondary)'
+    })
+  }
+  
+  // 添加到页面
+  document.body.appendChild(tooltip)
+  
+  // 计算位置
+  const rect = element.getBoundingClientRect()
+  const tooltipRect = tooltip.getBoundingClientRect()
+  
+  let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2)
+  let top = rect.top - tooltipRect.height - 8
+  
+  // 边界检查
+  if (left < 8) left = 8
+  if (left + tooltipRect.width > window.innerWidth - 8) {
+    left = window.innerWidth - tooltipRect.width - 8
+  }
+  if (top < 8) {
+    top = rect.bottom + 8
+  }
+  
+  tooltip.style.left = left + 'px'
+  tooltip.style.top = top + 'px'
+  
+  // 存储引用以便清理
+  element._tooltip = tooltip
+  
+  // 添加全局点击事件来关闭提示框
+  setTimeout(() => {
+    document.addEventListener('click', (e) => {
+      if (!tooltip.contains(e.target) && e.target !== element) {
+        hideAnnotationTooltip()
+      }
+    }, { once: true })
+  }, 100)
+}
+
+// 隐藏注解提示
+const hideAnnotationTooltip = (event) => {
+  // 移除所有现有的提示框
+  const existingTooltips = document.querySelectorAll('.annotation-tooltip')
+  existingTooltips.forEach(tooltip => {
+    if (tooltip.parentNode) {
+      tooltip.parentNode.removeChild(tooltip)
+    }
+  })
+  
+  // 清理元素引用
+  if (event && event.target && event.target._tooltip) {
+    event.target._tooltip = null
+  }
+}
+
+// 获取注解类型标签
+const getAnnotationTypeLabel = (type) => {
+  const labels = {
+    note: '说明',
+    quote: '引用',
+    warning: '警告',
+    tip: '提示'
+  }
+  return labels[type] || '注解'
+}
+
+const escapeRegExp = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+// 计算文字在编辑器中的精确位置
+const calculateTextPosition = (editor, selectedText) => {
+  try {
+    const fullText = editor.getText()
+    
+    // 尝试从编辑器的选择状态获取位置信息
+    let actualStartPos = 0
+    let actualEndPos = selectedText.length
+    
+    try {
+      // 获取当前选择的范围
+      const selection = editor.getSelection()
+      if (selection && selection.anchor && selection.focus) {
+        // 计算选择在纯文本中的位置
+        const beforeSelectionText = getTextBeforeSelection(editor, selection)
+        if (beforeSelectionText !== null) {
+          actualStartPos = beforeSelectionText.length
+          actualEndPos = actualStartPos + selectedText.length
+        }
+      }
+    } catch (selectionError) {
+      console.warn('无法获取编辑器选择信息，使用文本查找方式:', selectionError)
+      
+      // 如果无法获取选择信息，使用存储的选择范围信息
+      if (window.lastSelectionRange && window.lastSelectionRange.selectedText === selectedText) {
+        actualStartPos = window.lastSelectionRange.startPosition
+        actualEndPos = window.lastSelectionRange.endPosition
+        console.log(`使用存储的选择范围: ${actualStartPos}-${actualEndPos}`)
+      } else {
+        // 如果没有存储的范围信息，尝试通过上下文匹配找到正确位置
+        const allMatches = []
+        let index = fullText.indexOf(selectedText)
+        while (index !== -1) {
+          allMatches.push(index)
+          index = fullText.indexOf(selectedText, index + 1)
+        }
+        
+        if (allMatches.length > 1) {
+          // 如果有多个匹配，尝试通过上下文判断
+          console.log(`发现${allMatches.length}个"${selectedText}"的匹配位置:`, allMatches)
+          // 暂时使用第一个匹配，后续可以通过更复杂的逻辑改进
+          actualStartPos = allMatches[0]
+        } else if (allMatches.length === 1) {
+          actualStartPos = allMatches[0]
+        }
+        
+        actualEndPos = actualStartPos + selectedText.length
+      }
+    }
+    
+    // 获取前后文上下文（各取20个字符）
+    const contextLength = 20
+    const contextBefore = fullText.substring(Math.max(0, actualStartPos - contextLength), actualStartPos)
+    const contextAfter = fullText.substring(actualEndPos, Math.min(fullText.length, actualEndPos + contextLength))
+    
+    console.log(`位置计算结果: "${selectedText}" 在位置 ${actualStartPos}-${actualEndPos}`)
+    console.log(`上下文: "${contextBefore}" [${selectedText}] "${contextAfter}"`)
+    
+    return {
+      start: actualStartPos,
+      end: actualEndPos,
+      contextBefore,
+      contextAfter
+    }
+  } catch (error) {
+    console.error('计算文字位置失败:', error)
+    return {
+      start: 0,
+      end: selectedText.length,
+      contextBefore: '',
+      contextAfter: ''
+    }
+  }
+}
+
+// 获取选择前的文本内容
+const getTextBeforeSelection = (editor, selection) => {
+  try {
+    // 这是一个简化的实现，实际可能需要更复杂的逻辑
+    // 由于wangEditor的API限制，这里返回null表示无法准确获取
+    return null
+  } catch (error) {
+    console.error('获取选择前文本失败:', error)
+    return null
+  }
+}
+
+// 智能注解更新系统
+const updateAnnotationsAfterContentChange = async () => {
+  if (annotationUpdatePending.value || !postForm.id) return
+  
+  try {
+    annotationUpdatePending.value = true
+    console.log('开始检测文章内容变化并更新注解位置')
+    
+    // 获取当前编辑器内容
+    const editor = richTextEditorRef.value?.getEditor()
+    if (!editor) return
+    
+    const currentContent = editor.getText()
+    const currentHtml = editor.getHtml()
+    
+    // 如果内容没有变化，跳过更新
+    if (currentContent === lastContentSnapshot.value) {
+      return
+    }
+    
+    // 获取当前所有注解
+    const response = await request.get(`/annotations/post/${postForm.id}`)
+    const annotations = response.data || []
+    
+    if (annotations.length === 0) {
+      lastContentSnapshot.value = currentContent
+      return
+    }
+    
+    console.log(`检测到内容变化，开始更新 ${annotations.length} 个注解的位置`)
+    
+    // 分析内容变化并更新注解位置
+    const updatedAnnotations = await analyzeContentChangesAndUpdateAnnotations(
+      lastContentSnapshot.value,
+      currentContent,
+      annotations
+    )
+    
+    // 批量更新注解位置
+    if (updatedAnnotations.length > 0) {
+      await batchUpdateAnnotationPositions(updatedAnnotations)
+      console.log(`成功更新了 ${updatedAnnotations.length} 个注解的位置`)
+    }
+    
+    // 更新内容快照
+    lastContentSnapshot.value = currentContent
+    
+  } catch (error) {
+    console.error('更新注解位置失败:', error)
+  } finally {
+    annotationUpdatePending.value = false
+  }
+}
+
+// 分析内容变化并计算新的注解位置
+const analyzeContentChangesAndUpdateAnnotations = async (oldContent, newContent, annotations) => {
+  const updatedAnnotations = []
+  
+  for (const annotation of annotations) {
+    try {
+      // 使用多种策略尝试找到注解的新位置
+      const newPosition = findNewAnnotationPosition(oldContent, newContent, annotation)
+      
+      if (newPosition && (
+        newPosition.startPosition !== annotation.startPosition ||
+        newPosition.endPosition !== annotation.endPosition ||
+        newPosition.contextBefore !== annotation.contextBefore ||
+        newPosition.contextAfter !== annotation.contextAfter
+      )) {
+        updatedAnnotations.push({
+          id: annotation.id,
+          ...newPosition
+        })
+        console.log(`注解 ${annotation.id} 位置更新: ${annotation.startPosition}-${annotation.endPosition} → ${newPosition.startPosition}-${newPosition.endPosition}`)
+      }
+    } catch (error) {
+      console.error(`更新注解 ${annotation.id} 位置失败:`, error)
+    }
+  }
+  
+  return updatedAnnotations
+}
+
+// 查找注解在新内容中的位置
+const findNewAnnotationPosition = (oldContent, newContent, annotation) => {
+  const { selectedText, contextBefore, contextAfter, startPosition, endPosition } = annotation
+  
+  // 策略1: 使用上下文匹配
+  if (contextBefore || contextAfter) {
+    const contextPattern = (contextBefore || '') + selectedText + (contextAfter || '')
+    const contextIndex = newContent.indexOf(contextPattern)
+    
+    if (contextIndex !== -1) {
+      const newStart = contextIndex + (contextBefore || '').length
+      const newEnd = newStart + selectedText.length
+      
+      // 验证文字是否匹配
+      if (newContent.substring(newStart, newEnd) === selectedText) {
+        return {
+          startPosition: newStart,
+          endPosition: newEnd,
+          contextBefore: newContent.substring(Math.max(0, newStart - 20), newStart),
+          contextAfter: newContent.substring(newEnd, Math.min(newContent.length, newEnd + 20))
+        }
+      }
+    }
+  }
+  
+  // 策略2: 在原位置附近搜索
+  const searchRadius = 50 // 在原位置前后50个字符范围内搜索
+  const searchStart = Math.max(0, startPosition - searchRadius)
+  const searchEnd = Math.min(newContent.length, endPosition + searchRadius)
+  const searchArea = newContent.substring(searchStart, searchEnd)
+  
+  const localIndex = searchArea.indexOf(selectedText)
+  if (localIndex !== -1) {
+    const newStart = searchStart + localIndex
+    const newEnd = newStart + selectedText.length
+    
+    return {
+      startPosition: newStart,
+      endPosition: newEnd,
+      contextBefore: newContent.substring(Math.max(0, newStart - 20), newStart),
+      contextAfter: newContent.substring(newEnd, Math.min(newContent.length, newEnd + 20))
+    }
+  }
+  
+  // 策略3: 全文搜索（如果上述策略都失败）
+  const globalIndex = newContent.indexOf(selectedText)
+  if (globalIndex !== -1) {
+    const newStart = globalIndex
+    const newEnd = newStart + selectedText.length
+    
+    console.warn(`注解 ${annotation.id} 使用全文搜索找到新位置: ${newStart}-${newEnd}`)
+    
+    return {
+      startPosition: newStart,
+      endPosition: newEnd,
+      contextBefore: newContent.substring(Math.max(0, newStart - 20), newStart),
+      contextAfter: newContent.substring(newEnd, Math.min(newContent.length, newEnd + 20))
+    }
+  }
+  
+  // 如果所有策略都失败，返回null表示注解可能已失效
+  console.warn(`无法找到注解 ${annotation.id} 在新内容中的位置，注解可能已失效`)
+  return null
+}
+
+// 批量更新注解位置
+const batchUpdateAnnotationPositions = async (updatedAnnotations) => {
+  const updatePromises = updatedAnnotations.map(annotation => {
+    const updateData = {
+      startPosition: annotation.startPosition,
+      endPosition: annotation.endPosition,
+      contextBefore: annotation.contextBefore,
+      contextAfter: annotation.contextAfter
+    }
+    
+    return request.put(`/annotations/${annotation.id}`, updateData)
+  })
+  
+  try {
+    await Promise.all(updatePromises)
+    console.log('批量更新注解位置完成')
+  } catch (error) {
+    console.error('批量更新注解位置失败:', error)
+    throw error
+  }
+}
+
+// 设置内容变化监听器
+const setupContentChangeListener = () => {
+  const editor = richTextEditorRef.value?.getEditor()
+  if (!editor) return
+  
+  console.log('设置编辑器内容变化监听器')
+  
+  // 使用防抖来避免频繁触发更新
+  let updateTimer = null
+  
+  const handleContentChange = () => {
+    if (updateTimer) {
+      clearTimeout(updateTimer)
+    }
+    
+    updateTimer = setTimeout(() => {
+      console.log('检测到编辑器内容变化，准备更新注解位置')
+      updateAnnotationsAfterContentChange()
+    }, 2000) // 2秒后执行更新，避免频繁更新
+  }
+  
+  // 监听编辑器内容变化事件
+  try {
+    // wangEditor的内容变化监听
+    editor.on('change', handleContentChange)
+    
+    console.log('编辑器内容变化监听器设置完成')
+  } catch (error) {
+    console.error('设置内容变化监听器失败:', error)
+  }
+}
+
+// 测试注解功能
+const testAnnotation = () => {
+  console.log('测试注解功能')
+  
+  if (richTextEditorRef.value) {
+    const editor = richTextEditorRef.value.getEditor()
+    if (editor) {
+      const testText = '测试注解文字'
+      
+      try {
+        // 方法1：使用wangEditor支持的标签（下划线）来模拟注解
+        const testAnnotationHtml = `<u class="annotation" data-id="test123" data-type="note" data-content="这是一个测试注解" title="这是一个测试注解" style="text-decoration: underline dotted #1976d2; background-color: rgba(227, 242, 253, 0.4); padding: 1px 2px; border-radius: 2px; cursor: help; color: inherit;">${testText}</u>`
+        console.log('尝试插入下划线标签HTML:', testAnnotationHtml)
+        
+        editor.dangerouslyInsertHtml(testAnnotationHtml)
+        
+        // 插入后立即设置监听器
+        setTimeout(() => {
+          setupAnnotationListeners()
+        }, 50)
+        
+        // 检查插入后的内容
+        setTimeout(() => {
+          const currentHtml = editor.getHtml()
+          console.log('编辑器当前完整HTML:', currentHtml)
+          
+          // 检查是否包含注解标签
+          if (currentHtml.includes('class="annotation"') || currentHtml.includes('data-content')) {
+            console.log('✅ 注解HTML已成功插入')
+            ElMessage.success('注解插入成功！请检查编辑器中是否有样式显示')
+          } else if (currentHtml.includes('测试注解文字')) {
+            console.log('⚠️ 文字插入成功，但HTML标签被过滤了')
+            console.log('尝试方法2：使用强调标签')
+            
+            // 方法2：使用强调标签
+            const emphasisHtml = `<em class="annotation" data-annotation="这是一个测试注解" style="font-style: normal; text-decoration: underline dotted #1976d2; background-color: #e3f2fd; padding: 2px 4px; border-radius: 3px; cursor: help;">测试注解文字2</em>`
+            console.log('尝试插入强调标签HTML:', emphasisHtml)
+            editor.dangerouslyInsertHtml(emphasisHtml)
+            
+            setTimeout(() => {
+              const newHtml = editor.getHtml()
+              console.log('第二次插入后的HTML:', newHtml)
+              if (newHtml.includes('测试注解文字2')) {
+                ElMessage.success('使用强调标签插入成功')
+              } else {
+                ElMessage.warning('强调标签也被过滤了')
+              }
+            }, 100)
+            
+          } else {
+            console.log('❌ 插入完全失败')
+            ElMessage.error('注解插入失败')
+          }
+        }, 100)
+        
+      } catch (error) {
+        console.error('测试注解插入失败:', error)
+        ElMessage.error('测试注解插入失败: ' + error.message)
+      }
+    } else {
+      console.error('无法获取编辑器实例')
+      ElMessage.error('无法获取编辑器实例')
+    }
+  } else {
+    console.error('richTextEditorRef 为空')
+    ElMessage.error('编辑器引用为空')
+  }
+}
+
+// 保存注解到后台
+const saveAnnotationToBackend = async (annotationData) => {
+  try {
+    console.log('保存注解到后台:', annotationData)
+    
+    // 首先检查是否已存在相同文字的注解
+    const existingAnnotationsResponse = await request.get(`/annotations/post/${annotationData.postId}`)
+    const existingAnnotations = existingAnnotationsResponse.data || []
+    
+    // 查找相同文字的注解
+    const existingAnnotation = existingAnnotations.find(annotation => 
+      annotation.selectedText === annotationData.text &&
+      annotation.postId === annotationData.postId &&
+      (!annotationData.chapterId || annotation.chapterId === annotationData.chapterId)
+    )
+    
+    if (existingAnnotation) {
+      // 如果存在相同文字的注解，更新它
+      console.log('发现相同文字的注解，将进行更新:', existingAnnotation)
+      
+      const updateData = {
+        annotationType: annotationData.type,
+        annotationContent: annotationData.content,
+        isPublic: true
+      }
+      
+      const response = await request.put(`/annotations/${existingAnnotation.id}`, updateData)
+      console.log('注解更新成功，ID:', existingAnnotation.id)
+      return existingAnnotation.id
+    } else {
+      // 如果不存在，创建新注解
+      const createData = {
+        postId: annotationData.postId,
+        chapterId: annotationData.chapterId,
+        annotationType: annotationData.type,
+        selectedText: annotationData.text,
+        annotationContent: annotationData.content,
+        startPosition: annotationData.position?.start,
+        endPosition: annotationData.position?.end,
+        contextBefore: annotationData.contextBefore,
+        contextAfter: annotationData.contextAfter,
+        isPublic: true
+      }
+      
+      console.log('创建注解数据:', createData)
+      
+      // 调用注解创建接口
+      const response = await request.post('/annotations', createData)
+      
+      console.log('注解保存成功，ID:', response.data)
+      
+      // 返回注解ID，用于前端标记
+      return response.data
+    }
+    
+  } catch (error) {
+    console.error('保存注解到后台失败:', error)
+    ElMessage.error('保存注解失败: ' + (error.response?.data?.message || error.message))
+    throw error
+  }
+}
+
+// 保存章节注解到后台
+const saveChapterAnnotationToBackend = async (annotationData) => {
+  try {
+    console.log('保存章节注解到后台:', annotationData)
+    
+    if (!annotationData.chapterId) {
+      throw new Error('章节ID不存在')
+    }
+    
+    // 构建注解创建数据
+    const createData = {
+      chapterId: annotationData.chapterId,
+      annotationType: annotationData.type,
+      selectedText: annotationData.text,
+      annotationContent: annotationData.content,
+      startPosition: annotationData.position?.start,
+      endPosition: annotationData.position?.end,
+      contextBefore: annotationData.contextBefore,
+      contextAfter: annotationData.contextAfter,
+      isPublic: true
+    }
+    
+    console.log('创建章节注解数据:', createData)
+    
+    // 调用注解创建接口
+    const response = await request.post('/annotations', createData)
+    
+    console.log('章节注解保存成功，ID:', response.data.data)
+    
+    // 返回注解ID，用于前端标记
+    return response.data.data
+    
+  } catch (error) {
+    console.error('保存章节注解到后台失败:', error)
+    ElMessage.error('保存章节注解失败: ' + (error.response?.data?.message || error.message))
+    throw error
+  }
 }
 
 const goBack = () => {
   router.back()
+}
+
+// 加载并显示已有注解
+const loadAndDisplayAnnotations = async () => {
+  console.log('加载并显示已有注解')
+  
+  try {
+    // 加载文章注解
+    if (postForm.id) {
+      const response = await request.get(`/annotations/post/${postForm.id}`)
+      const annotations = response.data || []
+      console.log('文章注解数据:', annotations)
+      
+      // 更新当前注解数据
+      currentAnnotations.value = annotations
+      
+      // 在编辑器HTML中渲染注解标记
+      if (annotations.length > 0) {
+        renderAnnotationsInEditor(annotations, 'article')
+      }
+    }
+    
+    // 加载章节注解
+    for (const chapter of chapters.value) {
+      if (chapter.id) {
+        const response = await request.get(`/annotations/chapter/${chapter.id}`)
+        const chapterAnnotations = response.data || []
+        console.log(`章节 ${chapter.title} 注解数据:`, chapterAnnotations)
+        
+        // 在章节编辑器HTML中渲染注解标记
+        if (chapterAnnotations.length > 0) {
+          renderAnnotationsInEditor(chapterAnnotations, 'chapter', chapter.id)
+        }
+      }
+    }
+    
+    // 设置监听器
+    setTimeout(() => {
+      setupAnnotationListeners()
+    }, 100)
+    
+  } catch (error) {
+    console.error('加载注解失败:', error)
+  }
+}
+
+// 在指定位置精确插入注解标记
+const insertAnnotationAtExactPosition = (htmlContent, annotation, annotationHtml) => {
+  let plainTextIndex = 0
+  let htmlIndex = 0
+  
+  // 遍历HTML内容，找到对应的纯文本位置
+  while (htmlIndex < htmlContent.length) {
+    const char = htmlContent[htmlIndex]
+    
+    if (char === '<') {
+      // 跳过HTML标签
+      const tagEnd = htmlContent.indexOf('>', htmlIndex)
+      if (tagEnd !== -1) {
+        htmlIndex = tagEnd + 1
+        continue
+      }
+    }
+    
+    // 如果到达了注解的开始位置
+    if (plainTextIndex === annotation.startPosition) {
+      // 找到注解文本在HTML中的结束位置
+      let endHtmlIndex = htmlIndex
+      let currentPlainIndex = plainTextIndex
+      
+      while (currentPlainIndex < annotation.endPosition && endHtmlIndex < htmlContent.length) {
+        const endChar = htmlContent[endHtmlIndex]
+        if (endChar === '<') {
+          const tagEnd = htmlContent.indexOf('>', endHtmlIndex)
+          if (tagEnd !== -1) {
+            endHtmlIndex = tagEnd + 1
+            continue
+          }
+        }
+        currentPlainIndex++
+        endHtmlIndex++
+      }
+      
+      // 插入注解标记
+      const beforeHtml = htmlContent.substring(0, htmlIndex)
+      const afterHtml = htmlContent.substring(endHtmlIndex)
+      
+      return beforeHtml + annotationHtml + afterHtml
+    }
+    
+    plainTextIndex++
+    htmlIndex++
+  }
+  
+  return htmlContent
+}
+
+// 在编辑器中渲染注解标记
+const renderAnnotationsInEditor = (annotations, editorType, chapterId = null) => {
+  console.log('在编辑器中渲染注解:', editorType, annotations)
+  
+  try {
+    let editor = null
+    
+    // 获取对应的编辑器实例
+    if (editorType === 'article' && richTextEditorRef.value) {
+      editor = richTextEditorRef.value.getEditor()
+    } else if (editorType === 'chapter' && chapterRichTextEditorRef.value) {
+      editor = chapterRichTextEditorRef.value.getEditor()
+    }
+    
+    if (!editor) {
+      console.warn('无法获取编辑器实例')
+      return
+    }
+    
+    // 获取当前HTML内容
+    let currentHtml = editor.getHtml()
+    let currentText = editor.getText()
+    
+    // 为每个注解添加高亮标记
+    annotations.forEach(annotation => {
+      console.log(`处理注解 ${annotation.id}: ${annotation.selectedText} - ${annotation.annotationContent}`)
+      
+      // 检查是否已经存在注解标记
+      if (currentHtml.includes(`data-id="${annotation.id}"`)) {
+        console.log(`注解 ${annotation.id} 已存在于编辑器中`)
+        return
+      }
+      
+      // 使用位置信息进行精确替换
+      if (annotation.startPosition !== null && annotation.endPosition !== null) {
+        const targetText = currentText.substring(annotation.startPosition, annotation.endPosition)
+        if (targetText === annotation.selectedText) {
+          // 使用精确位置在HTML中插入注解标记
+          const annotationHtml = `<u class="annotation" data-id="${annotation.id}" data-type="${annotation.annotationType}" data-content="${annotation.annotationContent}" title="${annotation.annotationContent}" style="text-decoration: underline dotted; cursor: help; background-color: rgba(227, 242, 253, 0.4); padding: 1px 2px; border-radius: 2px; color: inherit;">${annotation.selectedText}</u>`
+          
+          // 使用精确位置匹配插入注解
+          const updatedHtml = insertAnnotationAtExactPosition(currentHtml, annotation, annotationHtml)
+          if (updatedHtml !== currentHtml) {
+            currentHtml = updatedHtml
+            console.log(`已在编辑器中精确添加注解标记: ${annotation.selectedText} 在位置 ${annotation.startPosition}`)
+          }
+        } else {
+          console.warn(`注解位置不匹配: 期望 "${annotation.selectedText}", 实际 "${targetText}"`)
+        }
+      } else {
+        // 如果没有位置信息，使用简单的文本替换
+        const annotationHtml = `<u class="annotation" data-id="${annotation.id}" data-type="${annotation.annotationType}" data-content="${annotation.annotationContent}" title="${annotation.annotationContent}" style="text-decoration: underline dotted; cursor: help; background-color: rgba(227, 242, 253, 0.4); padding: 1px 2px; border-radius: 2px; color: inherit;">${annotation.selectedText}</u>`
+        const firstOccurrence = currentHtml.indexOf(annotation.selectedText)
+        if (firstOccurrence !== -1) {
+          const beforeHtml = currentHtml.substring(0, firstOccurrence)
+          const afterHtml = currentHtml.substring(firstOccurrence + annotation.selectedText.length)
+          currentHtml = beforeHtml + annotationHtml + afterHtml
+          console.log(`已在编辑器中添加注解标记: ${annotation.selectedText}`)
+        }
+      }
+    })
+    
+    // 更新编辑器内容
+    if (currentHtml !== editor.getHtml()) {
+      editor.setHtml(currentHtml)
+      console.log('编辑器内容已更新，包含注解标记')
+      
+      // 设置事件监听器
+      setTimeout(() => {
+        setupAnnotationListeners()
+      }, 100)
+    }
+    
+  } catch (error) {
+    console.error('渲染注解失败:', error)
+  }
 }
 
 // 简单的Markdown渲染（避免依赖复杂的渲染器）
@@ -2066,16 +3039,54 @@ const selectImage = (image) => {
 }
 
 const insertImage = (image) => {
-  const imageMarkdown = `![${image.title || '图片'}](${image.url})\n`
+  console.log('插入图片:', image, 'showChapterImageSelector:', showChapterImageSelector.value)
   
   if (showChapterImageSelector.value) {
-    // 插入到章节内容
-    chapterForm.content += imageMarkdown
+    // 插入到章节富文本编辑器
+    if (chapterRichTextEditorRef.value) {
+      const editor = chapterRichTextEditorRef.value.getEditor()
+      if (editor) {
+        try {
+          // 在光标位置插入图片HTML
+          const imgHtml = `<img src="${image.url}" alt="${image.title || '图片'}" style="max-width: 100%; margin: 10px 0;" />`
+          editor.dangerouslyInsertHtml(imgHtml)
+          console.log('章节图片插入成功')
+          ElMessage.success('图片插入成功')
+        } catch (error) {
+          console.error('章节图片插入失败:', error)
+          ElMessage.error('图片插入失败')
+        }
+      } else {
+        console.error('章节编辑器实例不存在')
+        ElMessage.error('编辑器未初始化')
+      }
+    } else {
+      console.error('章节编辑器引用不存在')
+      ElMessage.error('编辑器引用不存在')
+    }
     showChapterImageSelector.value = false
   } else {
-    // 插入到富文本编辑器
+    // 插入到文章富文本编辑器
     if (richTextEditorRef.value) {
-      richTextEditorRef.value.insertImage(imageUrl)
+      const editor = richTextEditorRef.value.getEditor()
+      if (editor) {
+        try {
+          // 在光标位置插入图片HTML
+          const imgHtml = `<img src="${image.url}" alt="${image.title || '图片'}" style="max-width: 100%; margin: 10px 0;" />`
+          editor.dangerouslyInsertHtml(imgHtml)
+          console.log('文章图片插入成功')
+          ElMessage.success('图片插入成功')
+        } catch (error) {
+          console.error('文章图片插入失败:', error)
+          ElMessage.error('图片插入失败')
+        }
+      } else {
+        console.error('文章编辑器实例不存在')
+        ElMessage.error('编辑器未初始化')
+      }
+    } else {
+      console.error('文章编辑器引用不存在')
+      ElMessage.error('编辑器引用不存在')
     }
     showImageSelector.value = false
   }
@@ -2134,13 +3145,269 @@ const openImageSelector = () => {
 }
 
 const openChapterImageSelector = () => {
+  console.log('打开章节图片选择器')
+  console.log('chapterRichTextEditorRef:', chapterRichTextEditorRef.value)
+  if (chapterRichTextEditorRef.value) {
+    console.log('章节编辑器存在，获取编辑器实例...')
+    const editor = chapterRichTextEditorRef.value.getEditor()
+    console.log('章节编辑器实例:', editor)
+  }
+  
+  console.log('设置前 - showImageSelector:', showImageSelector.value)
+  console.log('设置前 - showChapterImageSelector:', showChapterImageSelector.value)
+  
   showImageSelector.value = false
   showChapterImageSelector.value = true
+  
+  console.log('设置后 - showImageSelector:', showImageSelector.value)
+  console.log('设置后 - showChapterImageSelector:', showChapterImageSelector.value)
+  
   loadImages()
 }
 
-// 注解功能方法 - 简化版本，直接选中文字添加注解
-const openAnnotationDialog = () => {
+// 响应式的注解按钮文本
+const annotationButtonText = ref('添加注解')
+
+// 获取注解按钮文本
+const getAnnotationButtonText = () => {
+  const selection = window.getSelection()
+  const selectedContent = selection.toString().trim()
+  
+  if (!selectedContent) {
+    return '添加注解'
+  }
+  
+  // 使用存储的选择范围信息进行精确匹配
+  let selectionInfo = null
+  if (window.lastSelectionRange && window.lastSelectionRange.selectedText === selectedContent) {
+    selectionInfo = window.lastSelectionRange
+  }
+  
+  // 检查选中的文本是否已有注解
+  const existingAnnotation = findExistingAnnotationForText(selectedContent, selectionInfo)
+  return existingAnnotation ? '编辑注解' : '添加注解'
+}
+
+// 更新按钮文字
+const updateAnnotationButtonText = () => {
+  annotationButtonText.value = getAnnotationButtonText()
+}
+
+// 设置选择变化监听器
+const setupSelectionChangeListener = () => {
+  // 监听文档选择变化
+  document.addEventListener('selectionchange', () => {
+    // 延迟更新，确保选择已经稳定
+    setTimeout(() => {
+      updateAnnotationButtonText()
+    }, 100)
+  })
+  
+  // 监听编辑器内的鼠标事件
+  const editor = richTextEditorRef.value?.getEditor()
+  if (editor) {
+    const editorElement = editor.getEditableContainer()
+    if (editorElement) {
+      editorElement.addEventListener('mouseup', () => {
+        setTimeout(() => {
+          updateAnnotationButtonText()
+        }, 100)
+      })
+      
+      editorElement.addEventListener('keyup', () => {
+        setTimeout(() => {
+          updateAnnotationButtonText()
+        }, 100)
+      })
+    }
+  }
+}
+
+// 获取注解对话框标题
+const getAnnotationDialogTitle = () => {
+  // 检查是否在编辑现有注解
+  if (annotationForm.content && selectedText.value) {
+    // 简单判断：如果表单有内容，可能是编辑模式
+    return '编辑注解'
+  }
+  return '添加注解'
+}
+
+// 存储当前文章的注解数据
+const currentAnnotations = ref([])
+
+// 查找选中文本的现有注解（基于位置的精确匹配）
+const findExistingAnnotationForText = (selectedText, selectionInfo = null) => {
+  if (!selectedText || !currentAnnotations.value.length) return null
+  
+  // 如果有位置信息，优先使用位置匹配
+  if (selectionInfo && selectionInfo.startPosition !== undefined && selectionInfo.endPosition !== undefined) {
+    return currentAnnotations.value.find(annotation => 
+      annotation.selectedText === selectedText &&
+      annotation.startPosition === selectionInfo.startPosition &&
+      annotation.endPosition === selectionInfo.endPosition
+    )
+  }
+  
+  // 如果没有位置信息，使用存储的选择范围
+  if (window.lastSelectionRange) {
+    return currentAnnotations.value.find(annotation => 
+      annotation.selectedText === selectedText &&
+      annotation.startPosition === window.lastSelectionRange.startPosition &&
+      annotation.endPosition === window.lastSelectionRange.endPosition
+    )
+  }
+  
+  // 最后才使用简单的文本匹配（不推荐）
+  return currentAnnotations.value.find(annotation => 
+    annotation.selectedText === selectedText
+  )
+}
+
+// 查找选中文本的现有注解（异步版本，用于精确匹配）
+const findExistingAnnotationForSelectedText = async (selectedText, selectionInfo) => {
+  if (!postForm.id) return null
+  
+  try {
+    // 从后台获取文章的所有注解
+    const response = await request.get(`/annotations/post/${postForm.id}`)
+    const annotations = response.data || []
+    
+    // 如果有位置信息，优先使用位置匹配
+    if (selectionInfo && selectionInfo.startPosition !== undefined) {
+      const positionMatch = annotations.find(annotation => 
+        annotation.selectedText === selectedText &&
+        annotation.startPosition === selectionInfo.startPosition &&
+        annotation.endPosition === selectionInfo.endPosition
+      )
+      if (positionMatch) {
+        console.log('通过位置找到匹配的注解:', positionMatch)
+        return positionMatch
+      }
+    }
+    
+    // 如果没有位置信息或位置匹配失败，使用文本匹配
+    const textMatch = annotations.find(annotation => 
+      annotation.selectedText === selectedText
+    )
+    
+    if (textMatch) {
+      console.log('通过文本找到匹配的注解:', textMatch)
+      return textMatch
+    }
+    
+    return null
+  } catch (error) {
+    console.error('查找现有注解失败:', error)
+    return null
+  }
+}
+
+// 注解功能方法 - 支持富文本编辑器
+const openAnnotationDialog = async () => {
+  console.log('打开注解对话框')
+  console.log('richTextEditorRef:', richTextEditorRef.value)
+  
+  if (richTextEditorRef.value) {
+    const editor = richTextEditorRef.value.getEditor()
+    console.log('文章编辑器实例:', editor)
+    
+    if (editor) {
+      try {
+        // 尝试获取选中文本和位置信息
+        let selectedContent = ''
+        let selectionInfo = null
+        
+        try {
+          // 使用浏览器原生API获取选择
+          const selection = window.getSelection()
+          selectedContent = selection.toString()
+          
+          if (selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0)
+            
+            // 计算在纯文本中的位置
+            const editorElement = editor.getEditableContainer()
+            if (editorElement) {
+              // 创建一个范围来计算开始位置
+              const startRange = document.createRange()
+              startRange.setStart(editorElement, 0)
+              startRange.setEnd(range.startContainer, range.startOffset)
+              
+              const beforeText = startRange.toString()
+              const startPosition = beforeText.length
+              const endPosition = startPosition + selectedContent.length
+              
+              // 计算前后文
+              const fullText = editor.getText()
+              const contextLength = 30 // 前后文长度
+              const contextBefore = fullText.substring(Math.max(0, startPosition - contextLength), startPosition)
+              const contextAfter = fullText.substring(endPosition, Math.min(fullText.length, endPosition + contextLength))
+              
+              selectionInfo = {
+                startPosition,
+                endPosition,
+                selectedText: selectedContent,
+                contextBefore,
+                contextAfter
+              }
+              
+              // 存储到全局变量供后续使用
+              window.lastSelectionRange = selectionInfo
+              
+              console.log('计算的选择位置:', selectionInfo)
+              
+              // 立即更新按钮文字
+              updateAnnotationButtonText()
+            }
+          }
+        } catch (error) {
+          console.error('获取选中文本和位置失败:', error)
+          const selection = window.getSelection()
+          selectedContent = selection.toString()
+        }
+        
+        console.log('选中的文本:', selectedContent)
+        
+        if (!selectedContent || !selectedContent.trim()) {
+          ElMessage.warning('请先在富文本编辑器中选择要注解的文字')
+          return
+        }
+        
+        selectedText.value = selectedContent
+        selectedRange.value = selectionInfo || { text: selectedContent } // 存储位置信息
+        currentTextarea.value = { ref: richTextEditorRef.value, type: 'article' }
+        
+        console.log('设置选中文本:', selectedText.value)
+        console.log('设置当前编辑器:', currentTextarea.value)
+        
+        // 检查是否是编辑现有注解（使用精确位置匹配）
+        const existingAnnotation = findExistingAnnotationForText(selectedContent, selectionInfo)
+        
+        if (existingAnnotation) {
+          // 编辑现有注解
+          annotationForm.content = existingAnnotation.annotationContent
+          annotationForm.type = existingAnnotation.annotationType
+          console.log('编辑现有注解:', existingAnnotation)
+        } else {
+          // 重置表单用于新注解
+          annotationForm.content = ''
+          annotationForm.type = 'note'
+          console.log('添加新注解，位置:', selectionInfo)
+        }
+        
+        showAnnotationDialog.value = true
+        console.log('显示注解对话框')
+        return
+      } catch (error) {
+        console.error('获取选中文本失败:', error)
+        ElMessage.warning('请先在富文本编辑器中选择要注解的文字')
+        return
+      }
+    }
+  }
+  
+  // 如果富文本编辑器不可用，尝试textarea（兼容性处理）
   const textarea = articleTextareaRef.value?.textarea
   if (!textarea) {
     ElMessage.warning('请先选择文章内容区域')
@@ -2167,6 +3434,61 @@ const openAnnotationDialog = () => {
 }
 
 const openChapterAnnotationDialog = () => {
+  console.log('打开章节注解对话框')
+  console.log('chapterRichTextEditorRef:', chapterRichTextEditorRef.value)
+  
+  if (chapterRichTextEditorRef.value) {
+    const editor = chapterRichTextEditorRef.value.getEditor()
+    console.log('章节编辑器实例:', editor)
+    
+    if (editor) {
+      try {
+        // 尝试获取选中文本
+        let selectedContent = ''
+        try {
+          // 尝试使用getSelectionText方法
+          if (typeof editor.getSelectionText === 'function') {
+            selectedContent = editor.getSelectionText()
+          } else {
+            // 如果方法不存在，使用浏览器原生API
+            const selection = window.getSelection()
+            selectedContent = selection.toString()
+          }
+        } catch (error) {
+          console.error('获取章节选中文本方法失败，使用原生API:', error)
+          const selection = window.getSelection()
+          selectedContent = selection.toString()
+        }
+        console.log('章节选中的文本:', selectedContent)
+        
+        if (!selectedContent || !selectedContent.trim()) {
+          ElMessage.warning('请先在章节编辑器中选择要注解的文字')
+          return
+        }
+        
+        selectedText.value = selectedContent
+        selectedRange.value = { text: selectedContent } // 简化存储
+        currentTextarea.value = { ref: chapterRichTextEditorRef.value, type: 'chapter' }
+        
+        console.log('设置章节选中文本:', selectedText.value)
+        console.log('设置章节当前编辑器:', currentTextarea.value)
+        
+        // 重置表单
+        annotationForm.content = ''
+        annotationForm.type = 'note'
+        
+        showAnnotationDialog.value = true
+        console.log('显示章节注解对话框')
+        return
+      } catch (error) {
+        console.error('获取章节选中文本失败:', error)
+        ElMessage.warning('请先在章节编辑器中选择要注解的文字')
+        return
+      }
+    }
+  }
+  
+  // 如果富文本编辑器不可用，尝试textarea（兼容性处理）
   const textarea = chapterTextareaRef.value?.textarea
   if (!textarea) {
     ElMessage.warning('请先选择章节内容区域')
@@ -2237,7 +3559,13 @@ const handleContextMenu = (event) => {
   }
 }
 
-const saveAnnotation = () => {
+const saveAnnotation = async () => {
+  console.log('开始保存注解')
+  console.log('注解表单内容:', annotationForm.content)
+  console.log('选中的文本:', selectedText.value)
+  console.log('选中范围:', selectedRange.value)
+  console.log('当前编辑器:', currentTextarea.value)
+  
   if (!annotationForm.content.trim()) {
     ElMessage.error('请输入注解内容')
     return
@@ -2248,22 +3576,108 @@ const saveAnnotation = () => {
     return
   }
   
-  const { start, end } = selectedRange.value
-  const { ref: textareaRef, type } = currentTextarea.value
+  const { ref: editorRef, type } = currentTextarea.value
+  console.log('编辑器类型:', type)
   
-  // 构建注解标记
+  // 构建注解标记（使用wangEditor支持的标签）
   const annotationId = Date.now()
-  const annotationMarkdown = `<span class="annotation" data-id="${annotationId}" data-type="${annotationForm.type}" title="${annotationForm.content}">${selectedText.value}</span>`
+  const annotationHtml = `<u class="annotation" data-id="${annotationId}" data-type="${annotationForm.type}" data-content="${annotationForm.content}" title="${annotationForm.content}" style="text-decoration: underline dotted; cursor: help; background-color: rgba(227, 242, 253, 0.4); padding: 1px 2px; border-radius: 2px; color: inherit;">${selectedText.value}</u>`
   
-  // 替换选中的文字
-  if (type === 'article') {
-    const content = postForm.contentHtml
-    const newContent = content.substring(0, start) + annotationMarkdown + content.substring(end)
-    postForm.contentHtml = newContent
-  } else if (type === 'chapter') {
-    const content = chapterForm.content
-    const newContent = content.substring(0, start) + annotationMarkdown + content.substring(end)
-    chapterForm.content = newContent
+  // 在富文本编辑器中替换选中的文字
+  if (type === 'article' && richTextEditorRef.value) {
+    const editor = richTextEditorRef.value.getEditor()
+    if (editor) {
+      try {
+        console.log('插入文章注解HTML:', annotationHtml)
+        // 使用dangerouslyInsertHtml方法插入HTML
+        editor.dangerouslyInsertHtml(annotationHtml)
+        console.log('文章注解插入成功')
+        
+        // 计算精确的文字位置
+        const textPosition = calculateTextPosition(editor, selectedText.value)
+        
+        // 保存注解到后台
+        const realAnnotationId = await saveAnnotationToBackend({
+          postId: postForm.id,
+          type: annotationForm.type,
+          content: annotationForm.content,
+          text: selectedText.value,
+          position: textPosition,
+          contextBefore: textPosition.contextBefore,
+          contextAfter: textPosition.contextAfter
+        })
+        
+        // 更新HTML中的注解ID为真实的数据库ID
+        const currentHtml = editor.getHtml()
+        const updatedHtml = currentHtml.replace(
+          `data-id="${annotationId}"`,
+          `data-id="${realAnnotationId}"`
+        )
+        editor.setHtml(updatedHtml)
+        
+        ElMessage.success('注解添加成功')
+        
+        // 插入后设置监听器
+        setTimeout(() => {
+          setupAnnotationListeners()
+        }, 100)
+      } catch (error) {
+        console.error('插入注解失败:', error)
+        ElMessage.error('注解添加失败')
+      }
+    }
+  } else if (type === 'chapter' && chapterRichTextEditorRef.value) {
+    const editor = chapterRichTextEditorRef.value.getEditor()
+    if (editor) {
+      try {
+        console.log('插入章节注解HTML:', annotationHtml)
+        // 使用dangerouslyInsertHtml方法插入HTML
+        editor.dangerouslyInsertHtml(annotationHtml)
+        console.log('章节注解插入成功')
+        
+        // 保存章节注解到后台
+        const realAnnotationId = await saveChapterAnnotationToBackend({
+          chapterId: currentEditingChapter.value?.id,
+          type: annotationForm.type,
+          content: annotationForm.content,
+          text: selectedText.value,
+          position: {
+            start: 0,
+            end: selectedText.value.length
+          }
+        })
+        
+        // 更新HTML中的注解ID为真实的数据库ID
+        const currentHtml = editor.getHtml()
+        const updatedHtml = currentHtml.replace(
+          `data-id="${annotationId}"`,
+          `data-id="${realAnnotationId}"`
+        )
+        editor.setHtml(updatedHtml)
+        
+        ElMessage.success('注解添加成功')
+        
+        // 插入后设置监听器
+        setTimeout(() => {
+          setupAnnotationListeners()
+        }, 100)
+      } catch (error) {
+        console.error('插入章节注解失败:', error)
+        ElMessage.error('注解添加失败')
+      }
+    }
+  } else {
+    // 兼容性处理：如果是textarea模式
+    const { start, end } = selectedRange.value
+    if (type === 'article') {
+      const content = postForm.contentHtml
+      const newContent = content.substring(0, start) + annotationHtml + content.substring(end)
+      postForm.contentHtml = newContent
+    } else if (type === 'chapter') {
+      const content = chapterForm.contentHtml
+      const newContent = content.substring(0, start) + annotationHtml + content.substring(end)
+      chapterForm.contentHtml = newContent
+    }
   }
   
   // 保存注解到文章的annotations字段（JSON格式）
@@ -2272,7 +3686,7 @@ const saveAnnotation = () => {
     text: selectedText.value,
     content: annotationForm.content,
     type: annotationForm.type,
-    position: { start, end }
+    position: selectedRange.value
   }
   
   // 更新文章的annotations字段
@@ -2289,6 +3703,18 @@ const saveAnnotation = () => {
   selectedText.value = ''
   selectedRange.value = null
   
+  // 重新加载注解数据并设置监听器
+  try {
+    await loadAndDisplayAnnotations()
+    
+    // 等待DOM更新后设置监听器
+    nextTick(() => {
+      setupAnnotationListeners()
+    })
+  } catch (error) {
+    console.error('重新加载注解失败:', error)
+  }
+  
   ElMessage.success('注解添加成功')
 }
 
@@ -2299,6 +3725,119 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 注解样式 */
+:deep(.annotation) {
+  position: relative;
+  background-color: #fff3cd;
+  border-bottom: 2px dotted #856404;
+  cursor: help;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: #856404;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+:deep(.annotation:hover) {
+  background-color: #ffeaa7;
+  border-bottom-color: #d63031;
+  text-decoration-color: #d63031;
+}
+
+:deep(.annotation[data-type="note"]) {
+  background-color: #e3f2fd;
+  border-bottom-color: #1976d2;
+  text-decoration-color: #1976d2;
+}
+
+:deep(.annotation[data-type="quote"]) {
+  background-color: #f3e5f5;
+  border-bottom-color: #7b1fa2;
+  text-decoration-color: #7b1fa2;
+}
+
+:deep(.annotation[data-type="warning"]) {
+  background-color: #ffebee;
+  border-bottom-color: #d32f2f;
+  text-decoration-color: #d32f2f;
+}
+
+:deep(.annotation[data-type="tip"]) {
+  background-color: #e8f5e8;
+  border-bottom-color: #388e3c;
+  text-decoration-color: #388e3c;
+}
+
+/* 预览界面的注解样式 */
+.annotation-content :deep(.annotation) {
+  position: relative;
+  background-color: #fff3cd;
+  border-bottom: 2px dotted #856404;
+  cursor: help;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: #856404;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+.annotation-content :deep(.annotation:hover) {
+  background-color: #ffeaa7;
+  border-bottom-color: #d63031;
+  text-decoration-color: #d63031;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.annotation-content :deep(.annotation[data-type="note"]) {
+  background-color: #e3f2fd;
+  border-bottom-color: #1976d2;
+  text-decoration-color: #1976d2;
+}
+
+.annotation-content :deep(.annotation[data-type="note"]:hover) {
+  background-color: #bbdefb;
+  border-bottom-color: #0d47a1;
+  text-decoration-color: #0d47a1;
+}
+
+.annotation-content :deep(.annotation[data-type="quote"]) {
+  background-color: #f3e5f5;
+  border-bottom-color: #7b1fa2;
+  text-decoration-color: #7b1fa2;
+}
+
+.annotation-content :deep(.annotation[data-type="quote"]:hover) {
+  background-color: #e1bee7;
+  border-bottom-color: #4a148c;
+  text-decoration-color: #4a148c;
+}
+
+.annotation-content :deep(.annotation[data-type="warning"]) {
+  background-color: #ffebee;
+  border-bottom-color: #d32f2f;
+  text-decoration-color: #d32f2f;
+}
+
+.annotation-content :deep(.annotation[data-type="warning"]:hover) {
+  background-color: #ffcdd2;
+  border-bottom-color: #b71c1c;
+  text-decoration-color: #b71c1c;
+}
+
+.annotation-content :deep(.annotation[data-type="tip"]) {
+  background-color: #e8f5e8;
+  border-bottom-color: #388e3c;
+  text-decoration-color: #388e3c;
+}
+
+.annotation-content :deep(.annotation[data-type="tip"]:hover) {
+  background-color: #c8e6c9;
+  border-bottom-color: #1b5e20;
+  text-decoration-color: #1b5e20;
+}
 .post-management {
   padding: 20px;
 }
@@ -3380,6 +4919,48 @@ onUnmounted(() => {
   word-break: break-all;
   max-height: 100px;
   overflow-y: auto;
+}
+
+.context-display {
+  margin-bottom: 20px;
+  padding: 15px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  border-left: 4px solid var(--accent-secondary);
+}
+
+.context-display label {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.context-preview {
+  background: var(--bg-primary);
+  padding: 12px;
+  border-radius: 4px;
+  font-family: monospace;
+  line-height: 1.6;
+  border: 1px solid var(--border-color);
+}
+
+.context-before {
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.selected-highlight {
+  background: var(--accent-primary);
+  color: white;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.context-after {
+  color: var(--text-secondary);
+  opacity: 0.8;
 }
 
 /* 注解模式下的textarea样式 */

@@ -458,10 +458,25 @@ const totalPages = computed(() => {
 // 当前页内容
 const currentPageContent = computed(() => {
   const pages = allPagesComputed.value
-  if (pages.length === 0) return ''
+  
+  // 如果没有分页数据，直接返回文章原始内容
+  if (pages.length === 0) {
+    if (post.value?.contentHtml) {
+      console.log('使用文章原始内容，因为没有分页数据')
+      return post.value.contentHtml
+    }
+    return ''
+  }
   
   const page = pages[currentPage.value - 1]
-  if (!page) return ''
+  if (!page) {
+    // 如果当前页不存在，也返回原始内容作为fallback
+    if (post.value?.contentHtml) {
+      console.log('使用文章原始内容作为fallback')
+      return post.value.contentHtml
+    }
+    return ''
+  }
   
   // 修复HTML结构，确保每一页的HTML都是完整的
   return fixHtmlStructure(page.content)

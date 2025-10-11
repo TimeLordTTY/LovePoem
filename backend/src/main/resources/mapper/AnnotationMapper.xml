@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herpoem.site.mapper.AnnotationMapper">
+
+    <!-- 基础结果映射 -->
+    <resultMap id="BaseResultMap" type="com.herpoem.site.model.entity.Annotation">
+        <id column="id" property="id" />
+        <result column="post_id" property="postId" />
+        <result column="chapter_id" property="chapterId" />
+        <result column="user_id" property="userId" />
+        <result column="annotation_type" property="annotationType" />
+        <result column="selected_text" property="selectedText" />
+        <result column="annotation_content" property="annotationContent" />
+        <result column="start_position" property="startPosition" />
+        <result column="end_position" property="endPosition" />
+        <result column="context_before" property="contextBefore" />
+        <result column="context_after" property="contextAfter" />
+        <result column="is_public" property="isPublic" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+        <result column="deleted" property="deleted" />
+    </resultMap>
+
+    <!-- 注解VO结果映射 -->
+    <resultMap id="AnnotationVOResultMap" type="com.herpoem.site.model.vo.AnnotationVO">
+        <id column="id" property="id" />
+        <result column="post_id" property="postId" />
+        <result column="chapter_id" property="chapterId" />
+        <result column="user_id" property="userId" />
+        <result column="username" property="username" />
+        <result column="display_name" property="displayName" />
+        <result column="annotation_type" property="annotationType" />
+        <result column="annotation_type_desc" property="annotationTypeDesc" />
+        <result column="selected_text" property="selectedText" />
+        <result column="annotation_content" property="annotationContent" />
+        <result column="start_position" property="startPosition" />
+        <result column="end_position" property="endPosition" />
+        <result column="context_before" property="contextBefore" />
+        <result column="context_after" property="contextAfter" />
+        <result column="is_public" property="isPublic" />
+        <result column="created_at" property="createdAt" />
+        <result column="updated_at" property="updatedAt" />
+    </resultMap>
+
+    <!-- 获取文章的注解列表 -->
+    <select id="selectPostAnnotations" resultMap="AnnotationVOResultMap">
+        SELECT 
+            a.id,
+            a.post_id,
+            a.chapter_id,
+            a.user_id,
+            u.username,
+            u.display_name,
+            a.annotation_type,
+            CASE 
+                WHEN a.annotation_type = 'note' THEN '笔记'
+                WHEN a.annotation_type = 'quote' THEN '引用'
+                WHEN a.annotation_type = 'warning' THEN '警告'
+                WHEN a.annotation_type = 'tip' THEN '提示'
+                ELSE '注解'
+            END as annotation_type_desc,
+            a.selected_text,
+            a.annotation_content,
+            a.start_position,
+            a.end_position,
+            a.context_before,
+            a.context_after,
+            a.is_public,
+            a.created_at,
+            a.updated_at
+        FROM annotation a
+        LEFT JOIN users u ON a.user_id = u.id
+        WHERE a.post_id = #{postId}
+          AND a.deleted = 0
+          <if test="isPublic != null">
+              AND a.is_public = #{isPublic}
+          </if>
+        ORDER BY a.created_at ASC
+    </select>
+
+    <!-- 获取章节的注解列表 -->
+    <select id="selectChapterAnnotations" resultMap="AnnotationVOResultMap">
+        SELECT 
+            a.id,
+            a.post_id,
+            a.chapter_id,
+            a.user_id,
+            u.username,
+            u.display_name,
+            a.annotation_type,
+            CASE 
+                WHEN a.annotation_type = 'note' THEN '笔记'
+                WHEN a.annotation_type = 'quote' THEN '引用'
+                WHEN a.annotation_type = 'warning' THEN '警告'
+                WHEN a.annotation_type = 'tip' THEN '提示'
+                ELSE '注解'
+            END as annotation_type_desc,
+            a.selected_text,
+            a.annotation_content,
+            a.start_position,
+            a.end_position,
+            a.context_before,
+            a.context_after,
+            a.is_public,
+            a.created_at,
+            a.updated_at
+        FROM annotation a
+        LEFT JOIN users u ON a.user_id = u.id
+        WHERE a.chapter_id = #{chapterId}
+          AND a.deleted = 0
+          <if test="isPublic != null">
+              AND a.is_public = #{isPublic}
+          </if>
+        ORDER BY a.created_at ASC
+    </select>
+
+    <!-- 获取用户的注解列表 -->
+    <select id="selectUserAnnotations" resultMap="AnnotationVOResultMap">
+        SELECT 
+            a.id,
+            a.post_id,
+            a.chapter_id,
+            a.user_id,
+            u.username,
+            u.display_name,
+            a.annotation_type,
+            CASE 
+                WHEN a.annotation_type = 'note' THEN '笔记'
+                WHEN a.annotation_type = 'quote' THEN '引用'
+                WHEN a.annotation_type = 'warning' THEN '警告'
+                WHEN a.annotation_type = 'tip' THEN '提示'
+                ELSE '注解'
+            END as annotation_type_desc,
+            a.selected_text,
+            a.annotation_content,
+            a.start_position,
+            a.end_position,
+            a.context_before,
+            a.context_after,
+            a.is_public,
+            a.created_at,
+            a.updated_at
+        FROM annotation a
+        LEFT JOIN users u ON a.user_id = u.id
+        WHERE a.user_id = #{userId}
+          AND a.deleted = 0
+          <if test="isPublic != null">
+              AND a.is_public = #{isPublic}
+          </if>
+        ORDER BY a.created_at DESC
+    </select>
+
+</mapper>
+
