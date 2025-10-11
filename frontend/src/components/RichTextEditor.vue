@@ -43,6 +43,47 @@ const emit = defineEmits(['update:modelValue', 'change'])
 // 编辑器实例，必须用 shallowRef
 const editorRef = shallowRef()
 
+// 处理粘贴的图片
+const handlePastedImage = async (editor, file) => {
+  try {
+    console.log('处理粘贴的图片:', file)
+    
+    // 创建FormData上传图片
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    // 上传图片
+    const response = await fetch('/api/assets/upload-image', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+      },
+      body: formData
+    })
+    
+    const result = await response.json()
+    console.log('粘贴图片上传结果:', result)
+    
+    if (result.code === 200 && result.data?.url) {
+      // 插入图片到编辑器
+      const imgHtml = `<img src="${result.data.url}" alt="粘贴的图片" style="max-width: 100%; height: auto; margin: 10px 0; cursor: move;" draggable="true" />`
+      
+      if (typeof editor.dangerouslyInsertHtml === 'function') {
+        editor.dangerouslyInsertHtml(imgHtml)
+      } else {
+        const currentHtml = editor.getHtml()
+        editor.setHtml(currentHtml + imgHtml)
+      }
+      
+      console.log('粘贴图片插入成功')
+    } else {
+      console.error('粘贴图片上传失败:', result)
+    }
+  } catch (error) {
+    console.error('处理粘贴图片失败:', error)
+  }
+}
+
 // 内容 HTML
 const valueHtml = ref('')
 
@@ -95,13 +136,34 @@ const editorConfig = {
   placeholder: props.placeholder,
   // 允许自定义HTML标签和属性
   customPaste: (editor, event) => {
-    // 允许粘贴自定义HTML
+    // 允许粘贴自定义HTML，包括图片
+    const clipboardData = event.clipboardData
+    if (clipboardData && clipboardData.files && clipboardData.files.length > 0) {
+      // 处理粘贴的图片文件
+      const file = clipboardData.files[0]
+      if (file.type.startsWith('image/')) {
+        handlePastedImage(editor, file)
+        event.preventDefault()
+        return false
+      }
+    }
     return true
   },
-  // 配置HTML过滤规则
+  // 配置HTML过滤规则 - 允许更多图片相关属性
+  customParseElemHtml: (elem, elemType) => {
+    if (elemType === 'image') {
+      // 保留图片的所有属性，包括拖拽相关的
+      return elem.outerHTML
+    }
+    return elem.outerHTML
+  },
+  // 配置悬浮工具栏
   hoverbarKeys: {
     'span': {
       menuKeys: ['bold', 'italic', 'underline']
+    },
+    'image': {
+      menuKeys: ['imageWidth30', 'imageWidth50', 'imageWidth100', 'deleteImage']
     }
   },
   MENU_CONF: {
@@ -132,10 +194,20 @@ const editorConfig = {
         console.log('onError', file, err, res)
       },
       customInsert(res, insertFn) {
-        // 自定义插入图片
+        // 自定义插入图片 - 支持拖拽和更好的样式
         const url = res.data?.url || res.url
         if (url) {
-          insertFn(url, '', url)
+          // 使用自定义HTML插入，包含拖拽支持
+          const imgHtml = `<img src="${url}" alt="上传的图片" style="max-width: 100%; height: auto; margin: 10px 0; cursor: move; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" draggable="true" ondragstart="handleImageDragStart(event)" ondragend="handleImageDragEnd(event)" />`
+          
+          // 获取编辑器实例
+          const editor = editorRef.value
+          if (editor && typeof editor.dangerouslyInsertHtml === 'function') {
+            editor.dangerouslyInsertHtml(imgHtml)
+          } else {
+            // 回退到默认插入方式
+            insertFn(url, '上传的图片', url)
+          }
         }
       }
     }
@@ -159,6 +231,87 @@ onBeforeUnmount(() => {
 const handleCreated = (editor) => {
   editorRef.value = editor // 记录 editor 实例，重要！
   console.log('created', editor)
+  
+  // 设置图片拖拽功能
+  setupImageDragAndDrop(editor)
+}
+
+// 设置图片拖拽和拖放功能
+const setupImageDragAndDrop = (editor) => {
+  const editorContainer = editor.getEditableContainer()
+  if (!editorContainer) return
+  
+  // 添加全局拖拽处理函数
+  window.handleImageDragStart = (event) => {
+    const img = event.target
+    if (img.tagName === 'IMG') {
+      event.dataTransfer.effectAllowed = 'move'
+      event.dataTransfer.setData('text/html', img.outerHTML)
+      img.style.opacity = '0.5'
+      console.log('开始拖拽图片')
+    }
+  }
+  
+  window.handleImageDragEnd = (event) => {
+    const img = event.target
+    if (img.tagName === 'IMG') {
+      img.style.opacity = '1'
+      console.log('结束拖拽图片')
+    }
+  }
+  
+  // 监听编辑器的拖放事件
+  editorContainer.addEventListener('dragover', (event) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  })
+  
+  editorContainer.addEventListener('drop', (event) => {
+    event.preventDefault()
+    
+    const htmlData = event.dataTransfer.getData('text/html')
+    if (htmlData && htmlData.includes('<img')) {
+      console.log('拖放图片到新位置')
+      
+      // 获取拖放位置
+      const range = document.caretRangeFromPoint(event.clientX, event.clientY)
+      if (range) {
+        // 清除选择
+        const selection = window.getSelection()
+        selection.removeAllRanges()
+        selection.addRange(range)
+        
+        // 插入图片到新位置
+        if (typeof editor.dangerouslyInsertHtml === 'function') {
+          editor.dangerouslyInsertHtml(htmlData)
+        }
+      }
+    }
+  })
+  
+  // 监听图片双击事件进行编辑
+  editorContainer.addEventListener('dblclick', (event) => {
+    if (event.target.tagName === 'IMG') {
+      showImageEditDialog(event.target)
+    }
+  })
+}
+
+// 显示图片编辑对话框
+const showImageEditDialog = (imgElement) => {
+  const newAlt = prompt('请输入图片描述:', imgElement.alt || '')
+  if (newAlt !== null) {
+    imgElement.alt = newAlt
+  }
+  
+  const newWidth = prompt('请输入图片宽度 (留空为自动):', '')
+  if (newWidth !== null && newWidth !== '') {
+    if (newWidth.includes('%') || newWidth.includes('px')) {
+      imgElement.style.width = newWidth
+    } else {
+      imgElement.style.width = newWidth + 'px'
+    }
+  }
 }
 
 const handleChange = (editor) => {
@@ -210,6 +363,45 @@ defineExpose({
   border: 1px solid #ccc;
   border-radius: 4px;
   overflow: hidden;
+}
+
+/* 编辑器内图片样式 */
+.rich-text-editor :deep(.w-e-text-container) img {
+  max-width: 100%;
+  height: auto;
+  margin: 10px 0;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: move;
+  transition: all 0.3s ease;
+}
+
+.rich-text-editor :deep(.w-e-text-container) img:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.rich-text-editor :deep(.w-e-text-container) img:active {
+  transform: scale(0.98);
+}
+
+/* 拖拽时的样式 */
+.rich-text-editor :deep(.w-e-text-container) img.dragging {
+  opacity: 0.5;
+  transform: rotate(5deg);
+}
+
+/* 拖拽目标区域样式 */
+.rich-text-editor :deep(.w-e-text-container) .drag-over {
+  border: 2px dashed #409eff;
+  background-color: rgba(64, 158, 255, 0.1);
+}
+
+/* 图片选中状态 */
+.rich-text-editor :deep(.w-e-text-container) img:focus,
+.rich-text-editor :deep(.w-e-text-container) img.selected {
+  outline: 2px solid #409eff;
+  outline-offset: 2px;
 }
 
 /* 编辑器样式优化 */

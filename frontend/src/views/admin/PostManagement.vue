@@ -3047,14 +3047,51 @@ const insertImage = (image) => {
       const editor = chapterRichTextEditorRef.value.getEditor()
       if (editor) {
         try {
-          // 在光标位置插入图片HTML
-          const imgHtml = `<img src="${image.url}" alt="${image.title || '图片'}" style="max-width: 100%; margin: 10px 0;" />`
-          editor.dangerouslyInsertHtml(imgHtml)
-          console.log('章节图片插入成功')
-          ElMessage.success('图片插入成功')
+          // 在光标位置插入图片HTML - 支持拖拽和更好的样式
+          const imgHtml = `<img src="${image.url}" alt="${image.title || '图片'}" style="max-width: 100%; height: auto; margin: 10px 0; cursor: move; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" draggable="true" ondragstart="handleImageDragStart(event)" ondragend="handleImageDragEnd(event)" />`
+          
+          console.log('尝试插入章节图片HTML:', imgHtml)
+          
+          // 尝试多种插入方法
+          if (typeof editor.insertBreak === 'function' && typeof editor.insertNode === 'function') {
+            // 创建图片元素节点
+            const imgElement = {
+              type: 'image',
+              src: image.url,
+              alt: image.title || '图片',
+              style: 'max-width: 100%; margin: 10px 0;',
+              children: [{ text: '' }]
+            }
+            editor.insertNode(imgElement)
+            console.log('章节：使用Slate.js API插入图片节点')
+          }
+          else if (typeof editor.dangerouslyInsertHtml === 'function') {
+            editor.dangerouslyInsertHtml(imgHtml)
+            console.log('章节：使用dangerouslyInsertHtml插入')
+          }
+          else {
+            const currentHtml = editor.getHtml()
+            const newHtml = currentHtml ? currentHtml + imgHtml : imgHtml
+            editor.setHtml(newHtml)
+            console.log('章节：使用setHtml追加插入')
+          }
+          
+          // 验证插入是否成功
+          setTimeout(() => {
+            const updatedHtml = editor.getHtml()
+            console.log('章节插入后的HTML内容:', updatedHtml)
+            if (updatedHtml.includes(image.url)) {
+              console.log('章节图片插入成功')
+              ElMessage.success('图片插入成功')
+            } else {
+              console.warn('章节图片可能未成功插入到编辑器')
+              ElMessage.warning('图片插入可能未成功，请检查编辑器内容')
+            }
+          }, 100)
+          
         } catch (error) {
           console.error('章节图片插入失败:', error)
-          ElMessage.error('图片插入失败')
+          ElMessage.error('图片插入失败: ' + error.message)
         }
       } else {
         console.error('章节编辑器实例不存在')
@@ -3071,14 +3108,72 @@ const insertImage = (image) => {
       const editor = richTextEditorRef.value.getEditor()
       if (editor) {
         try {
-          // 在光标位置插入图片HTML
-          const imgHtml = `<img src="${image.url}" alt="${image.title || '图片'}" style="max-width: 100%; margin: 10px 0;" />`
-          editor.dangerouslyInsertHtml(imgHtml)
-          console.log('文章图片插入成功')
-          ElMessage.success('图片插入成功')
+          // 在光标位置插入图片HTML - 支持拖拽和更好的样式
+          const imgHtml = `<img src="${image.url}" alt="${image.title || '图片'}" style="max-width: 100%; height: auto; margin: 10px 0; cursor: move; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" draggable="true" ondragstart="handleImageDragStart(event)" ondragend="handleImageDragEnd(event)" />`
+          
+          // 尝试多种插入方法
+          console.log('尝试插入图片HTML:', imgHtml)
+          console.log('编辑器实例:', editor)
+          
+          // 方法1: 使用WangEditor 5的正确API
+          if (typeof editor.insertBreak === 'function' && typeof editor.insertNode === 'function') {
+            // 创建图片元素节点 (基于Slate.js结构)
+            const imgElement = {
+              type: 'image',
+              src: image.url,
+              alt: image.title || '图片',
+              style: 'max-width: 100%; margin: 10px 0;',
+              children: [{ text: '' }]
+            }
+            
+            // 插入图片节点
+            editor.insertNode(imgElement)
+            console.log('使用Slate.js API插入图片节点')
+          }
+          // 方法1.5: 尝试使用编辑器的内置图片插入功能
+          else if (editor.getMenuConfig && editor.getMenuConfig('uploadImage')) {
+            // 如果编辑器支持图片菜单，尝试模拟点击
+            console.log('尝试使用编辑器内置图片功能')
+            const currentHtml = editor.getHtml()
+            const newHtml = currentHtml + imgHtml
+            editor.setHtml(newHtml)
+          }
+          // 方法2: 使用dangerouslyInsertHtml
+          else if (typeof editor.dangerouslyInsertHtml === 'function') {
+            editor.dangerouslyInsertHtml(imgHtml)
+            console.log('使用dangerouslyInsertHtml插入')
+          }
+          // 方法3: 使用restoreSelection + insertText
+          else if (typeof editor.restoreSelection === 'function' && typeof editor.insertText === 'function') {
+            editor.restoreSelection()
+            editor.insertText(imgHtml)
+            console.log('使用restoreSelection + insertText插入')
+          }
+          // 方法4: 直接在当前位置追加HTML内容
+          else {
+            const currentHtml = editor.getHtml()
+            // 如果有内容，在末尾添加，否则直接设置
+            const newHtml = currentHtml ? currentHtml + imgHtml : imgHtml
+            editor.setHtml(newHtml)
+            console.log('使用setHtml追加插入')
+          }
+          
+          // 验证插入是否成功
+          setTimeout(() => {
+            const updatedHtml = editor.getHtml()
+            console.log('插入后的HTML内容:', updatedHtml)
+            if (updatedHtml.includes(image.url)) {
+              console.log('文章图片插入成功')
+              ElMessage.success('图片插入成功')
+            } else {
+              console.warn('图片可能未成功插入到编辑器')
+              ElMessage.warning('图片插入可能未成功，请检查编辑器内容')
+            }
+          }, 100)
+          
         } catch (error) {
           console.error('文章图片插入失败:', error)
-          ElMessage.error('图片插入失败')
+          ElMessage.error('图片插入失败: ' + error.message)
         }
       } else {
         console.error('文章编辑器实例不存在')
@@ -3088,8 +3183,13 @@ const insertImage = (image) => {
       console.error('文章编辑器引用不存在')
       ElMessage.error('编辑器引用不存在')
     }
-    showImageSelector.value = false
   }
+  
+  // 关闭图片选择器
+  showImageSelector.value = false
+  showChapterImageSelector.value = false
+  
+  console.log('图片选择器已关闭')
 }
 
 const handleQuickUpload = async (file) => {
