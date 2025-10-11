@@ -239,16 +239,19 @@ CREATE TABLE comment (
 CREATE TABLE update_request (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '催更ID',
     post_id BIGINT NOT NULL COMMENT '文章ID',
+    user_id BIGINT DEFAULT NULL COMMENT '用户ID（可空，支持游客催更）',
     ip_address VARCHAR(45) NOT NULL COMMENT 'IP地址（用于防刷）',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除标志',
     
     INDEX idx_post_id (post_id),
+    INDEX idx_user_id (user_id),
     INDEX idx_created_at (created_at),
     INDEX idx_ip_post_date (ip_address, post_id, created_at),
     INDEX idx_deleted (deleted),
     
-    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE
+    FOREIGN KEY (post_id) REFERENCES post(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 ) COMMENT '催更表（简化版）';
 
 -- 评论点赞表

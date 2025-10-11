@@ -27,10 +27,12 @@
               <span class="user-info">
                 <div class="user-avatar">
                   <img 
-                    v-if="authStore.user?.avatarUrl" 
-                    :src="authStore.user.avatarUrl" 
+                    v-if="userAvatarUrl" 
+                    :src="getFullAvatarUrl(userAvatarUrl)" 
                     :alt="authStore.user?.displayName"
                     class="avatar-image"
+                    @error="handleAvatarError"
+                    @load="handleAvatarLoad"
                   />
                   <div v-else class="avatar-placeholder">
                     {{ getAvatarText(authStore.user?.displayName) }}
@@ -60,7 +62,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useAuthStore } from '@/store/auth'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
@@ -71,6 +73,11 @@ const authStore = useAuthStore()
 const isScrolled = ref(false)
 const siteInfo = ref({})
 const navigation = ref({})
+
+// 获取用户头像URL
+const userAvatarUrl = computed(() => {
+  return authStore.user?.avatarUrl
+})
 
 // 加载站点信息
 const loadSiteData = async () => {
@@ -115,9 +122,45 @@ const getAvatarText = (displayName) => {
   return displayName.charAt(0).toUpperCase()
 }
 
-onMounted(() => {
+// 获取完整的头像URL
+const getFullAvatarUrl = (avatarUrl) => {
+  if (!avatarUrl) return ''
+  
+  // 如果已经是完整URL，直接返回
+  if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
+    return avatarUrl
+  }
+  
+  // 如果是相对路径，拼接基础URL
+  const baseUrl = window.location.origin
+  return avatarUrl.startsWith('/') ? `${baseUrl}${avatarUrl}` : `${baseUrl}/${avatarUrl}`
+}
+
+// 处理头像加载成功
+const handleAvatarLoad = (event) => {
+  console.log('HeaderNav - 头像加载成功:', event.target.src)
+}
+
+// 处理头像加载错误
+const handleAvatarError = (event) => {
+  console.warn('HeaderNav - 头像加载失败:', event.target.src)
+  // 头像加载失败时，隐藏图片元素，显示占位符
+  event.target.style.display = 'none'
+}
+
+onMounted(async () => {
   window.addEventListener('scroll', handleScroll)
   loadSiteData()
+  
+  // 确保用户信息已加载
+  if (authStore.isLoggedIn && !authStore.user?.avatarUrl) {
+    console.log('HeaderNav - 主动获取用户信息')
+    try {
+      await authStore.getCurrentUser()
+    } catch (error) {
+      console.warn('HeaderNav - 获取用户信息失败:', error)
+    }
+  }
 })
 
 onUnmounted(() => {

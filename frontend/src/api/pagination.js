@@ -14,7 +14,7 @@ export function getPostPaginatedContent(postId, wordsPerPage = null) {
   
   // 如果没有指定字数，根据设备类型设置默认值
   if (!wordsPerPage) {
-    wordsPerPage = deviceType === 'mobile' ? 250 : 500
+    wordsPerPage = deviceType === 'mobile' ? 500 : 500
   }
   
   return request({
@@ -32,7 +32,7 @@ export function getPageContent(postId, pageNumber, wordsPerPage = null) {
   const deviceType = getDeviceType()
   
   if (!wordsPerPage) {
-    wordsPerPage = deviceType === 'mobile' ? 250 : 500
+    wordsPerPage = deviceType === 'mobile' ? 500 : 500
   }
   
   return request({

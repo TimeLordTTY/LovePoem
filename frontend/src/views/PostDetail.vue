@@ -323,22 +323,6 @@
           </div>
         </div>
         
-        <!-- 催更统计 -->
-        <div class="update-requests-section">
-          <div class="section-header">
-            <h3>催更统计</h3>
-          </div>
-          <div class="update-stats">
-            <div class="stat-item">
-              <span class="stat-label">总催更数：</span>
-              <span class="stat-value">{{ post.updateRequestCount || 0 }}</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">今日催更：</span>
-              <span class="stat-value">{{ todayUpdateRequests }}</span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -384,7 +368,6 @@ const comments = ref([])
 const loadingComments = ref(false)
 const submittingComment = ref(false)
 const submittingUpdateRequest = ref(false)
-const todayUpdateRequests = ref(0)
 const hasUpdatedToday = ref(false)
 
 // 表单数据
@@ -617,14 +600,6 @@ onMounted(async () => {
   if (post.value) {
     await loadComments()
     
-    // 加载今日催更统计
-    try {
-      const { getTodayUpdateRequestCount } = await import('@/api/updateRequest')
-      const response = await getTodayUpdateRequestCount(post.value.id)
-      todayUpdateRequests.value = response.data || 0
-    } catch (error) {
-      console.error('加载催更统计失败:', error)
-    }
     
     // 检查今日是否已催更（基于IP）
     try {
@@ -852,7 +827,6 @@ const submitUpdateRequest = async () => {
     if (post.value) {
       post.value.updateRequestCount = (post.value.updateRequestCount || 0) + 1
     }
-    todayUpdateRequests.value += 1
   } catch (error) {
     console.error('催更失败:', error)
     ElMessage.error(error.message || '催更失败')
@@ -1227,6 +1201,16 @@ const jumpToPage = () => {
   flex-direction: column;
 }
 
+/* 移动端文章内容容器自适应 */
+@media (max-width: 768px) {
+  .page-container {
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    min-height: 400px;
+  }
+}
+
 .page-header {
   margin-bottom: 20px;
   padding-bottom: 15px;
@@ -1252,11 +1236,9 @@ const jumpToPage = () => {
 
 .page-content {
   flex: 1;
-  overflow: hidden;
   line-height: 1.6;
   font-size: 16px;
   color: var(--text-primary);
-  max-height: calc(70vh - 160px);
   word-wrap: break-word;
 }
 
@@ -1730,8 +1712,6 @@ const jumpToPage = () => {
   
   .page-container {
     padding: 20px;
-    min-height: 400px;
-    max-height: 60vh;
   }
   
   .page-title {
@@ -1740,16 +1720,25 @@ const jumpToPage = () => {
   
   .page-content {
     font-size: 15px;
+    padding-bottom: 20px;
   }
   
   .page-nav-controls {
-    flex-direction: column;
-    gap: 15px;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: nowrap;
   }
   
   .page-nav-btn {
-    width: 100%;
-    max-width: 200px;
+    padding: 4px 8px;
+    font-size: 11px;
+    min-width: auto;
+    flex-shrink: 0;
+    height: 32px;
+    border-radius: 6px;
   }
   
   .page-jump {
@@ -2085,13 +2074,39 @@ const jumpToPage = () => {
 
 @media (max-width: 768px) {
   .pagination-nav {
-    flex-direction: column;
-    gap: 16px;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 15px 0;
   }
   
-  .page-nav-btn {
-    width: 100%;
-    max-width: 200px;
+  
+  
+  .page-nav-btn .el-icon {
+    font-size: 10px;
+  }
+  
+  .page-info {
+    font-size: 11px;
+    white-space: nowrap;
+    margin: 0 3px;
+    padding: 4px 8px;
+    background: var(--bg-primary);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+  
+  .page-current {
+    font-weight: 600;
+  }
+  
+  .page-separator {
+    margin: 0 2px;
+  }
+  
+  .page-total {
+    color: var(--text-secondary);
   }
   
   /* 移动端显示目录按钮 */
@@ -2107,31 +2122,18 @@ const jumpToPage = () => {
   /* 优化移动端分页导航 */
   .page-navigation {
     background: var(--bg-secondary);
-    padding: 20px;
-    border-radius: 16px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin: 16px 0;
   }
   
-  .page-nav-controls {
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 12px;
-  }
-  
-  .page-info {
-    background: var(--bg-primary);
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-weight: 600;
-    font-size: 14px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  }
   
   .page-nav-btn {
-    height: 44px;
-    border-radius: 12px;
-    font-weight: 600;
-    min-width: 100px;
+    height: 32px;
+    border-radius: 8px;
+    font-weight: 500;
+    min-width: 70px;
   }
 }
 </style>

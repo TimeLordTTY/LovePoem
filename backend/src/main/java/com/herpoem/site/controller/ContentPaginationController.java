@@ -45,11 +45,11 @@ public class ContentPaginationController {
             if ("mobile".equalsIgnoreCase(deviceType)) {
                 // 移动端每页字数更少，适合小屏幕
                 if (wordsPerPage == null || wordsPerPage == 500) {
-                    wordsPerPage = 250; // 移动端默认250字
+                    wordsPerPage = 500; // 移动端默认250字
                 }
                 // 限制移动端最大字数
-                if (wordsPerPage > 300) {
-                    wordsPerPage = 300;
+                if (wordsPerPage > 500) {
+                    wordsPerPage = 500;
                 }
             } else {
                 // 桌面端
@@ -112,11 +112,11 @@ public class ContentPaginationController {
             if ("mobile".equalsIgnoreCase(deviceType)) {
                 // 移动端每页字数更少，适合小屏幕
                 if (wordsPerPage == null || wordsPerPage == 500) {
-                    wordsPerPage = 250; // 移动端默认250字
+                    wordsPerPage = 500; // 移动端默认250字
                 }
                 // 限制移动端最大字数
-                if (wordsPerPage > 300) {
-                    wordsPerPage = 300;
+                if (wordsPerPage > 500) {
+                    wordsPerPage = 500;
                 }
             } else {
                 // 桌面端

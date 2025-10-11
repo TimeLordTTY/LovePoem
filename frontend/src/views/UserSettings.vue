@@ -342,6 +342,10 @@ const handleAvatarUpload = async (file) => {
   try {
     const response = await uploadAvatar(file)
     userForm.avatarUrl = response.data
+    
+    // 头像上传成功后，立即刷新auth store中的用户信息
+    await authStore.getCurrentUser()
+    
     ElMessage.success('头像上传成功')
     return false // 阻止默认上传行为
   } catch (error) {
@@ -355,6 +359,10 @@ const updateProfile = async () => {
   try {
     updating.value = true
     await updateUserProfile(userForm)
+    
+    // 更新成功后，刷新auth store中的用户信息
+    await authStore.getCurrentUser()
+    
     ElMessage.success('个人信息更新成功')
   } catch (error) {
     console.error('更新失败:', error)

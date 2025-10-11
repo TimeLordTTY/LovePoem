@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { login as authLogin, getCurrentUser as getUser } from '@/api/auth'
+import { getUserProfile } from '@/api/user'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -59,12 +60,22 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('Token expired')
       }
       
-      const response = await getUser()
+      // 使用getUserProfile API获取完整的用户信息（包括头像）
+      const response = await getUserProfile()
       user.value = response.data
+      console.log('Auth Store - 获取用户信息成功:', response.data)
       return response
     } catch (error) {
-      logout()
-      throw error
+      // 如果getUserProfile失败，尝试使用基础的auth API
+      try {
+        console.log('Auth Store - getUserProfile失败，尝试基础API')
+        const response = await getUser()
+        user.value = response.data
+        return response
+      } catch (authError) {
+        logout()
+        throw authError
+      }
     }
   }
   
