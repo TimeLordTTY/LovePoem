@@ -6,7 +6,7 @@ const routes = [
     path: '/',
     name: 'Home',
     component: () => import('@/views/HomeView.vue'),
-    meta: { title: '她的诗集 - 白秦' }
+    meta: { title: '白秦的文字世界 - 白秦' }
   },
   {
     path: '/posts',
@@ -125,8 +125,11 @@ const routes = [
   }
 ]
 
+// 从 <base> 标签读取部署路径，nginx 会动态注入
+const base = document.querySelector('base')?.getAttribute('href') || '/'
+
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory(base),
   routes,
   scrollBehavior(to, from, savedPosition) {
     if (savedPosition) {
@@ -143,7 +146,7 @@ router.beforeEach(async (to, from, next) => {
   
   // 设置页面标题
   if (to.meta.title) {
-    document.title = to.meta.title + ' - 她的诗集'
+    document.title = to.meta.title + ' - 白秦的文字世界'
   }
   
   // 检查是否需要认证

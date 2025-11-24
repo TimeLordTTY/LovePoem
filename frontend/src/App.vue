@@ -77,6 +77,13 @@ body {
   padding-top: 80px; /* 为固定header留出空间 */
 }
 
+/* 移动端需要更多的上边距 */
+@media (max-width: 768px) {
+  .main-content {
+    padding-top: 120px; /* 移动端导航栏更高 */
+  }
+}
+
 /* 有壁纸时的内容背景 */
 .app[style*="background-image"] .main-content {
   background-color: rgba(255, 255, 255, 0.9);

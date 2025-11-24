@@ -48,6 +48,12 @@ public class UserServiceImpl implements UserService {
         
         UserProfileVO profileVO = new UserProfileVO();
         BeanUtils.copyProperties(user, profileVO);
+        
+        // 手动设置role字段，确保枚举正确转换为字符串
+        if (user.getRole() != null) {
+            profileVO.setRole(user.getRole().name());
+        }
+        
         return profileVO;
     }
     

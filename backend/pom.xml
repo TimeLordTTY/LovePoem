@@ -16,7 +16,7 @@
     <artifactId>love-poem-backend</artifactId>
     <version>1.0.0</version>
     <name>LovePoem Backend</name>
-    <description>她的诗集网站后端服务</description>
+    <description>白秦的文字世界网站后端服务</description>
 
     <properties>
         <java.version>17</java.version>
