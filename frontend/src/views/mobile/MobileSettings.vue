@@ -50,6 +50,31 @@
           {{ changingPwd ? '修改中...' : '修改密码' }}
         </button>
       </div>
+
+      <!-- 我的收藏与评论（简版） -->
+      <div class="section">
+        <div class="sec-label">我的内容</div>
+
+        <div class="sub-section-title">最近收藏</div>
+        <div v-if="favorites.length === 0" class="small-item">暂无收藏</div>
+        <ul v-else class="small-list">
+          <li v-for="f in favorites.slice(0, 5)" :key="f.id" class="small-item" @click="$router.push(`/post/${f.slug}`)">
+            <div>{{ f.title || '未命名文章' }}</div>
+            <div class="small-meta">{{ formatDate(f.createdAt) }}</div>
+          </li>
+        </ul>
+
+        <div class="sub-section-title" style="margin-top: 16px;">我的评论</div>
+        <div v-if="comments.length === 0" class="small-item">暂无评论</div>
+        <ul v-else class="small-list">
+          <li v-for="c in comments.slice(0, 5)" :key="c.id" class="small-item" @click="$router.push(`/post/${c.postSlug}`)">
+            <div>{{ c.content }}</div>
+            <div class="small-meta">
+              发表在《{{ c.postTitle }}》 · {{ formatDate(c.createdAt) }}
+            </div>
+          </li>
+        </ul>
+      </div>
     </div>
 
     <div v-else class="loading-text">加载中...</div>
@@ -61,7 +86,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/auth'
-import { getUserProfile, updateUserProfile, changePassword } from '@/api/user'
+import { getUserProfile, updateUserProfile, changePassword, getUserFavorites, getUserComments } from '@/api/user'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -72,6 +97,9 @@ const changingPwd = ref(false)
 
 const profile = reactive({ displayName: '', email: '', bio: '' })
 const pwd = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
+
+const favorites = ref([])
+const comments = ref([])
 
 onMounted(async () => {
   if (!authStore.isLoggedIn) {
@@ -91,6 +119,21 @@ onMounted(async () => {
     }
   }
   loaded.value = true
+
+  // 加载收藏与评论
+  try {
+    const favResp = await getUserFavorites()
+    favorites.value = favResp.data || []
+  } catch {
+    favorites.value = []
+  }
+
+  try {
+    const cResp = await getUserComments()
+    comments.value = cResp.data || []
+  } catch {
+    comments.value = []
+  }
 })
 
 const saveProfile = async () => {
@@ -118,6 +161,12 @@ const doChangePwd = async () => {
     ElMessage.error(err.response?.data?.message || '修改失败')
   }
   changingPwd.value = false
+}
+
+const formatDate = (dateStr) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return d.toLocaleDateString('zh-CN')
 }
 </script>
 
@@ -234,6 +283,37 @@ const doChangePwd = async () => {
   text-align: center;
   padding: 60px 0;
   font-size: 13px;
+  color: #94A3B8;
+}
+
+.sub-section-title {
+  margin-top: 16px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.small-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.small-item {
+  padding: 8px 0;
+  border-bottom: 0.5px solid rgba(148, 163, 184, 0.18);
+  font-size: 13px;
+  color: #0F172A;
+}
+
+.small-item:last-child {
+  border-bottom: none;
+}
+
+.small-meta {
+  margin-top: 2px;
+  font-size: 11px;
   color: #94A3B8;
 }
 </style>

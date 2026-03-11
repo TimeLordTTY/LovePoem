@@ -77,6 +77,7 @@ import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/store/auth'
 import { getFavorites } from '@/api/favorite'
+import { getReadingStats } from '@/api/reading'
 
 const authStore = useAuthStore()
 const router = useRouter()
@@ -91,7 +92,7 @@ const avatarChar = computed(() => {
   return name.charAt(0)
 })
 
-const calcCheckins = () => {
+const calcCheckinsLocal = () => {
   const uid = authStore.user?.id || 'anon'
   const prefix = `mStreak:${uid}:`
   const today = new Date()
@@ -125,7 +126,19 @@ const doLogout = () => {
 }
 
 onMounted(() => {
-  calcCheckins()
+  if (authStore.isLoggedIn) {
+    getReadingStats()
+      .then(resp => {
+        const stats = resp.data || {}
+        todayCheckins.value = stats.todayCheckins ?? 0
+        streakDays.value = stats.streakDays ?? 0
+      })
+      .catch(() => {
+        calcCheckinsLocal()
+      })
+  } else {
+    calcCheckinsLocal()
+  }
   loadFavoriteCount()
 })
 </script>

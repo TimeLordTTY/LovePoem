@@ -61,6 +61,7 @@ import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/store/auth'
 import { getFavorites } from '@/api/favorite'
 import { getPostBySlug } from '@/api/post'
+import { getReadingList } from '@/api/reading'
 
 const authStore = useAuthStore()
 const tab = ref('reading')
@@ -77,11 +78,10 @@ const formatDate = (dateStr) => {
   return d.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })
 }
 
-const loadReading = async () => {
-  loadingReading.value = true
+const loadReadingFromLocal = async () => {
   const uid = authStore.user?.id || 'anon'
   const prefix = `mRead:${uid}:`
-  let keys = Object.keys(localStorage).filter(k => k.startsWith(prefix))
+  const keys = Object.keys(localStorage).filter(k => k.startsWith(prefix))
 
   const entries = keys.map(k => {
     try { return { key: k, ...JSON.parse(localStorage.getItem(k) || '{}') } }
@@ -104,6 +104,30 @@ const loadReading = async () => {
     } catch { return null }
   }))
   readingList.value = items.filter(Boolean)
+}
+
+const loadReading = async () => {
+  loadingReading.value = true
+  try {
+    if (authStore.isLoggedIn) {
+      const resp = await getReadingList({ page: 1, size: MAX_READING_ITEMS })
+      const d = resp.data
+      const list = Array.isArray(d) ? d : (d?.records || [])
+      readingList.value = list.map(post => {
+        const progress = typeof post.readingProgress === 'number'
+          ? post.readingProgress
+          : 100
+        return {
+          ...post,
+          progress
+        }
+      })
+    } else {
+      await loadReadingFromLocal()
+    }
+  } catch {
+    await loadReadingFromLocal()
+  }
   loadingReading.value = false
 }
 

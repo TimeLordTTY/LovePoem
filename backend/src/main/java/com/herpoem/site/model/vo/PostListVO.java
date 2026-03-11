@@ -58,6 +58,9 @@ public class PostListVO {
     // 预计阅读时长（分钟）
     private Integer readingTime;
     
+    // 阅读进度（百分比，可选）
+    private Integer readingProgress;
+    
     // 文章摘要（作者自述）
     private String summary;
     

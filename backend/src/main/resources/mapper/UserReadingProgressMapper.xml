@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herpoem.site.mapper.UserReadingProgressMapper">
+
+    <!-- 分页查询用户最近阅读的文章列表 -->
+    <select id="selectUserReadingList" resultType="com.herpoem.site.model.vo.PostListVO">
+        SELECT
+            p.id,
+            p.slug,
+            p.title,
+            p.summary,
+            LEFT(p.summary, 200) AS excerpt,
+            p.post_type_id AS postTypeId,
+            p.series_id AS seriesId,
+            p.chapter_no AS chapterNo,
+            p.cover_asset_id AS coverAssetId,
+            p.sort_order AS sortOrder,
+            p.visibility,
+            p.status,
+            p.publish_date AS publishDate,
+            p.created_at AS createdAt,
+            p.updated_at AS UpdatedAt,
+            pt.name AS postTypeName,
+            u.display_name AS authorName,
+            CEIL(CHAR_LENGTH(p.content_html) / 500) AS readingTime,
+            LEAST(100, GREATEST(0, ROUND(urp.current_page * 100.0 / NULLIF(urp.total_pages, 0)))) AS readingProgress
+        FROM user_reading_progress urp
+        INNER JOIN post p ON urp.post_id = p.id
+        LEFT JOIN post_type pt ON p.post_type_id = pt.id
+        LEFT JOIN users u ON p.created_by = u.id
+        WHERE urp.user_id = #{userId}
+          AND p.deleted = 0
+          AND p.status = 'PUBLISHED'
+          AND p.visibility IN ('PUBLIC', 'UNLISTED')
+        ORDER BY urp.last_read_at DESC
+    </select>
+
+</mapper>
+

@@ -575,7 +575,8 @@ const checkFavoriteStatus = async () => {
   
   try {
     const response = await checkUserFavorite(post.value.id)
-    isFavorited.value = !!response.data
+    // 后端返回 { isFavorited: boolean }
+    isFavorited.value = !!response.data?.isFavorited
   } catch (error) {
     console.error('Check favorite status error:', error)
   }

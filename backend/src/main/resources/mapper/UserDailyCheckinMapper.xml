@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herpoem.site.mapper.UserDailyCheckinMapper">
+
+    <!-- 查询某用户某天是否已打卡 -->
+    <select id="countByUserAndDate" resultType="int">
+        SELECT COUNT(*)
+        FROM user_daily_checkin
+        WHERE user_id = #{userId}
+          AND checkin_date = #{checkinDate}
+    </select>
+
+    <!-- 查询某用户最近一段时间的打卡记录（按日期倒序） -->
+    <select id="selectRecentCheckins" resultType="com.herpoem.site.model.entity.UserDailyCheckin">
+        SELECT
+            id,
+            user_id     AS userId,
+            checkin_date AS checkinDate,
+            post_id     AS postId,
+            created_at  AS createdAt
+        FROM user_daily_checkin
+        WHERE user_id = #{userId}
+        ORDER BY checkin_date DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>
+

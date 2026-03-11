@@ -40,9 +40,78 @@
         <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
         <button class="page-btn" :disabled="currentPage >= totalPages" @click="nextPage">下一页 ›</button>
       </div>
+
+      <!-- 评论区（可折叠） -->
+      <transition name="fade-slide">
+        <div v-if="showComments" class="comments-panel">
+          <div class="comments-header">
+            <div class="ch-left">
+              <span class="ch-title">评论</span>
+              <span class="ch-count">({{ commentsTotal }})</span>
+            </div>
+            <button class="ch-close" @click="toggleComments">收起</button>
+          </div>
+
+          <div class="comments-body" v-if="commentsLoading">
+            正在载入评论…
+          </div>
+          <div class="comments-body" v-else>
+            <div v-if="comments.length === 0" class="comments-empty">
+              还没有评论，写下你的第一条想法吧。
+            </div>
+            <div v-else class="comments-list">
+              <div
+                v-for="item in comments"
+                :key="item.id"
+                class="comment-item"
+              >
+                <div class="c-meta">
+                  <span class="c-author">{{ item.userName || '匿名读者' }}</span>
+                  <span class="c-dot">·</span>
+                  <span class="c-time">{{ formatTime(item.createdAt) }}</span>
+                </div>
+                <div class="c-content">{{ item.content }}</div>
+                <div class="c-actions">
+                  <button
+                    class="c-like"
+                    @click="toggleCommentLike(item)"
+                  >
+                    <span :class="{ liked: item.isLiked }">❤</span>
+                    <span class="c-like-count">{{ item.likeCount || 0 }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="comment-editor">
+            <textarea
+              v-model="commentContent"
+              class="comment-input"
+              rows="2"
+              maxlength="500"
+              placeholder="写下你的想法…"
+            ></textarea>
+            <button
+              class="comment-send"
+              :disabled="submittingComment || !commentContent.trim()"
+              @click="submitComment"
+            >
+              {{ submittingComment ? '发送中…' : '发送' }}
+            </button>
+          </div>
+        </div>
+      </transition>
     </div>
 
     <div class="reading-toolbar" role="toolbar" aria-label="阅读工具">
+      <button
+        :class="{ active: showComments }"
+        :aria-label="showComments ? '收起评论' : '展开评论'"
+        @click="toggleComments"
+      >
+        {{ showComments ? '💬' : '🗨️' }}
+      </button>
       <button :class="{ faved: favorited }" :aria-label="favorited ? '取消收藏' : '收藏'" @click="toggleFavorite">{{ favorited ? '❤️' : '🤍' }}</button>
       <button :aria-label="favorited ? '取消收藏' : '收藏'" @click="toggleFavoriteBookmark">{{ favorited ? '🔖' : '📑' }}</button>
       <button :aria-label="themeStore.isDark ? '切换日间模式' : '切换夜间模式'" @click="toggleTheme">{{ themeStore.isDark ? '☀️' : '🌙' }}</button>
@@ -72,6 +141,7 @@ import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import { getPostBySlug } from '@/api/post'
+import { reportReadingProgress, checkin as checkinApi } from '@/api/reading'
 
 const route = useRoute()
 const router = useRouter()
@@ -84,6 +154,14 @@ const pages = ref([])
 const currentPage = ref(1)
 const favorited = ref(false)
 const todayCheckedIn = ref(false)
+
+// 评论相关
+const showComments = ref(false)
+const comments = ref([])
+const commentsTotal = ref(0)
+const commentsLoading = ref(false)
+const submittingComment = ref(false)
+const commentContent = ref('')
 
 const slug = computed(() => route.params.slug)
 const totalPages = computed(() => Math.max(1, pages.value.length || 1))
@@ -100,6 +178,21 @@ const formatDate = (dateStr) => {
   if (!dateStr) return ''
   const d = new Date(dateStr)
   return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })
+}
+
+const formatTime = (dateStr) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  if (hours < 24) return `${hours} 小时前`
+  if (days < 30) return `${days} 天前`
+  return d.toLocaleDateString('zh-CN')
 }
 
 const goBack = () => router.back()
@@ -137,6 +230,16 @@ const persistProgress = () => {
     totalPages: totalPages.value,
     updatedAt: Date.now()
   }))
+
+  if (authStore.isLoggedIn) {
+    reportReadingProgress({
+      postId: post.value.id,
+      currentPage: currentPage.value,
+      totalPages: totalPages.value
+    }).catch(() => {
+      // 后端失败时静默处理，仍保留本地进度
+    })
+  }
 }
 
 const checkInIfNeeded = () => {
@@ -155,6 +258,16 @@ const checkInIfNeeded = () => {
     localStorage.setItem(streakKey.value, JSON.stringify({ date: dateStr, postId: post.value.id }))
     todayCheckedIn.value = true
     ElMessage.success('已为你打卡')
+
+    if (authStore.isLoggedIn) {
+      checkinApi({
+        postId: post.value.id,
+        currentPage: currentPage.value,
+        totalPages: totalPages.value
+      }).catch(() => {
+        // 后端失败时忽略，保持本地打卡结果
+      })
+    }
   }
 }
 
@@ -167,6 +280,74 @@ const restoreProgress = () => {
       currentPage.value = Math.min(data.currentPage, totalPages.value)
     }
   } catch { /* ignore */ }
+}
+
+const ensureCommentsLoaded = async () => {
+  if (!post.value?.id) return
+  if (comments.value.length > 0 || commentsLoading.value) return
+  commentsLoading.value = true
+  try {
+    const { getPostComments } = await import('@/api/comment')
+    const resp = await getPostComments(post.value.id, { page: 1, size: 20 })
+    const d = resp.data || {}
+    comments.value = d.records || []
+    commentsTotal.value = d.total ?? comments.value.length
+  } catch {
+    comments.value = []
+    commentsTotal.value = 0
+  }
+  commentsLoading.value = false
+}
+
+const toggleComments = async () => {
+  if (!showComments.value) {
+    await ensureCommentsLoaded()
+  }
+  showComments.value = !showComments.value
+}
+
+const submitComment = async () => {
+  const content = commentContent.value.trim()
+  if (!content) return
+  if (!authStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    router.push('/m/login')
+    return
+  }
+  submittingComment.value = true
+  try {
+    const { createComment } = await import('@/api/comment')
+    await createComment({
+      postId: post.value.id,
+      content
+    })
+    ElMessage.success('评论已发送')
+    commentContent.value = ''
+    // 重新拉一遍，保证与服务器一致
+    comments.value = []
+    commentsTotal.value = 0
+    await ensureCommentsLoaded()
+  } catch (err) {
+    ElMessage.error(err?.message || '发送失败')
+  }
+  submittingComment.value = false
+}
+
+const toggleCommentLike = async (item) => {
+  if (!authStore.isLoggedIn) {
+    ElMessage.warning('请先登录')
+    router.push('/m/login')
+    return
+  }
+  try {
+    const { toggleCommentLike } = await import('@/api/comment')
+    const resp = await toggleCommentLike(item.id)
+    const d = resp.data || {}
+    item.likeCount = d.likeCount ?? item.likeCount ?? 0
+    item.isLiked = d.isLiked ?? item.isLiked
+  } catch {
+    ElMessage.error('操作失败')
+  }
 }
 
 const loadPost = async () => {
@@ -183,7 +364,8 @@ const loadPost = async () => {
       try {
         const { checkUserFavorite } = await import('@/api/favorite')
         const favResp = await checkUserFavorite(post.value.id)
-        favorited.value = !!favResp.data
+        // 后端返回 { isFavorited: boolean }
+        favorited.value = !!favResp.data?.isFavorited
       } catch { /* ignore */ }
     }
   } catch {
@@ -218,9 +400,18 @@ const toggleTheme = () => {
   themeStore.toggleTheme()
 }
 
+const goToComments = () => {
+  if (!slug.value) return
+  router.push(`/post/${slug.value}`)
+}
+
 onMounted(async () => {
   await loadPost()
   restoreProgress()
+  // 初次进入时也同步一次进度（尤其是只有一页的文章）
+  if (post.value) {
+    persistProgress()
+  }
   checkInIfNeeded()
 })
 
