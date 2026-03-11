@@ -1,5 +1,12 @@
 <template>
   <div class="m-discover">
+    <!-- Loading -->
+    <div v-if="discoverLoading" class="discover-loading">
+      <div class="skel skel-random"></div>
+      <div class="skel skel-section"></div>
+    </div>
+
+    <template v-else>
     <!-- 随机一篇 -->
     <div class="random-card" v-if="randomPost" @click="$router.push(`/m/read/${randomPost.slug}`)">
       <div class="random-label">随机一篇</div>
@@ -43,6 +50,7 @@
         </button>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -52,6 +60,7 @@ import { getPosts } from '@/api/post'
 import { getAllSeries } from '@/api/series'
 import { getAllTags } from '@/api/tag'
 
+const discoverLoading = ref(true)
 const randomPost = ref(null)
 const seriesList = ref([])
 const tags = ref([])
@@ -80,8 +89,9 @@ const loadSeriesAndTags = async () => {
   }
 }
 
-onMounted(() => {
-  Promise.all([loadRandom(), loadSeriesAndTags()])
+onMounted(async () => {
+  await Promise.all([loadRandom(), loadSeriesAndTags()])
+  discoverLoading.value = false
 })
 </script>
 
@@ -159,4 +169,19 @@ onMounted(() => {
 .tag-purple { background: linear-gradient(135deg, #F5F3FF, #EDE9FE); color: #6D28D9; }
 .tag-green { background: linear-gradient(135deg, #F0FDF4, #DCFCE7); color: #15803D; }
 .tag-amber { background: linear-gradient(135deg, #FFFBEB, #FEF3C7); color: #B45309; }
+
+.discover-loading { padding: 16px 0; }
+.discover-loading .skel {
+  background: linear-gradient(90deg, #F1F3F8 25%, #E2E8F0 50%, #F1F3F8 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 18px;
+  margin-bottom: 14px;
+}
+.skel-random { height: 140px; }
+.skel-section { height: 100px; }
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 </style>

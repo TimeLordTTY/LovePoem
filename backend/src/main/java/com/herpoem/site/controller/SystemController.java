@@ -11,6 +11,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.herpoem.site.model.entity.User;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -37,6 +41,18 @@ public class SystemController {
     private final PostTagService postTagService;
     private final UserService userService;
     private final UserMapper userMapper;
+
+    private void requireAdmin() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof String)) {
+            throw new RuntimeException("用户未登录");
+        }
+        Long userId = Long.valueOf((String) auth.getPrincipal());
+        User user = userMapper.selectById(userId);
+        if (user == null || user.getRole() != User.UserRole.ADMIN) {
+            throw new RuntimeException("需要管理员权限");
+        }
+    }
     
     /**
      * 获取系统统计数据
@@ -72,6 +88,7 @@ public class SystemController {
      */
     @PostMapping("/settings")
     public Result<String> updateSettings(@RequestBody Map<String, String> settings) {
+        requireAdmin();
         settingService.setValues(settings);
         return Result.success("设置更新成功");
     }
@@ -81,6 +98,7 @@ public class SystemController {
      */
     @GetMapping("/backup")
     public Result<Map<String, Object>> backupData() {
+        requireAdmin();
         try {
             Map<String, Object> backupData = new HashMap<>();
             
@@ -129,6 +147,7 @@ public class SystemController {
      */
     @PostMapping("/restore")
     public Result<String> restoreData(@RequestParam("file") MultipartFile file) {
+        requireAdmin();
         if (file.isEmpty()) {
             return Result.error("备份文件不能为空");
         }

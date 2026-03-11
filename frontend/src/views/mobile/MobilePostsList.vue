@@ -2,20 +2,22 @@
   <div class="m-posts">
     <!-- Header -->
     <div class="posts-top">
-      <button class="back" @click="$router.back()">←</button>
-      <div class="top-title" v-if="!showSearch">{{ pageTitle }}</div>
-      <input
-        v-else
-        ref="searchInputRef"
-        v-model="keyword"
-        class="search-input"
-        placeholder="搜索文章标题..."
-        @keyup.enter="doSearch"
-      />
-      <button class="search-toggle" @click="toggleSearch">
-        <template v-if="!showSearch">🔍</template>
-        <template v-else>✕</template>
-      </button>
+      <button class="back" aria-label="返回" @click="$router.back()">←</button>
+      <template v-if="showSearch">
+        <input
+          ref="searchInputRef"
+          v-model="keyword"
+          class="search-input"
+          placeholder="搜索文章标题..."
+          @keyup.enter="doSearch"
+        />
+        <button class="search-go" @click="doSearch">🔍</button>
+        <button class="search-toggle" @click="toggleSearch">✕</button>
+      </template>
+      <template v-else>
+        <div class="top-title">{{ pageTitle }}</div>
+        <button class="search-toggle" @click="toggleSearch">🔍</button>
+      </template>
     </div>
 
     <!-- List -->
@@ -96,6 +98,7 @@ const formatDate = (dateStr) => {
 
 const loadPosts = async (reset = false) => {
   if (reset) { page.value = 1; posts.value = [] }
+  if (isSearchMode.value) resolvedTitle.value = ''
   loading.value = true
   try {
     const params = {
@@ -173,7 +176,7 @@ watch(() => route.query, () => loadPosts(true))
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
   background: rgba(250, 251, 254, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -211,6 +214,20 @@ watch(() => route.query, () => loadPosts(true))
 }
 .search-input:focus { border-color: #E11D48; background: #fff; }
 .search-input::placeholder { color: #94A3B8; }
+.search-go {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: #E11D48;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 .search-toggle {
   width: 32px;
   height: 32px;
@@ -223,6 +240,7 @@ watch(() => route.query, () => loadPosts(true))
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .posts-body {

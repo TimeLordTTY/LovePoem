@@ -63,6 +63,7 @@ const posts = ref([])
 const loading = ref(true)
 
 const formatDate = (dateString) => {
+  if (!dateString) return ''
   const date = new Date(dateString)
   return date.toLocaleDateString('zh-CN', {
     year: 'numeric',

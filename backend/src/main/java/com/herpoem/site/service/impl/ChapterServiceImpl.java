@@ -4,17 +4,21 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.herpoem.site.mapper.ChapterMapper;
 import com.herpoem.site.mapper.SeriesMapper;
+import com.herpoem.site.mapper.UserMapper;
 import com.herpoem.site.model.dto.ChapterCreateDTO;
 import com.herpoem.site.model.dto.ChapterDTO;
 import com.herpoem.site.model.dto.ChapterUpdateDTO;
 import com.herpoem.site.model.entity.Chapter;
 import com.herpoem.site.model.entity.Series;
+import com.herpoem.site.model.entity.User;
 import com.herpoem.site.model.vo.ChapterContentVO;
 import com.herpoem.site.model.vo.ChapterNavigationVO;
 import com.herpoem.site.service.ChapterService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +35,27 @@ public class ChapterServiceImpl implements ChapterService {
 
     private final ChapterMapper chapterMapper;
     private final SeriesMapper seriesMapper;
+    private final UserMapper userMapper;
+
+    private Long getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof String) {
+            return Long.valueOf((String) auth.getPrincipal());
+        }
+        throw new RuntimeException("用户未登录");
+    }
+
+    private void checkSeriesOwnership(Long seriesId) {
+        Long userId = getCurrentUserId();
+        Series series = seriesMapper.selectById(seriesId);
+        if (series == null) return;
+        if (series.getCreatedBy() != null && !series.getCreatedBy().equals(userId)) {
+            User user = userMapper.selectById(userId);
+            if (user == null || user.getRole() != User.UserRole.ADMIN) {
+                throw new RuntimeException("无权限操作此系列的章节");
+            }
+        }
+    }
 
     @Override
     public List<ChapterDTO> getChapterTreeBySeriesId(Long seriesId) {
@@ -41,11 +66,11 @@ public class ChapterServiceImpl implements ChapterService {
     @Override
     @Transactional
     public ChapterDTO createChapter(ChapterCreateDTO createDTO) {
-        // 验证系列是否存在
         Series series = seriesMapper.selectById(createDTO.getSeriesId());
         if (series == null) {
             throw new RuntimeException("系列不存在");
         }
+        checkSeriesOwnership(createDTO.getSeriesId());
 
         // 如果没有指定排序号，自动设置为最大值+1
         if (createDTO.getOrderNo() == null) {
@@ -71,6 +96,7 @@ public class ChapterServiceImpl implements ChapterService {
         if (chapter == null) {
             throw new RuntimeException("章节不存在");
         }
+        checkSeriesOwnership(chapter.getSeriesId());
 
         // 更新章节信息
         if (updateDTO.getTitle() != null) {
@@ -100,7 +126,11 @@ public class ChapterServiceImpl implements ChapterService {
     @Override
     @Transactional
     public void deleteChapter(Long chapterId) {
-        // 检查是否有子章节
+        Chapter chapter = chapterMapper.selectById(chapterId);
+        if (chapter != null) {
+            checkSeriesOwnership(chapter.getSeriesId());
+        }
+
         LambdaQueryWrapper<Chapter> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Chapter::getParentId, chapterId).eq(Chapter::getDeleted, 0);
         Long childCount = chapterMapper.selectCount(queryWrapper);

@@ -13,6 +13,7 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -34,8 +35,21 @@ public class PostTypeServiceImpl extends ServiceImpl<PostTypeMapper, PostType> i
         
         List<PostType> postTypes = postTypeMapper.selectList(wrapper);
         
+        QueryWrapper<Post> countWrapper = new QueryWrapper<>();
+        countWrapper.select("post_type_id", "COUNT(*) as cnt")
+                    .eq("status", "PUBLISHED")
+                    .isNotNull("post_type_id")
+                    .groupBy("post_type_id");
+        List<Map<String, Object>> countRows = postMapper.selectMaps(countWrapper);
+        Map<Long, Long> countMap = countRows.stream()
+            .collect(Collectors.toMap(
+                m -> ((Number) m.get("post_type_id")).longValue(),
+                m -> ((Number) m.get("cnt")).longValue(),
+                (a, b) -> a
+            ));
+        
         return postTypes.stream()
-                       .map(this::convertToVO)
+                       .map(pt -> convertToVO(pt, countMap))
                        .collect(Collectors.toList());
     }
     
@@ -88,6 +102,13 @@ public class PostTypeServiceImpl extends ServiceImpl<PostTypeMapper, PostType> i
         postTypeMapper.deleteById(id);
     }
     
+    private PostTypeVO convertToVO(PostType postType, Map<Long, Long> countMap) {
+        PostTypeVO vo = new PostTypeVO();
+        BeanUtils.copyProperties(postType, vo);
+        vo.setPostCount(countMap.getOrDefault(postType.getId(), 0L));
+        return vo;
+    }
+
     private PostTypeVO convertToVO(PostType postType) {
         PostTypeVO vo = new PostTypeVO();
         BeanUtils.copyProperties(postType, vo);

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/auth'
+import router from '@/router'
 import config from '@/config'
 
 // 创建axios实例
@@ -47,7 +48,7 @@ request.interceptors.response.use(
           const authStore = useAuthStore()
           authStore.logout()
           const isMobile = window.location.pathname.startsWith('/m')
-          window.location.href = isMobile ? '/m/login' : '/login'
+          router.push(isMobile ? '/m/login' : '/login')
           break
         }
         case 403:

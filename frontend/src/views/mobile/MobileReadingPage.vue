@@ -1,13 +1,28 @@
 <template>
-  <div class="reading-page" v-if="post">
-    <!-- Top Bar -->
+  <!-- Loading -->
+  <div class="reading-page" v-if="pageLoading">
     <div class="reading-top">
-      <button class="back" @click="goBack">←</button>
+      <button class="back" aria-label="返回" @click="goBack">←</button>
+      <div class="r-title">加载中...</div>
+      <div class="spacer"></div>
+    </div>
+    <div class="loading-body">
+      <div class="skel skel-title"></div>
+      <div class="skel skel-meta"></div>
+      <div class="skel skel-line"></div>
+      <div class="skel skel-line short"></div>
+      <div class="skel skel-line"></div>
+    </div>
+  </div>
+
+  <!-- Content -->
+  <div class="reading-page" v-else-if="post">
+    <div class="reading-top">
+      <button class="back" aria-label="返回" @click="goBack">←</button>
       <div class="r-title">{{ post.title }}</div>
-      <div style="width:32px"></div>
+      <div class="spacer"></div>
     </div>
 
-    <!-- Body -->
     <div class="reading-body">
       <h1 class="r-heading">{{ post.title }}</h1>
       <div class="r-meta">
@@ -18,10 +33,8 @@
         <span v-if="post.publishDate">{{ formatDate(post.publishDate) }}</span>
       </div>
 
-      <!-- 文章正文 -->
       <div class="r-content" v-html="currentPageContent"></div>
 
-      <!-- 分页 -->
       <div class="page-nav" v-if="totalPages > 1">
         <button class="page-btn" :disabled="currentPage <= 1" @click="prevPage">‹ 上一页</button>
         <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
@@ -29,11 +42,25 @@
       </div>
     </div>
 
-    <!-- Floating Toolbar -->
-    <div class="reading-toolbar">
-      <button :class="{ liked }" @click="toggleLike">{{ liked ? '♥' : '♡' }}</button>
-      <button @click="toggleFavorite">🔖</button>
-      <button @click="toggleTheme">{{ themeStore.isDark ? '☀️' : '🌙' }}</button>
+    <div class="reading-toolbar" role="toolbar" aria-label="阅读工具">
+      <button :class="{ faved: favorited }" :aria-label="favorited ? '取消收藏' : '收藏'" @click="toggleFavorite">{{ favorited ? '❤️' : '🤍' }}</button>
+      <button :aria-label="favorited ? '取消收藏' : '收藏'" @click="toggleFavoriteBookmark">{{ favorited ? '🔖' : '📑' }}</button>
+      <button :aria-label="themeStore.isDark ? '切换日间模式' : '切换夜间模式'" @click="toggleTheme">{{ themeStore.isDark ? '☀️' : '🌙' }}</button>
+    </div>
+  </div>
+
+  <!-- Load failed -->
+  <div class="reading-page" v-else>
+    <div class="reading-top">
+      <button class="back" aria-label="返回" @click="goBack">←</button>
+      <div class="r-title">加载失败</div>
+      <div class="spacer"></div>
+    </div>
+    <div class="fail-body">
+      <div class="fail-icon">😕</div>
+      <div class="fail-text">文章加载失败</div>
+      <button class="fail-btn" @click="loadPost">重新加载</button>
+      <button class="fail-btn secondary" @click="goBack">返回上一页</button>
     </div>
   </div>
 </template>
@@ -52,9 +79,9 @@ const authStore = useAuthStore()
 const themeStore = useThemeStore()
 
 const post = ref(null)
+const pageLoading = ref(true)
 const pages = ref([])
 const currentPage = ref(1)
-const liked = ref(false)
 const favorited = ref(false)
 const todayCheckedIn = ref(false)
 
@@ -113,12 +140,15 @@ const persistProgress = () => {
 }
 
 const checkInIfNeeded = () => {
+  if (!post.value) return
   const today = new Date()
   const dateStr = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`
   const raw = localStorage.getItem(streakKey.value)
   if (raw) {
-    const data = JSON.parse(raw)
-    if (data.date === dateStr) { todayCheckedIn.value = true; return }
+    try {
+      const data = JSON.parse(raw)
+      if (data.date === dateStr) { todayCheckedIn.value = true; return }
+    } catch { /* ignore */ }
   }
   const progress = currentPage.value / totalPages.value
   if (progress >= 0.6) {
@@ -140,6 +170,7 @@ const restoreProgress = () => {
 }
 
 const loadPost = async () => {
+  pageLoading.value = true
   try {
     const resp = await getPostBySlug(slug.value)
     post.value = resp.data
@@ -148,17 +179,23 @@ const loadPost = async () => {
       const pageResp = await getPostPaginatedContent(post.value.id)
       pages.value = pageResp.data || []
     } catch { /* no pagination available */ }
+    if (authStore.isLoggedIn && post.value?.id) {
+      try {
+        const { checkUserFavorite } = await import('@/api/favorite')
+        const favResp = await checkUserFavorite(post.value.id)
+        favorited.value = !!favResp.data
+      } catch { /* ignore */ }
+    }
   } catch {
     ElMessage.error('加载文章失败')
-    router.replace('/m')
   }
+  pageLoading.value = false
 }
-
-const toggleLike = () => { liked.value = !liked.value }
 
 const toggleFavorite = async () => {
   if (!authStore.isLoggedIn) {
-    ElMessage.warning('请先登录以收藏')
+    ElMessage.warning('请先登录')
+    router.push('/m/login')
     return
   }
   try {
@@ -174,6 +211,8 @@ const toggleFavorite = async () => {
     }
   } catch { ElMessage.error('操作失败') }
 }
+
+const toggleFavoriteBookmark = () => toggleFavorite()
 
 const toggleTheme = () => {
   themeStore.toggleTheme()
@@ -203,7 +242,7 @@ watch(currentPage, () => { persistProgress() })
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
   background: rgba(250, 251, 254, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -321,5 +360,51 @@ watch(currentPage, () => { persistProgress() })
   transition: all 0.15s;
 }
 .reading-toolbar button:active { transform: scale(0.88); }
-.reading-toolbar button.liked { color: #FACC15; }
+.reading-toolbar button.faved { color: #FACC15; }
+
+.spacer { width: 32px; }
+
+.loading-body {
+  padding: 24px 20px;
+}
+.skel {
+  background: linear-gradient(90deg, #F1F3F8 25%, #E2E8F0 50%, #F1F3F8 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.skel-title { height: 28px; width: 70%; }
+.skel-meta { height: 14px; width: 40%; margin-bottom: 24px; }
+.skel-line { height: 16px; width: 100%; }
+.skel-line.short { width: 60%; }
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.fail-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 20px;
+}
+.fail-icon { font-size: 48px; margin-bottom: 16px; }
+.fail-text { font-size: 15px; color: #64748B; margin-bottom: 24px; }
+.fail-btn {
+  padding: 10px 32px;
+  border-radius: 999px;
+  border: none;
+  background: #E11D48;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+.fail-btn.secondary {
+  background: #F1F3F8;
+  color: #64748B;
+}
 </style>

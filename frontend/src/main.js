@@ -3,6 +3,7 @@ import { createPinia } from 'pinia'
 import router from './router'
 import App from './App.vue'
 import { useAuthStore } from '@/store/auth'
+import { useThemeStore } from '@/store/theme'
 
 // 样式
 import 'element-plus/dist/index.css'
@@ -16,6 +17,10 @@ const pinia = createPinia()
 
 app.use(pinia)
 app.use(router)
+
+// 初始化主题（在 mount 之前，避免白/暗闪烁）
+const themeStore = useThemeStore()
+themeStore.initTheme()
 
 // 初始化认证状态
 const authStore = useAuthStore()

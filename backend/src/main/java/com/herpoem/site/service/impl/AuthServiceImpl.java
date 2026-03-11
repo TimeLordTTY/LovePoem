@@ -43,12 +43,14 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("用户不存在或已被禁用");
         }
         
-        // 验证密码
         if (!passwordEncoder.matches(loginDTO.getPassword(), user.getPasswordHash())) {
             throw new RuntimeException("用户名或密码错误");
         }
         
-        // 更新最后登录时间
+        if (passwordEncoder.upgradeEncoding(user.getPasswordHash())) {
+            user.setPasswordHash(passwordEncoder.encode(loginDTO.getPassword()));
+        }
+        
         user.setLastLoginAt(LocalDateTime.now());
         userMapper.updateById(user);
         

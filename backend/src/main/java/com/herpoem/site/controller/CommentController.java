@@ -46,7 +46,11 @@ public class CommentController {
     @PostMapping
     public Result<CommentVO> createComment(@Valid @RequestBody CommentCreateDTO commentCreateDTO, 
                                           HttpServletRequest request) {
-        Long userId = getCurrentUserId(request);
+        String token = getTokenFromRequest(request);
+        if (token == null || !jwtUtil.validateToken(token)) {
+            return Result.error("请先登录后再发表评论");
+        }
+        Long userId = jwtUtil.getUserIdFromToken(token);
         String ipAddress = getClientIpAddress(request);
         String userAgent = request.getHeader("User-Agent");
         

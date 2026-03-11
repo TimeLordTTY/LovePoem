@@ -8,7 +8,7 @@
         type="text"
         placeholder="用户名"
         v-model="username"
-        @keyup.enter="$refs.pwdInput?.focus()"
+        @keyup.enter="pwdInput?.focus()"
       />
       <input
         ref="pwdInput"
@@ -36,6 +36,7 @@ import { useAuthStore } from '@/store/auth'
 const router = useRouter()
 const authStore = useAuthStore()
 
+const pwdInput = ref(null)
 const username = ref('')
 const password = ref('')
 const loading = ref(false)

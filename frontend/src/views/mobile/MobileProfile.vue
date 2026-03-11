@@ -4,7 +4,7 @@
     <template v-if="authStore.isLoggedIn && user">
       <div class="profile-header">
         <div class="avatar">{{ avatarChar }}</div>
-        <div class="profile-name">{{ user.nickname || user.username }}</div>
+        <div class="profile-name">{{ user.displayName || user.username }}</div>
         <div class="profile-bio">{{ user.bio || '写给世界，也写给自己。' }}</div>
       </div>
 
@@ -87,7 +87,7 @@ const todayCheckins = ref(0)
 const streakDays = ref(0)
 
 const avatarChar = computed(() => {
-  const name = user.value?.nickname || user.value?.username || '?'
+  const name = user.value?.displayName || user.value?.username || '?'
   return name.charAt(0)
 })
 

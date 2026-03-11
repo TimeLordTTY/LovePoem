@@ -3,7 +3,9 @@ package com.herpoem.site.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.herpoem.site.mapper.TagMapper;
+import com.herpoem.site.mapper.UserMapper;
 import com.herpoem.site.model.entity.Tag;
+import com.herpoem.site.model.entity.User;
 import com.herpoem.site.model.vo.TagVO;
 import com.herpoem.site.service.TagService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,16 @@ import java.util.stream.Collectors;
 public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagService {
     
     private final TagMapper tagMapper;
+    private final UserMapper userMapper;
+
+    private void checkOwnership(Long createdBy, Long userId) {
+        if (createdBy != null && !createdBy.equals(userId)) {
+            User user = userMapper.selectById(userId);
+            if (user == null || user.getRole() != User.UserRole.ADMIN) {
+                throw new RuntimeException("无权限操作此标签");
+            }
+        }
+    }
     
     @Override
     public List<TagVO> getAllTags() {
@@ -59,6 +71,7 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
         if (tag == null) {
             throw new RuntimeException("标签不存在");
         }
+        checkOwnership(tag.getCreatedBy(), userId);
         
         tag.setName(name);
         tag.setDescription(description);
@@ -72,8 +85,8 @@ public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagSe
         if (tag == null) {
             throw new RuntimeException("标签不存在");
         }
+        checkOwnership(tag.getCreatedBy(), userId);
         
-        // 软删除
         tagMapper.deleteById(id);
     }
     

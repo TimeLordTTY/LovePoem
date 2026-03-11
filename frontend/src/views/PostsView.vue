@@ -84,7 +84,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import PoemCard from '@/components/PoemCard.vue'
 import { getPosts } from '@/api/post'
@@ -110,16 +110,22 @@ const filters = ref({
 
 // 从URL参数初始化筛选器
 const initFiltersFromQuery = () => {
-  if (route.query.postTypeId) {
-    filters.value.postType = route.query.postTypeId
+  if (route.query.postTypeId || route.query.type) {
+    filters.value.postType = route.query.postTypeId || route.query.type
   }
-  if (route.query.tagId) {
-    filters.value.tag = route.query.tagId
+  if (route.query.tagId || route.query.tag) {
+    filters.value.tag = route.query.tagId || route.query.tag
   }
   if (route.query.keyword) {
     filters.value.keyword = route.query.keyword
   }
 }
+
+watch(() => route.query, () => {
+  initFiltersFromQuery()
+  currentPage.value = 1
+  loadPosts()
+})
 
 const loadInitialData = async () => {
   try {

@@ -9,6 +9,8 @@ import com.herpoem.site.common.PageResult;
 import com.herpoem.site.mapper.PostMapper;
 import com.herpoem.site.mapper.PostTagMapper;
 import com.herpoem.site.mapper.PostChapterMapper;
+import com.herpoem.site.mapper.UserMapper;
+import com.herpoem.site.model.entity.User;
 import com.herpoem.site.model.entity.PostChapter;
 import com.herpoem.site.model.dto.PostCreateDTO;
 import com.herpoem.site.model.entity.Post;
@@ -39,6 +41,18 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
     private final PostMapper postMapper;
     private final PostTagMapper postTagMapper;
     private final PostChapterMapper postChapterMapper;
+    private final UserMapper userMapper;
+
+    private boolean isAdmin(Long userId) {
+        User user = userMapper.selectById(userId);
+        return user != null && user.getRole() == User.UserRole.ADMIN;
+    }
+
+    private void checkOwnership(Long createdBy, Long userId, String resource) {
+        if (!createdBy.equals(userId) && !isAdmin(userId)) {
+            throw new RuntimeException("无权限操作此" + resource);
+        }
+    }
     
     @Override
     public PageResult<PostListVO> getPostList(Integer page, Integer size, String keyword, 
@@ -149,13 +163,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         if (post == null) {
             throw new RuntimeException("文章不存在");
         }
-        
-        // 添加调试日志
-        System.out.println("=== 更新文章调试信息 ===");
-        System.out.println("文章ID: " + id);
-        System.out.println("原系列ID: " + post.getSeriesId());
-        System.out.println("新系列ID: " + postCreateDTO.getSeriesId());
-        System.out.println("========================");
+        checkOwnership(post.getCreatedBy(), userId, "文章");
         
         post.setTitle(postCreateDTO.getTitle());
         post.setSlug(generateSlug(postCreateDTO.getSlug(), postCreateDTO.getTitle()));
@@ -189,10 +197,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         // 先使用SQL更新系列字段（确保null值能正确处理）
         postMapper.updatePostSeries(id, postCreateDTO.getSeriesId(), userId);
         
-        // 然后更新其他字段
         postMapper.updateById(post);
-        
-        System.out.println("更新后系列ID: " + post.getSeriesId());
         
         // 删除旧的标签关联
         QueryWrapper<PostTag> wrapper = new QueryWrapper<>();
@@ -211,8 +216,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         if (post == null) {
             throw new RuntimeException("文章不存在");
         }
+        checkOwnership(post.getCreatedBy(), userId, "文章");
         
-        // 软删除
         postMapper.deleteById(id);
         
         // 删除标签关联
@@ -227,6 +232,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         if (post == null) {
             throw new RuntimeException("文章不存在");
         }
+        checkOwnership(post.getCreatedBy(), userId, "文章");
         
         post.setStatus(Post.Status.PUBLISHED);
         post.setPublishDate(LocalDateTime.now());
@@ -241,6 +247,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         if (post == null) {
             throw new RuntimeException("文章不存在");
         }
+        checkOwnership(post.getCreatedBy(), userId, "文章");
         
         post.setVisibility(visibility);
         post.setUpdatedBy(userId);
@@ -307,6 +314,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         if (post == null) {
             throw new RuntimeException("文章不存在");
         }
+        checkOwnership(post.getCreatedBy(), userId, "文章");
         
         post.setSortOrder(sortOrder);
         post.setUpdatedBy(userId);
@@ -379,8 +387,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         if (post == null) {
             throw new RuntimeException("文章不存在");
         }
+        checkOwnership(post.getCreatedBy(), userId, "文章");
         
-        // 直接使用SQL更新，确保null值能够被正确设置
         postMapper.updatePostSeries(postId, seriesId, userId);
     }
     
@@ -394,6 +402,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         if (post == null) {
             throw new RuntimeException("文章不存在");
         }
+        checkOwnership(post.getCreatedBy(), userId, "文章");
 
         // 获取当前最大排序值
         Integer maxSortOrder = postMapper.selectMaxSortOrder();

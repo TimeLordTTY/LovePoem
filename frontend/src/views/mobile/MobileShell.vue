@@ -7,11 +7,11 @@
         <div class="greeting">{{ greetingText }}</div>
       </div>
       <div class="icons">
-        <button title="搜索" @click="goSearch">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <button aria-label="搜索" @click="goSearch">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
         </button>
-        <button title="主题" @click="toggleTheme">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        <button aria-label="切换主题" @click="toggleTheme">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
         </button>
       </div>
     </div>
@@ -22,18 +22,21 @@
     </div>
 
     <!-- Tab Bar -->
-    <div class="tab-bar">
+    <nav class="tab-bar" role="tablist" aria-label="主导航">
       <button
         v-for="tab in tabs"
         :key="tab.name"
         class="tab-btn"
+        role="tab"
+        :aria-selected="currentTab === tab.name"
+        :aria-label="tab.label"
         :class="{ active: currentTab === tab.name }"
         @click="navigate(tab)"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-html="tab.icon" />
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" v-html="tab.icon" aria-hidden="true" />
         <span>{{ tab.label }}</span>
       </button>
-    </div>
+    </nav>
   </div>
 </template>
 
@@ -120,7 +123,7 @@ const goSearch = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 18px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 18px 12px;
   background: rgba(250, 251, 254, 0.78);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);

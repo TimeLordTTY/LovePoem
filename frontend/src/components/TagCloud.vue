@@ -3,7 +3,7 @@
     <router-link
       v-for="tag in tags"
       :key="tag.id"
-      :to="`/posts?tag=${encodeURIComponent(tag.name)}`"
+      :to="`/posts?tagId=${tag.id}`"
       class="tag-item"
       :style="getTagStyle(tag.postCount)"
     >
@@ -22,9 +22,11 @@ const props = defineProps({
 })
 
 const getTagStyle = (count) => {
-  const maxCount = Math.max(...props.tags.map(t => t.postCount))
-  const minCount = Math.min(...props.tags.map(t => t.postCount))
-  const ratio = (count - minCount) / (maxCount - minCount) || 0
+  if (!props.tags || props.tags.length === 0) return { fontSize: '14px', opacity: 1 }
+  const counts = props.tags.map(t => t.postCount || 0)
+  const maxCount = Math.max(...counts)
+  const minCount = Math.min(...counts)
+  const ratio = maxCount === minCount ? 0 : (count - minCount) / (maxCount - minCount)
   
   const minSize = 14
   const maxSize = 24

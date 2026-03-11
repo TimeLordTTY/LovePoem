@@ -160,6 +160,7 @@ const passwordRules = {
 }
 
 const passwordFormRef = ref()
+const passwordLoading = ref(false)
 
 // 加载设置
 const loadSettings = async () => {

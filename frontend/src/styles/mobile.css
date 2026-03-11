@@ -162,3 +162,87 @@
 }
 
 .dark .form-group label { color: var(--m-text2) !important; }
+
+.dark .login-page,
+.dark .m-home,
+.dark .m-discover {
+  background: var(--m-bg) !important;
+  color: var(--m-text1) !important;
+}
+.dark .login-page { background: radial-gradient(circle at 20% 20%, rgba(225,29,72,0.08), transparent 50%), var(--m-bg) !important; }
+
+.dark .login-brand { color: var(--m-text1) !important; }
+.dark .login-subtitle,
+.dark .login-alt,
+.dark .login-skip,
+.dark .reg-brand p,
+.dark .reg-alt { color: var(--m-text3) !important; }
+.dark .reg-brand h1 { color: var(--m-text1) !important; }
+
+.dark .search-input {
+  background: var(--m-bg2) !important;
+  border-color: var(--m-card-border) !important;
+  color: var(--m-text1) !important;
+}
+.dark .search-input::placeholder { color: var(--m-text3) !important; }
+
+.dark .skel {
+  background: linear-gradient(90deg, #1A1F2E 25%, #252A3A 50%, #1A1F2E 75%) !important;
+  background-size: 200% 100% !important;
+}
+
+.dark .empty-text,
+.dark .empty-home .empty-desc,
+.dark .discover-loading .skel { color: var(--m-text3); }
+.dark .empty-home .empty-title { color: var(--m-text1) !important; }
+
+.dark .random-card {
+  background: linear-gradient(135deg, rgba(26,31,46,0.9), rgba(30,35,50,0.9)) !important;
+}
+.dark .random-title { color: var(--m-text1) !important; }
+.dark .random-excerpt,
+.dark .random-label { color: var(--m-text3) !important; }
+
+.dark .card-title,
+.dark .h-card .card-title { color: var(--m-text1) !important; }
+.dark .card-excerpt,
+.dark .h-card .card-excerpt { color: var(--m-text2) !important; }
+.dark .card-foot { color: var(--m-text3) !important; }
+.dark .h-card {
+  background: var(--m-card) !important;
+  border-color: var(--m-card-border) !important;
+}
+
+.dark .series-item h4 { color: var(--m-text1) !important; }
+.dark .series-item p { color: var(--m-text3) !important; }
+
+/* --- Reading page dark mode --- */
+.dark .reading-toolbar {
+  background: rgba(26,31,46,0.95) !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5) !important;
+}
+
+/* --- Fail state dark mode --- */
+.dark .fail-body .fail-text { color: var(--m-text3) !important; }
+.dark .fail-btn.secondary {
+  background: var(--m-bg2) !important;
+  color: var(--m-text2) !important;
+}
+
+/* --- Settings dark mode --- */
+.dark .settings-body .form-group input,
+.dark .settings-body .form-group textarea {
+  background: var(--m-bg2) !important;
+  border-color: var(--m-card-border) !important;
+  color: var(--m-text1) !important;
+}
+
+/* --- Touch area improvements --- */
+.tab-btn { min-height: 44px; }
+.posts-top .back,
+.reading-top .back,
+.settings-top .back,
+.search-toggle,
+.search-go { min-width: 44px; min-height: 44px; }
+.reading-toolbar button { min-width: 44px; min-height: 44px; }
+.top-bar .icons button { min-width: 44px; min-height: 44px; }

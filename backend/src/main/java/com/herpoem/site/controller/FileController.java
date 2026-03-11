@@ -78,10 +78,13 @@ public class FileController {
     @DeleteMapping("/delete-image")
     public Result<String> deleteImage(@RequestParam("url") String url) {
         try {
-            // 从URL中提取文件路径
             if (url.startsWith(urlPrefix)) {
                 String filePath = url.substring(urlPrefix.length());
-                File file = new File(uploadPath + filePath);
+                File uploadDir = new File(uploadPath).getCanonicalFile();
+                File file = new File(uploadPath + filePath).getCanonicalFile();
+                if (!file.toPath().startsWith(uploadDir.toPath())) {
+                    return Result.error("非法文件路径");
+                }
                 if (file.exists() && file.delete()) {
                     return Result.success("文件删除成功");
                 }

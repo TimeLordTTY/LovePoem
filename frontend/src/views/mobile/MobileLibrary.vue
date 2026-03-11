@@ -1,30 +1,22 @@
 <template>
   <div class="m-library">
-    <!-- Tabs -->
     <div class="lib-tabs">
-      <button
-        class="lib-tab"
-        :class="{ active: tab === 'reading' }"
-        @click="tab = 'reading'"
-      >在读</button>
-      <button
-        class="lib-tab"
-        :class="{ active: tab === 'favorite' }"
-        @click="tab = 'favorite'"
-      >收藏</button>
+      <button class="lib-tab" :class="{ active: tab === 'reading' }" @click="tab = 'reading'">在读</button>
+      <button class="lib-tab" :class="{ active: tab === 'favorite' }" @click="tab = 'favorite'">收藏</button>
     </div>
 
     <!-- 在读列表 -->
     <div class="lib-list" v-if="tab === 'reading'">
-      <div v-if="readingList.length === 0" class="empty">还没有阅读记录</div>
+      <div v-if="loadingReading" class="empty">加载中...</div>
+      <div v-else-if="readingList.length === 0" class="empty">还没有阅读记录</div>
       <div
         class="lib-item"
         v-for="item in readingList"
         :key="item.slug"
-        @click="$router.push(`/m/read/${item.slug}`)"
+        @click="item.slug && $router.push(`/m/read/${item.slug}`)"
       >
         <div class="info">
-          <h4>{{ item.title }}</h4>
+          <h4>{{ item.title || '未知文章' }}</h4>
           <p>{{ item.postTypeName || '诗文' }} · {{ formatDate(item.publishDate) }}</p>
         </div>
         <svg class="progress-ring" viewBox="0 0 36 36">
@@ -39,7 +31,8 @@
 
     <!-- 收藏列表 -->
     <div class="lib-list" v-else>
-      <div v-if="favorites.length === 0" class="empty">
+      <div v-if="loadingFav" class="empty">加载中...</div>
+      <div v-else-if="favorites.length === 0" class="empty">
         <template v-if="!authStore.isLoggedIn">
           <span @click="$router.push('/m/login')" class="login-hint">登录后查看收藏 →</span>
         </template>
@@ -49,10 +42,10 @@
         class="lib-item"
         v-for="fav in favorites"
         :key="fav.id"
-        @click="$router.push(`/m/read/${fav.slug}`)"
+        @click="fav.slug && $router.push(`/m/read/${fav.slug}`)"
       >
         <div class="info">
-          <h4>{{ fav.title }}</h4>
+          <h4>{{ fav.title || '未知文章' }}</h4>
           <p>{{ fav.postTypeName || '诗文' }} · {{ formatDate(fav.publishDate) }}</p>
         </div>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#94A3B8" stroke-width="2">
@@ -73,6 +66,10 @@ const authStore = useAuthStore()
 const tab = ref('reading')
 const readingList = ref([])
 const favorites = ref([])
+const loadingReading = ref(false)
+const loadingFav = ref(false)
+
+const MAX_READING_ITEMS = 20
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
@@ -81,35 +78,44 @@ const formatDate = (dateStr) => {
 }
 
 const loadReading = async () => {
+  loadingReading.value = true
   const uid = authStore.user?.id || 'anon'
   const prefix = `mRead:${uid}:`
-  const keys = Object.keys(localStorage).filter(k => k.startsWith(prefix))
-  const items = []
-  for (const key of keys) {
+  let keys = Object.keys(localStorage).filter(k => k.startsWith(prefix))
+
+  const entries = keys.map(k => {
+    try { return { key: k, ...JSON.parse(localStorage.getItem(k) || '{}') } }
+    catch { return null }
+  }).filter(e => e?.slug)
+  entries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  const recent = entries.slice(0, MAX_READING_ITEMS)
+
+  const items = await Promise.all(recent.map(async (data) => {
     try {
-      const data = JSON.parse(localStorage.getItem(key) || '{}')
-      if (!data.slug) continue
       const resp = await getPostBySlug(data.slug)
-      if (!resp.data) continue
+      if (!resp.data) return null
       const total = data.totalPages || 1
       const current = data.currentPage || 1
-      items.push({
+      return {
         ...resp.data,
         progress: Math.round((current / total) * 100),
         updatedAt: data.updatedAt || 0
-      })
-    } catch { /* ignore */ }
-  }
-  readingList.value = items.sort((a, b) => b.updatedAt - a.updatedAt)
+      }
+    } catch { return null }
+  }))
+  readingList.value = items.filter(Boolean)
+  loadingReading.value = false
 }
 
 const loadFavorites = async () => {
   if (!authStore.isLoggedIn) { favorites.value = []; return }
+  loadingFav.value = true
   try {
     const resp = await getFavorites()
     const d = resp.data
     favorites.value = Array.isArray(d) ? d : (d?.records || [])
   } catch { favorites.value = [] }
+  loadingFav.value = false
 }
 
 onMounted(() => {

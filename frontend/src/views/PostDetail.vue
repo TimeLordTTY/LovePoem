@@ -574,9 +574,8 @@ const checkFavoriteStatus = async () => {
   if (!authStore.isLoggedIn || !post.value) return
   
   try {
-    // 这里需要调用API检查收藏状态
-    // const response = await checkUserFavorite(post.value.id)
-    // isFavorited.value = response.data
+    const response = await checkUserFavorite(post.value.id)
+    isFavorited.value = !!response.data
   } catch (error) {
     console.error('Check favorite status error:', error)
   }

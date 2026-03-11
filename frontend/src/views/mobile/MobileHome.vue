@@ -1,5 +1,21 @@
 <template>
   <div class="m-home">
+    <!-- Loading -->
+    <div v-if="homeLoading" class="home-loading">
+      <div class="skel skel-bar"></div>
+      <div class="skel skel-cards"></div>
+      <div class="skel skel-grid"></div>
+    </div>
+
+    <template v-else>
+    <!-- 全空提示 -->
+    <div v-if="isEmpty" class="empty-home">
+      <div class="empty-icon">📖</div>
+      <div class="empty-title">这里还是空的</div>
+      <div class="empty-desc">内容正在准备中，先去看看吧</div>
+      <button class="empty-btn" @click="$router.push('/m/posts')">浏览全部文章</button>
+    </div>
+
     <!-- 继续阅读 -->
     <div class="sec" style="margin-top:14px" v-if="lastRead">
       <div class="continue-card" @click="openReading(lastRead.slug)">
@@ -94,6 +110,7 @@
         </button>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -109,11 +126,16 @@ import { getAllPostTypes } from '@/api/postType'
 const router = useRouter()
 const authStore = useAuthStore()
 
+const homeLoading = ref(true)
 const lastRead = ref(null)
 const posts = ref([])
 const postTypes = ref([])
 const seriesList = ref([])
 const tags = ref([])
+
+const isEmpty = computed(() =>
+  !lastRead.value && posts.value.length === 0 && postTypes.value.length === 0 && tags.value.length === 0
+)
 
 const tagColors = ['tag-warm', 'tag-cool', 'tag-green', 'tag-amber', 'tag-purple']
 const tagColorClass = (idx) => tagColors[idx % tagColors.length]
@@ -194,8 +216,9 @@ const loadPostTypes = async () => {
   }
 }
 
-onMounted(() => {
-  Promise.all([loadLastRead(), loadPosts(), loadPostTypes(), loadSeriesAndTags()])
+onMounted(async () => {
+  await Promise.all([loadLastRead(), loadPosts(), loadPostTypes(), loadSeriesAndTags()])
+  homeLoading.value = false
 })
 </script>
 
@@ -336,4 +359,40 @@ onMounted(() => {
 .tag-purple { background: linear-gradient(135deg, #F5F3FF, #EDE9FE); color: #6D28D9; }
 .tag-green { background: linear-gradient(135deg, #F0FDF4, #DCFCE7); color: #15803D; }
 .tag-amber { background: linear-gradient(135deg, #FFFBEB, #FEF3C7); color: #B45309; }
+
+/* Loading skeleton */
+.home-loading { padding: 16px 0; }
+.home-loading .skel {
+  background: linear-gradient(90deg, #F1F3F8 25%, #E2E8F0 50%, #F1F3F8 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 14px;
+  margin-bottom: 14px;
+}
+.skel-bar { height: 80px; }
+.skel-cards { height: 120px; }
+.skel-grid { height: 160px; }
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Empty state */
+.empty-home {
+  text-align: center;
+  padding: 60px 20px;
+}
+.empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-title { font-size: 17px; font-weight: 600; color: #0F172A; margin-bottom: 6px; }
+.empty-desc { font-size: 13px; color: #94A3B8; margin-bottom: 20px; }
+.empty-btn {
+  padding: 10px 28px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #E11D48, #BE123C);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
 </style>

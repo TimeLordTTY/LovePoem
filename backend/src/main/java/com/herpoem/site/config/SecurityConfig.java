@@ -7,7 +7,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import com.herpoem.site.util.MD5PasswordEncoder;
+import com.herpoem.site.util.MigratingPasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -50,7 +50,7 @@ public class SecurityConfig {
      */
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new MD5PasswordEncoder();
+        return new MigratingPasswordEncoder();
     }
 
     /**
@@ -119,8 +119,7 @@ public class SecurityConfig {
         // 从配置文件读取允许的HTTP方法
         configuration.setAllowedMethods(corsProperties.getAllowedMethods());
         
-        // 从配置文件读取允许的请求头
-        configuration.setAllowedHeaders(List.of(corsProperties.getAllowedHeaders()));
+        configuration.setAllowedHeaders(List.of(corsProperties.getAllowedHeaders().split(",")));
         
         // 从配置文件读取是否允许发送凭证
         configuration.setAllowCredentials(corsProperties.isAllowCredentials());

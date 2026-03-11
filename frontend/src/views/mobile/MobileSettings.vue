@@ -58,8 +58,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/store/auth'
 import { getUserProfile, updateUserProfile, changePassword } from '@/api/user'
+
+const router = useRouter()
+const authStore = useAuthStore()
 
 const loaded = ref(false)
 const saving = ref(false)
@@ -69,13 +74,22 @@ const profile = reactive({ displayName: '', email: '', bio: '' })
 const pwd = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
 
 onMounted(async () => {
+  if (!authStore.isLoggedIn) {
+    router.replace('/m/login')
+    return
+  }
   try {
     const resp = await getUserProfile()
     const d = resp.data || {}
     profile.displayName = d.displayName || ''
     profile.email = d.email || ''
     profile.bio = d.bio || ''
-  } catch { /* ignore */ }
+  } catch (err) {
+    if (err?.response?.status === 401) {
+      router.replace('/m/login')
+      return
+    }
+  }
   loaded.value = true
 })
 
@@ -122,7 +136,7 @@ const doChangePwd = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 16px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
   background: rgba(250, 251, 254, 0.8);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
