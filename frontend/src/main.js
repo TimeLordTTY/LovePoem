@@ -9,6 +9,7 @@ import 'element-plus/dist/index.css'
 import '@/styles/theme.css'
 import '@/styles/element-dark.css'
 import '@/styles/motion.css'
+import '@/styles/mobile.css'
 
 const app = createApp(App)
 const pinia = createPinia()

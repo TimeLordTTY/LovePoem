@@ -19,7 +19,7 @@ echo 当前目录: %CD%
 REM 检查是否需要编译
 if not exist "target\love-poem-backend-1.0.0.jar" (
     echo 后端JAR不存在，开始编译...
-    call "%MAVEN_HOME%\bin\mvn.cmd" clean package -DskipTests
+    call "%MAVEN_HOME%\bin\mvn.cmd" -s "%~dp0maven-settings.xml" clean package -DskipTests
     if errorlevel 1 (
         echo 错误: Maven构建失败
         pause
@@ -58,7 +58,9 @@ echo.
 echo ========================================
 echo 本地开发环境启动完成！
 echo ========================================
-echo 前端开发地址: http://localhost:5173
+echo 前端开发地址: 
+echo   PC 端前台: http://localhost:5173
+echo   手机端前台: http://localhost:5173/m
 echo 后端API地址:  http://localhost:8080/api
 echo.
 echo 默认登录信息:

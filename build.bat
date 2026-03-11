@@ -49,7 +49,7 @@ echo ========================================
 cd /d "%~dp0backend"
 echo Current directory: %CD%
 echo Starting Maven build...
-call "%MAVEN_HOME%\bin\mvn.cmd" clean package -DskipTests
+call "%MAVEN_HOME%\bin\mvn.cmd" -s "%~dp0maven-settings.xml" clean package -DskipTests
 if errorlevel 1 (
     echo ERROR: Maven build failed
     cd /d "%~dp0"

@@ -14,6 +14,72 @@ const routes = [
     component: () => import('@/views/PostsView.vue'),
     meta: { title: '文章列表' }
   },
+  // 手机端登录
+  {
+    path: '/m/login',
+    name: 'MobileLogin',
+    component: () => import('@/views/mobile/MobileLogin.vue'),
+    meta: { title: '登录', isMobile: true }
+  },
+  // 手机端注册
+  {
+    path: '/m/register',
+    name: 'MobileRegister',
+    component: () => import('@/views/mobile/MobileRegister.vue'),
+    meta: { title: '注册', isMobile: true }
+  },
+  // 手机端个人设置
+  {
+    path: '/m/settings',
+    name: 'MobileSettings',
+    component: () => import('@/views/mobile/MobileSettings.vue'),
+    meta: { title: '个人设置', isMobile: true, requiresAuth: true }
+  },
+  // 手机端文章列表（独立全屏，不带 Shell）
+  {
+    path: '/m/posts',
+    name: 'MobilePosts',
+    component: () => import('@/views/mobile/MobilePostsList.vue'),
+    meta: { title: '文章列表', isMobile: true }
+  },
+  // 手机端阅读页（独立全屏，不带 Shell）
+  {
+    path: '/m/read/:slug',
+    name: 'MobileReading',
+    component: () => import('@/views/mobile/MobileReadingPage.vue'),
+    meta: { title: '阅读', isMobile: true }
+  },
+  // 手机端主框架
+  {
+    path: '/m',
+    component: () => import('@/views/mobile/MobileShell.vue'),
+    children: [
+      {
+        path: '',
+        name: 'MobileHome',
+        component: () => import('@/views/mobile/MobileHome.vue'),
+        meta: { title: '首页', isMobile: true }
+      },
+      {
+        path: 'library',
+        name: 'MobileLibrary',
+        component: () => import('@/views/mobile/MobileLibrary.vue'),
+        meta: { title: '书架', isMobile: true }
+      },
+      {
+        path: 'discover',
+        name: 'MobileDiscover',
+        component: () => import('@/views/mobile/MobileDiscover.vue'),
+        meta: { title: '发现', isMobile: true }
+      },
+      {
+        path: 'profile',
+        name: 'MobileProfile',
+        component: () => import('@/views/mobile/MobileProfile.vue'),
+        meta: { title: '我的', isMobile: true }
+      }
+    ]
+  },
   {
     path: '/post/:slug',
     name: 'PostDetail',
@@ -152,17 +218,16 @@ router.beforeEach(async (to, from, next) => {
   // 检查是否需要认证
   if (to.meta.requiresAuth) {
     if (!authStore.isLoggedIn) {
-      // 尝试从本地存储恢复登录状态
       const token = localStorage.getItem('token')
       if (token) {
         try {
           await authStore.getCurrentUser()
           next()
         } catch (error) {
-          next('/login')
+          next(to.meta.isMobile ? '/m/login' : '/login')
         }
       } else {
-        next('/login')
+        next(to.meta.isMobile ? '/m/login' : '/login')
       }
     } else {
       next()

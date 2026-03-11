@@ -5,9 +5,8 @@ import request from './request'
  */
 export function addUserFavorite(postId) {
   return request({
-    url: '/user-favorites',
-    method: 'post',
-    data: { postId }
+    url: `/favorites/${postId}`,
+    method: 'post'
   })
 }
 
@@ -16,7 +15,7 @@ export function addUserFavorite(postId) {
  */
 export function removeUserFavorite(postId) {
   return request({
-    url: `/user-favorites/${postId}`,
+    url: `/favorites/${postId}`,
     method: 'delete'
   })
 }
@@ -26,7 +25,7 @@ export function removeUserFavorite(postId) {
  */
 export function checkUserFavorite(postId) {
   return request({
-    url: `/user-favorites/check/${postId}`,
+    url: `/favorites/${postId}/check`,
     method: 'get'
   })
 }
@@ -36,7 +35,7 @@ export function checkUserFavorite(postId) {
  */
 export function getUserFavorites(params) {
   return request({
-    url: '/user-favorites',
+    url: '/favorites',
     method: 'get',
     params
   })

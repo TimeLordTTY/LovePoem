@@ -42,12 +42,14 @@ request.interceptors.response.use(
       const { status, data } = response
       
       switch (status) {
-        case 401:
+        case 401: {
           ElMessage.error('登录已过期，请重新登录')
           const authStore = useAuthStore()
           authStore.logout()
-          window.location.href = '/login'
+          const isMobile = window.location.pathname.startsWith('/m')
+          window.location.href = isMobile ? '/m/login' : '/login'
           break
+        }
         case 403:
           ElMessage.error('没有权限访问')
           break

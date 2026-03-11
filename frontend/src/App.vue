@@ -1,15 +1,16 @@
 <template>
   <div id="app" :class="['app', themeStore.currentTheme]" :style="appStyle">
-    <HeaderNav />
-    <main class="main-content">
+    <HeaderNav v-if="!isMobileRoute" />
+    <main class="main-content" :class="{ 'main-content--mobile': isMobileRoute }">
       <router-view />
     </main>
-    <FooterNav />
+    <FooterNav v-if="!isMobileRoute" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useThemeStore } from '@/store/theme'
 import HeaderNav from '@/components/HeaderNav.vue'
 import FooterNav from '@/components/FooterNav.vue'
@@ -17,6 +18,10 @@ import { getSiteSettings } from '@/api/site'
 
 const themeStore = useThemeStore()
 const wallpaperUrl = ref('')
+
+const route = useRoute()
+
+const isMobileRoute = computed(() => route.path.startsWith('/m'))
 
 // 计算应用样式
 const appStyle = computed(() => {
@@ -77,10 +82,18 @@ body {
   padding-top: 80px; /* 为固定header留出空间 */
 }
 
+.main-content--mobile {
+  padding-top: 0;
+}
+
 /* 移动端需要更多的上边距 */
 @media (max-width: 768px) {
   .main-content {
     padding-top: 120px; /* 移动端导航栏更高 */
+  }
+
+  .main-content--mobile {
+    padding-top: 0;
   }
 }
 

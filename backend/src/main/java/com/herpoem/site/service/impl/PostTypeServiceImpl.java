@@ -2,7 +2,9 @@ package com.herpoem.site.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.herpoem.site.mapper.PostMapper;
 import com.herpoem.site.mapper.PostTypeMapper;
+import com.herpoem.site.model.entity.Post;
 import com.herpoem.site.model.entity.PostType;
 import com.herpoem.site.model.vo.PostTypeVO;
 import com.herpoem.site.service.PostTypeService;
@@ -23,6 +25,7 @@ import java.util.stream.Collectors;
 public class PostTypeServiceImpl extends ServiceImpl<PostTypeMapper, PostType> implements PostTypeService {
     
     private final PostTypeMapper postTypeMapper;
+    private final PostMapper postMapper;
     
     @Override
     public List<PostTypeVO> getAllPostTypes() {
@@ -88,6 +91,10 @@ public class PostTypeServiceImpl extends ServiceImpl<PostTypeMapper, PostType> i
     private PostTypeVO convertToVO(PostType postType) {
         PostTypeVO vo = new PostTypeVO();
         BeanUtils.copyProperties(postType, vo);
+        QueryWrapper<Post> countWrapper = new QueryWrapper<>();
+        countWrapper.eq("post_type_id", postType.getId())
+                    .eq("status", "PUBLISHED");
+        vo.setPostCount(postMapper.selectCount(countWrapper));
         return vo;
     }
 }
