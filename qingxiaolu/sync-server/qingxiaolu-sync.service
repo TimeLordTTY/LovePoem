@@ -1,0 +1,18 @@
+[Unit]
+Description=Qingxiaolu synchronization service
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=www
+Group=www
+WorkingDirectory=/www/wwwroot/qingxiaolu/backend
+EnvironmentFile=/etc/qingxiaolu-sync/qingxiaolu-sync.env
+ExecStart=/usr/local/bin/node /www/wwwroot/qingxiaolu/backend/server.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

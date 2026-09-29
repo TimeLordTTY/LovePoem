@@ -1,0 +1,194 @@
+import { useEffect, useRef, useState } from "react";
+import { importAdapters, type ImportCandidate, type ImportMode } from "./importers";
+import { queueItem } from "./sync";
+import { nativeCaptureAvailable, openNativeCaptureSettings } from "./nativeHistory";
+import { appendProjectImport } from "./ProjectWorkspace";
+
+const modeLabels: Record<ImportMode, string> = {
+  browser: "电脑网页辅助",
+  root: "Root 读取",
+  accessibility: "辅助浏览",
+  ocr: "OCR 识别",
+  file: "文件解析",
+};
+
+export default function HistoryImport({
+  close,
+  kind = "history",
+  projects = [],
+}: {
+  close: () => void;
+  kind?: "history" | "documents";
+  projects?: any[];
+}) {
+  const [step, setStep] = useState<"source" | "preview">("source");
+  const [candidates, setCandidates] = useState<ImportCandidate[]>([]);
+  const [message, setMessage] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [targetProjectId, setTargetProjectId] = useState("");
+  const [targetCategory, setTargetCategory] = useState("正文");
+  const [pastedResult, setPastedResult] = useState("");
+  const isAndroid = nativeCaptureAvailable();
+  const platformUrls: Record<string, string> = {
+    weibo: "https://weibo.com/",
+    qqzone: "https://user.qzone.qq.com/",
+  };
+
+  function goBack() {
+    if (step === "preview") {
+      setStep("source");
+      setCandidates([]);
+      setMessage("");
+      return;
+    }
+    close();
+  }
+
+  useEffect(() => {
+    const handleBack = () => goBack();
+    window.addEventListener("qx-history-back", handleBack);
+    return () => window.removeEventListener("qx-history-back", handleBack);
+  });
+
+  async function importFiles(files: File[]) {
+    setMessage("正在解析文件…");
+    try {
+      const adapter = importAdapters.find((item) => item.id === "other")!;
+      const result = await adapter.collect({ mode: "file", files });
+      setCandidates(result);
+      setStep("preview");
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "文件解析失败");
+    }
+  }
+
+  async function importPastedResult() {
+    if (!pastedResult.trim()) return setMessage("请先粘贴采集结果");
+    await importFiles([new File([pastedResult], "QQ空间采集结果.json", { type: "application/json" })]);
+  }
+
+  async function startPlatform(adapterId: string, label: string, mode: ImportMode) {
+    const adapter = importAdapters.find((item) => item.id === adapterId);
+    if (mode === "accessibility" && adapter && nativeCaptureAvailable()) {
+      const captured = await adapter.collect({ mode });
+      if (captured.length) {
+        setCandidates(captured);
+        setStep("preview");
+        setMessage(`已读取 ${captured.length} 条手机采集内容`);
+        return;
+      }
+      await openNativeCaptureSettings();
+      setMessage(`请开启“情晓录历史采集”，然后打开${label}并向下浏览。浏览完成后回到这里再次点“辅助浏览”。`);
+      return;
+    }
+    setMessage(`${label} · ${modeLabels[mode]}需要对应的采集工具。采集完成后在这里导入结果文件。`);
+  }
+
+  function update(id: string, patch: Partial<ImportCandidate>) {
+    setCandidates((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+
+  async function commit() {
+    const selected = candidates.filter((item) => item.selected);
+    if (!selected.length) return setMessage("请至少选择一条内容");
+    setMessage(`正在导入 ${selected.length} 条…`);
+    for (const item of selected) {
+      if (kind === "documents" && targetProjectId && targetCategory !== "正文") {
+        appendProjectImport(targetProjectId, targetCategory, item.title || item.text.slice(0, 20), item.text);
+        continue;
+      }
+      const savedTitle = item.source === "qqzone" ? "" : (item.title || item.text.slice(0, 20));
+      await queueItem("article", savedTitle, {
+        text: item.text,
+        imported: true,
+        importSource: item.source,
+        sourceLabel: item.sourceLabel,
+        publishedAt: item.publishedAt,
+        images: item.images,
+        originalUrl: item.originalUrl,
+        projectId: targetProjectId || undefined,
+        materialCategory: kind === "documents" ? targetCategory : undefined,
+      }, targetProjectId || undefined);
+    }
+    setMessage(`已正式导入 ${selected.length} 条内容`);
+    window.setTimeout(close, 800);
+  }
+
+  return (
+    <div className="history-import">
+      <header><button onClick={goBack}>‹ 返回</button><div>
+        <b>{kind === "documents" ? "导入本地文档" : "历史导入"}</b>
+        <span>{kind === "documents" ? "解析后先预览，再保存到项目" : "一次性导入，不会实时同步"}</span>
+      </div></header>
+      {message && <div className="import-message">{message}</div>}
+      <input ref={fileInput} hidden multiple type="file"
+        accept={kind === "documents"
+          ? ".docx,.txt,.md,.markdown,.pdf,.json,.xmind,.mm,.opml,.csv,text/plain,text/markdown,application/pdf,application/json"
+          : ".json,application/json"}
+        onChange={(event) => void importFiles(Array.from(event.target.files || []))} />
+
+      {step === "source" && <section>
+        <h1>{kind === "documents" ? "选择本地文件" : "选择内容来源"}</h1>
+        <p>采集结果会先进入临时预览，不会直接写入正式数据。</p>
+        <div className="import-sources">
+          {kind === "history" && importAdapters.filter((item) => item.id !== "other").map((adapter) =>
+            <article key={adapter.id}>
+              <h2>{adapter.label}</h2><p>{adapter.description}</p>
+              <div>
+                {isAndroid && <button className="primary"
+                  onClick={() => void startPlatform(adapter.id, adapter.label, "accessibility")}>辅助采集</button>}
+                {!isAndroid && platformUrls[adapter.id] && <button onClick={() =>
+                  window.open(platformUrls[adapter.id], "_blank", "noopener,noreferrer")}>打开{adapter.label}网页版</button>}
+                <button onClick={() => fileInput.current?.click()}>导入采集结果</button>
+              </div>
+            </article>)}
+          {kind === "documents" && <article>
+            <h2>文件导入</h2><p>Word、TXT、Markdown、PDF、XMind、FreeMind、OPML、CSV 和 JSON</p>
+            <button className="primary" onClick={() => fileInput.current?.click()}>选择文件</button>
+          </article>}
+        </div>
+        {kind === "history" && <div className="paste-import-result">
+          <h2>粘贴电脑采集结果</h2>
+          <textarea value={pastedResult} onChange={(event) => setPastedResult(event.target.value)}
+            placeholder="从QQ空间采集工具复制的内容会放在这里" />
+          <button className="primary" onClick={() => void importPastedResult()}>生成临时预览</button>
+        </div>}
+      </section>}
+
+      {step === "preview" && <section>
+        <div className="preview-head"><div><h1>临时预览</h1><p>可以勾选、修改或删除，再正式导入。</p></div>
+          <button onClick={() => { setStep("source"); setCandidates([]); }}>重新选择</button></div>
+        {kind === "documents" && <div className="import-destination">
+          <label>归入项目<select value={targetProjectId} onChange={(event) => setTargetProjectId(event.target.value)}>
+            <option value="">不归入项目</option>
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.payload.title}</option>)}
+          </select></label>
+          <label>导入为<select value={targetCategory} onChange={(event) => setTargetCategory(event.target.value)}>
+            {["正文", "大纲", "人物", "背景", "时间轴", "资料"].map((name) => <option key={name}>{name}</option>)}
+          </select></label>
+        </div>}
+        <div className="candidate-list">
+          {candidates.map((item) => <article key={item.id}>
+            <label><input type="checkbox" checked={item.selected}
+              onChange={(event) => update(item.id, { selected: event.target.checked })} /> 导入</label>
+            <button className="remove" onClick={() => setCandidates((items) => items.filter((entry) => entry.id !== item.id))}>删除</button>
+            <small>{item.sourceLabel}{item.publishedAt ? ` · ${item.publishedAt}` : ""}</small>
+            {item.source !== "qqzone" && <input value={item.title}
+              onChange={(event) => update(item.id, { title: event.target.value })} />}
+            <textarea value={item.text} onChange={(event) => update(item.id, { text: event.target.value })} />
+            {!!item.images.length && <div className="candidate-images">
+              {item.images.map((image, index) => <a key={`${image}-${index}`} href={image}
+                target="_blank" rel="noreferrer" aria-label={`查看第 ${index + 1} 张原图`}>
+                <img src={image} alt={`导入图片 ${index + 1}`} loading="lazy" referrerPolicy="no-referrer" />
+              </a>)}
+            </div>}
+          </article>)}
+        </div>
+        <button className="commit-import" onClick={() => void commit()}>
+          正式导入已选内容（{candidates.filter((item) => item.selected).length}）
+        </button>
+      </section>}
+    </div>
+  );
+}
