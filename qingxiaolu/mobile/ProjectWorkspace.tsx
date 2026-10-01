@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Share } from "@capacitor/share";
 import { queueItem } from "./sync";
+import { storeJson } from "./storage";
+import { createBackup, downloadBackup, parseBackup } from "./backup";
 
 export type ProjectWorkspaceData = {
   type: string;
@@ -50,7 +52,7 @@ function load(projectId: string, fallback: Partial<ProjectWorkspaceData> = {}): 
 function save(projectId: string, data: ProjectWorkspaceData) {
   const all = JSON.parse(localStorage.getItem("qx_project_workspaces") || "{}");
   all[projectId] = data;
-  localStorage.setItem("qx_project_workspaces", JSON.stringify(all));
+  storeJson("qx_project_workspaces", all);
 }
 
 export function appendProjectImport(projectId: string, category: string, title: string, text: string) {
@@ -127,6 +129,7 @@ export default function ProjectWorkspace({
   onEditArticle,
   close,
   onWrite,
+  onNewArticle,
   onUpdated,
 }: {
   project: any;
@@ -136,6 +139,7 @@ export default function ProjectWorkspace({
   onEditArticle?: (article: any) => void;
   close: () => void;
   onWrite: () => void;
+  onNewArticle?: (chapterId?: string) => void;
   onUpdated?: (title: string, content: Record<string, unknown>) => void;
 }) {
   const projectId = String(project.id);
@@ -151,6 +155,7 @@ export default function ProjectWorkspace({
   const [readerTheme, setReaderTheme] = useState<"paper" | "green" | "night">("paper");
   const [syncProject, setSyncProject] = useState(false);
   const [message, setMessage] = useState("");
+  const [backupBusy, setBackupBusy] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [selectionMenu, setSelectionMenu] = useState<{ x: number; y: number; mobile: boolean } | null>(null);
   const [projectDirectory, setProjectDirectory] = useState<any>(null);
@@ -159,6 +164,15 @@ export default function ProjectWorkspace({
   const coverInput = useRef<HTMLInputElement>(null);
 
   const markdown = useMemo(() => packageText(title, data), [title, data]);
+  const orderedArticles = useMemo(() => [...articles].sort((a, b) => {
+    const chapterIndex = (item: any) => {
+      const index = data.chapters.findIndex((chapter) => chapter.id === item.payload?.content?.chapterId);
+      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+    };
+    return chapterIndex(a) - chapterIndex(b) || Number(a.seq || 0) - Number(b.seq || 0);
+  }), [articles, data.chapters]);
+  const fullText = useMemo(() => `${markdown}\n\n## 正文\n\n${orderedArticles.map((article) =>
+    `### ${article.payload?.title || "未命名稿件"}\n\n${article.payload?.content?.text || ""}`).join("\n\n")}`, [markdown, orderedArticles]);
   const chapterArticles = useMemo(() => {
     const groups = new Map<string, any[]>();
     for (const article of articles) {
@@ -172,19 +186,38 @@ export default function ProjectWorkspace({
     total + String(article.payload?.content?.text || "").replace(/\s/g, "").length, 0), [articles]);
   const completedChapters = data.chapters.filter((chapter) => chapter.status === "已完成").length;
   const wordHtml = useMemo(() =>
-    `<html><head><meta charset="utf-8"><title>${xmlEscape(title)}</title></head><body>${markdown.split("\n").map((line) =>
-      line.startsWith("# ") ? `<h1>${line.slice(2)}</h1>` :
-        line.startsWith("## ") ? `<h2>${line.slice(3)}</h2>` :
-          line.startsWith("### ") ? `<h3>${line.slice(4)}</h3>` : `<p>${line || "&nbsp;"}</p>`).join("")}</body></html>`,
-  [markdown, title]);
+    `<html><head><meta charset="utf-8"><title>${xmlEscape(title)}</title></head><body>${fullText.split("\n").map((line) =>
+      line.startsWith("# ") ? `<h1>${xmlEscape(line.slice(2))}</h1>` :
+        line.startsWith("## ") ? `<h2>${xmlEscape(line.slice(3))}</h2>` :
+          line.startsWith("### ") ? `<h3>${xmlEscape(line.slice(4))}</h3>` : `<p>${line ? xmlEscape(line) : "&nbsp;"}</p>`).join("")}</body></html>`,
+  [fullText, title]);
   const patch = (next: Partial<ProjectWorkspaceData>) => setData((current) => ({ ...current, ...next }));
 
-  async function persist() {
-    save(projectId, data);
-    const { aiKey, ...syncData } = data;
-    await queueItem("project", title, syncData, undefined, syncProject, projectId, Number(project.revision || 0));
-    onUpdated?.(title, syncData);
-    setMessage(syncProject ? "项目资料已保存并同步" : "项目资料已保存到本地");
+  async function persist(upload = syncProject, snapshot = { title, data }) {
+    try {
+    save(projectId, snapshot.data);
+    const { aiKey, ...syncData } = snapshot.data;
+    await queueItem("project", snapshot.title, syncData, undefined, upload, projectId, Number(project.revision || 0), upload);
+    onUpdated?.(snapshot.title, syncData);
+    setMessage(upload ? "本机已保存，项目资料等待同步；请点击主页面同步" : "项目资料已自动保存到本机");
+    return true;
+    } catch (error) { setMessage((error as Error).message); return false; }
+  }
+
+  const latest = useRef({ title, data });
+  latest.current = { title, data };
+  useEffect(() => {
+    const timer = window.setTimeout(() => void persist(false), 800);
+    return () => window.clearTimeout(timer);
+  }, [title, data]);
+  useEffect(() => () => { void persist(false, latest.current); }, []);
+
+  async function exportProjectBackup() {
+    setBackupBusy(true);
+    try { downloadBackup(await createBackup(projectId, { id: projectId, revision: project.revision || 0,
+      payload: { id: projectId, itemType: "project", title, content: data } }), title); }
+    catch (error) { setMessage((error as Error).message); }
+    finally { setBackupBusy(false); }
   }
 
   async function writeFile(directory: any, name: string, content: string, type = "text/markdown;charset=utf-8") {
@@ -259,23 +292,28 @@ export default function ProjectWorkspace({
   async function syncAppToLocal() {
     if (!projectDirectory) return void chooseProjectDirectory();
     if (!await ensureDirectoryPermission()) return setMessage("未获得文件夹读写权限");
+    if (!window.confirm(`将 ${articles.length} 篇稿件及项目资料写入所选文件夹。同名文件将更新，完整备份会包含图片。继续吗？`)) return;
+    if (!await persist(false)) return;
+    const backup = await createBackup(projectId);
+    await writeFile(projectDirectory, "完整备份.json", JSON.stringify(backup), "application/json");
     await writeFile(projectDirectory, "项目信息.md",
       `# ${title}\n\n类型：${data.type}\n\n标签：${data.tags}\n\n${data.description}`);
     await writeFile(projectDirectory, "世界观.md", `# 世界观\n\n${data.world}`);
     await writeFile(projectDirectory, "情节.md", `# 情节\n\n${data.plot}`);
+    await writeFile(projectDirectory, "私密备注.md", `# 私密备注\n\n${data.privateNotes}`);
     await writeFile(projectDirectory, "项目全文.doc", wordHtml, "application/msword;charset=utf-8");
 
     const characterDirectory = await projectDirectory.getDirectoryHandle("人物", { create: true });
     for (const card of data.characterCards) await writeFile(characterDirectory,
-      `${safeFileName(card.name, "未命名人物")}.md`, `# ${card.name}\n\n身份：${card.role}\n\n${card.description}`);
+      `${safeFileName(card.name, "未命名人物")}.md`, `# ${card.name}\n\n人物ID：${card.id}\n身份：${card.role}\n\n${card.description}`);
     const outlineDirectory = await projectDirectory.getDirectoryHandle("大纲", { create: true });
     for (const [index, chapter] of data.chapters.entries()) await writeFile(outlineDirectory,
       `${String(index + 1).padStart(3, "0")}-${safeFileName(chapter.title, "未命名章节")}.md`,
-      `# ${chapter.title}\n\n状态：${chapter.status}\n\n${chapter.summary}`);
+      `# ${chapter.title}\n\n章节ID：${chapter.id}\n状态：${chapter.status}\n\n${chapter.summary}`);
     const timelineDirectory = await projectDirectory.getDirectoryHandle("时间轴", { create: true });
     for (const [index, event] of data.timelineEvents.entries()) await writeFile(timelineDirectory,
       `${String(index + 1).padStart(3, "0")}-${safeFileName(event.title, "未命名事件")}.md`,
-      `# ${event.title}\n\n时间：${event.time}\n\n${event.detail}`);
+      `# ${event.title}\n\n事件ID：${event.id}\n时间：${event.time}\n\n${event.detail}`);
     const articleDirectory = await projectDirectory.getDirectoryHandle("正文", { create: true });
     for (const article of articles) await writeFile(articleDirectory,
       `${article.id}--${safeFileName(article.payload?.title, "未命名稿件")}.md`,
@@ -315,6 +353,12 @@ export default function ProjectWorkspace({
     const timelineFiles = await markdownFiles("时间轴");
     const articleFiles = await markdownFiles("正文");
     const discussionFiles = await markdownFiles("AI讨论");
+    const backupText = await readTextFile(projectDirectory, "完整备份.json");
+    const folderBackup = backupText ? parseBackup(backupText) : undefined;
+    const folderProject = folderBackup?.items.find((item: any) => item.payload.itemType === "project")?.payload.content || {};
+    const privateNotes = await readTextFile(projectDirectory, "私密备注.md");
+    const projectInfo = await readTextFile(projectDirectory, "项目信息.md");
+    if (!window.confirm(`将读取 ${articleFiles.length} 篇正文、${chapterFiles.length} 个章节、${characterFiles.length} 个人物。现有同名稿件将更新并保留版本记录，不上传服务器。继续吗？`)) return;
     const stripHeading = (text: string) => text.replace(/^# .*\r?\n+/, "");
     const field = (text: string, label: string) => {
       const match = text.match(new RegExp(`${label}：([^\\n\\r]*)`));
@@ -322,25 +366,31 @@ export default function ProjectWorkspace({
     };
     const next: ProjectWorkspaceData = {
       ...data,
-      world: world ? stripHeading(world).trim() : data.world,
-      plot: plot ? stripHeading(plot).trim() : data.plot,
+      ...folderProject,
+      aiKey: data.aiKey,
+      description: projectInfo ? stripHeading(projectInfo).replace(/^(?:类型|标签)：[^\n\r]*\r?\n*/gm, "").trim() : folderProject.description || data.description,
+      type: field(projectInfo, "类型") || folderProject.type || data.type,
+      tags: field(projectInfo, "标签") || folderProject.tags || data.tags,
+      privateNotes: privateNotes ? stripHeading(privateNotes).trim() : folderProject.privateNotes || data.privateNotes,
+      world: world ? stripHeading(world).trim() : folderProject.world || data.world,
+      plot: plot ? stripHeading(plot).trim() : folderProject.plot || data.plot,
       characterCards: characterFiles.length ? characterFiles.map((file) => ({
-        id: crypto.randomUUID(),
+        id: field(file.text, "人物ID") || (folderProject.characterCards || data.characterCards).find((card: any) => card.name === file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id || crypto.randomUUID(),
         name: file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/\.md$/i, ""),
         role: field(file.text, "身份"),
-        description: stripHeading(file.text).replace(/^身份：[^\n\r]*\r?\n+/, "").trim(),
+        description: stripHeading(file.text).replace(/^(?:人物ID|身份)：[^\n\r]*\r?\n*/gm, "").trim(),
       })) : data.characterCards,
       chapters: chapterFiles.length ? chapterFiles.map((file) => ({
-        id: crypto.randomUUID(),
+        id: field(file.text, "章节ID") || (folderProject.chapters || data.chapters).find((chapter: any) => chapter.title === file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id || crypto.randomUUID(),
         title: file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/^\d+-/, "").replace(/\.md$/i, ""),
         status: field(file.text, "状态") || "待修改",
-        summary: stripHeading(file.text).replace(/^状态：[^\n\r]*\r?\n+/, "").trim(),
+        summary: stripHeading(file.text).replace(/^(?:章节ID|状态)：[^\n\r]*\r?\n*/gm, "").trim(),
       })) : data.chapters,
       timelineEvents: timelineFiles.length ? timelineFiles.map((file) => ({
-        id: crypto.randomUUID(),
+        id: field(file.text, "事件ID") || crypto.randomUUID(),
         title: file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/^\d+-/, "").replace(/\.md$/i, ""),
         time: field(file.text, "时间"),
-        detail: stripHeading(file.text).replace(/^时间：[^\n\r]*\r?\n+/, "").trim(),
+        detail: stripHeading(file.text).replace(/^(?:事件ID|时间)：[^\n\r]*\r?\n*/gm, "").trim(),
       })) : data.timelineEvents,
     };
     setData(next);
@@ -350,11 +400,13 @@ export default function ProjectWorkspace({
     for (const file of articleFiles) {
       const articleId = file.name.includes("--") ? file.name.split("--")[0] : crypto.randomUUID();
       const articleTitle = file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/\.md$/i, "");
+      const original = articles.find((article) => article.id === articleId) || folderBackup?.items.find((item) => item.id === articleId);
       await queueItem("article", articleTitle, {
+        ...original?.payload?.content,
         text: stripHeading(file.text).replace(/^章节ID：[^\n\r]*\r?\n+/, "").trim(),
         projectId, chapterId: field(file.text, "章节ID") || undefined,
         visibility: "qingxiaolu", publicationState: "editing",
-      }, projectId, false, articleId);
+      }, projectId, false, articleId, Number(original?.revision || 0));
     }
     for (const file of discussionFiles) {
       const discussionId = file.name.includes("--") ? file.name.split("--")[0] : crypto.randomUUID();
@@ -418,6 +470,7 @@ export default function ProjectWorkspace({
 
   const textSections: Record<string, [keyof ProjectWorkspaceData, string]> = {
     世界观: ["world", "记录时代、地点、规则、组织、力量体系和背景历史……"],
+    资料: ["world", "记录参考资料、来源和写作背景……"],
     情节: ["plot", "记录主线、支线、冲突、伏笔及回收方式……"],
     私密: ["privateNotes", "仅用于自己的创作备注……"],
   };
@@ -430,7 +483,8 @@ export default function ProjectWorkspace({
       <button className="save-project" onClick={() => void persist()}>保存</button></header>
     {message && <div className="real-message">{message}</div>}
     <nav className="project-section-tabs">
-      {["项目", "正文", "人物", "世界观", "大纲", "情节", "时间轴", "AI 讨论", "私密", "导出"].map((name) =>
+      {(data.type === "小说" ? ["项目", "正文", "人物", "世界观", "大纲", "情节", "时间轴", "AI 讨论", "私密", "导出"] :
+        ["项目", "正文", "资料", "AI 讨论", "私密", "导出"]).map((name) =>
         <button className={section === name ? "active" : ""} key={name} onClick={() => setSection(name)}>{name}</button>)}
     </nav>
     <section className="project-workspace-body">
@@ -478,10 +532,10 @@ export default function ProjectWorkspace({
       {section === "正文" && <div className="project-article-library">
         <div className="project-article-library-head">
           <div><small>项目正文</small><h1>{title}</h1></div>
-          <button onClick={onWrite}>写新稿件</button>
+          <button onClick={() => onNewArticle?.()}>写新稿件</button>
         </div>
         <div className="project-article-list">
-          {articles.length ? [...articles].sort((a, b) => Number(b.seq || 0) - Number(a.seq || 0)).map((article) => {
+            {articles.length ? orderedArticles.map((article) => {
             const content = article.payload?.content || {};
             const chapterIndex = data.chapters.findIndex((item) => item.id === String(content.chapterId || ""));
             const chapter = chapterIndex >= 0 ? data.chapters[chapterIndex] : undefined;
@@ -612,8 +666,12 @@ export default function ProjectWorkspace({
             const next = [...data.chapters]; next[index] = { ...chapter, summary: event.target.value };
             patch({ chapters: next });
           }} />
-          <button className="remove-structured" onClick={() =>
-            patch({ chapters: data.chapters.filter((item) => item.id !== chapter.id) })}>删除章节</button>
+          <div className="chapter-actions"><button onClick={() => onNewArticle?.(chapter.id)}>写本章正文</button>
+          <button disabled={index === 0} onClick={() => { const next = [...data.chapters]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; patch({ chapters: next }); }}>上移</button>
+          <button disabled={index === data.chapters.length - 1} onClick={() => { const next = [...data.chapters]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; patch({ chapters: next }); }}>下移</button>
+          <button className="remove-structured" onClick={() => {
+            if (window.confirm("删除该章节大纲？关联正文仍保留在稿件库。")) patch({ chapters: data.chapters.filter((item) => item.id !== chapter.id) });
+          }}>删除章节</button></div>
         </article>)}
       </StructuredEditor>}
       {section === "时间轴" && <div className="story-timeline">
@@ -681,6 +739,8 @@ export default function ProjectWorkspace({
       </div>}
       {section === "导出" && <div className="project-ai-panel">
         <h1>项目备份与导出</h1>
+        <button disabled={backupBusy} onClick={() => void exportProjectBackup()}>{backupBusy ? "正在整理图片…" : "下载完整项目备份（含图片和版本）"}</button>
+        <p>完整备份可在“设置 → 从完整备份恢复”中恢复。文字导出适合阅读和排版，不能替代完整备份。</p>
         <p>阅读时选中文字，电脑右键或手机长按即可复制、导出或发送；这里用于导出整个项目。</p>
         <div className="local-word-sync">
           <div><b>情晓录总文件夹</b><small>{projectDirectoryName
@@ -689,15 +749,16 @@ export default function ProjectWorkspace({
           <button onClick={() => void chooseProjectDirectory()}>
             {projectDirectoryName ? "更换总文件夹" : "关联总文件夹"}
           </button>
-          <button disabled={!projectDirectory} onClick={() => void syncAppToLocal()}>从 App 同步到本地</button>
-          <button disabled={!projectDirectory} onClick={() => void syncLocalToApp()}>从本地同步到 App</button>
+          <button disabled={!projectDirectory} onClick={() => void syncAppToLocal().catch((error) => setMessage(error.message))}>从 App 同步到本地</button>
+          <button disabled={!projectDirectory} onClick={() => void syncLocalToApp().catch((error) => setMessage(error.message))}>从本地同步到 App</button>
         </div>
         <h2>导出项目设定</h2>
         <div className="project-export-actions">
           <button onClick={() => download(`${title}-设定包.md`, markdown, "text/markdown")}>Markdown</button>
           <button onClick={() => download(`${title}-设定包.json`,
             JSON.stringify({ project: title, ...data, aiKey: undefined }, null, 2), "application/json")}>JSON</button>
-          <button onClick={() => download(`${title}-设定包.doc`, wordHtml, "application/msword")}>Word</button>
+          <button onClick={() => download(`${title}-全文.doc`, wordHtml, "application/msword")}>全文 Word（文字版）</button>
+          <button onClick={() => download(`${title}-全文.md`, fullText, "text/markdown")}>全文 Markdown</button>
           <button onClick={() => download(`${title}-大纲.opml`,
             `<?xml version="1.0" encoding="UTF-8"?><opml version="2.0"><head><title>${xmlEscape(title)}</title></head><body>` +
             `<outline text="${xmlEscape(title)}">${data.chapters.map((chapter) =>

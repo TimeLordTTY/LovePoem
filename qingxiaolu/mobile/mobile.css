@@ -1,6 +1,43 @@
 :root {
   color-scheme: light;
 }
+/* 创作工作区：正文优先，工具和资料按需展开。 */
+.writing-tools { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid #e8e1da; background: #fffdfa; }
+.writing-tools button, .chapter-actions button { min-height: 40px; padding: 8px 12px; border: 1px solid #d9d2dd; border-radius: 8px; color: #665274; background: #fff; }
+.writing-tools input { min-width: 100px; max-width: 180px; padding: 8px 10px; border: 1px solid #d9d2dd; border-radius: 8px; font: inherit; }
+.writing-reference { margin: 12px 16px; padding: 20px; border: 1px solid #e6dfe9; border-radius: 12px; background: #f9f6fc; }
+.writing-reference p { white-space: pre-wrap; line-height: 1.7; }
+.writing-reference details { margin: 10px 0; }
+.writing-preview { min-height: 45vh; line-height: 1.9; overflow-wrap: anywhere; }
+.writing-preview p { margin: 0 0 .65em; white-space: pre-wrap; }
+.writing-preview blockquote { margin: 0; padding-left: 18px; border-left: 3px solid #b7a2cf; }
+.writing-focused .publish-options, .writing-focused .editor-main-nav { display: none; }
+.writing-focused .writing-tools > :not(.focus-toggle), .writing-focused .compose-mode-row { display: none; }
+.optional-publication { padding: 16px 0; border-bottom: 1px solid #ece9e5; color: #665b70; }
+.optional-publication summary { cursor: pointer; }
+.optional-publication button { padding: 10px; margin-top: 12px; border: 1px solid #ddd3e5; border-radius: 8px; background: #faf7fd; }
+.writing-focused .qzone-compose { min-height: 66vh; }
+.writing-focused .qzone-compose > textarea { min-height: 60vh; }
+.manuscript-excerpt summary { cursor: pointer; white-space: pre-wrap; line-height: 1.7; color: #625a69; }
+.sync-state { display: block; margin: 12px 0 5px; color: #766880; }
+.sync-state.synced { color: #477357; }
+.conflict-list { padding: 20px; margin-bottom: 20px; border: 1px solid #dfbb9d; border-radius: 12px; background: #fffbf3; }
+.conflict-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.conflict-columns pre { max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.7; }
+.conflict-list button { min-height: 44px; margin: 5px; border: 1px solid #d9c4b1; border-radius: 8px; padding: 8px 12px; background: white; }
+.chapter-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.blog-tools { flex-wrap: wrap; }
+.blog-tools select { max-width: 100%; }
+@media (min-width: 1000px) {
+  .qzone-compose, .publish-options, .compose-status { max-width: 860px; margin-left: auto; margin-right: auto; }
+  .qzone-compose { padding: 36px; }
+  .qzone-compose > textarea { min-height: 52vh; }
+  .article-editor:has(.writing-reference) .qzone-compose,
+  .article-editor:has(.writing-reference) .publish-options,
+  .article-editor:has(.writing-reference) .compose-status { margin-right: 350px; }
+  .writing-reference { position: fixed; top: 150px; right: 18px; width: 265px; max-height: 65vh; overflow: auto; }
+}
+@media (max-width: 700px) { .conflict-columns { grid-template-columns: 1fr; } .writing-tools button { min-height: 44px; } }
 
 html,
 body,
