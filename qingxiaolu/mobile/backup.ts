@@ -124,11 +124,15 @@ export function restoreBackup(data: WritingBackup) {
   return { restored: incoming.length, skipped: data.items.length - incoming.length };
 }
 
+export function backupDate(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 export function downloadBackup(data: WritingBackup, name: string) {
   const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${name}-完整备份-${new Date().toISOString().slice(0, 10)}.json`;
+  link.download = `${name}-完整备份-${backupDate()}.json`;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

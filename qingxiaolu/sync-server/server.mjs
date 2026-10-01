@@ -1,6 +1,7 @@
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import mysql from "mysql2/promise";
+import { createWebsiteBridge, WebsiteError } from "./website-bridge.mjs";
 
 const port = Number(process.env.PORT || 8082);
 const host = process.env.HOST || "127.0.0.1";
@@ -17,6 +18,8 @@ const pool = mysql.createPool({
   connectionLimit: 5,
   charset: "utf8mb4",
 });
+const websiteRequest = createWebsiteBridge({ pool, allowedUser: process.env.SYNC_AUTH_USER || "",
+  secret: decode("WEBSITE_JWT_SECRET") || "" });
 
 function json(res, status, body) {
   res.writeHead(status, {
@@ -37,7 +40,7 @@ function corsHeaders(req) {
   ]);
   return allowed.has(origin) ? {
     "access-control-allow-origin": origin,
-    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-methods": "GET,POST,PUT,OPTIONS",
     "access-control-allow-headers": "authorization,content-type",
     "access-control-max-age": "86400",
     vary: "Origin",
@@ -154,6 +157,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { token, syncUrl: "/qingxiaolu-api" });
     }
     if (!authorized(req)) return json(res, 401, { error: "未授权" });
+    if (url.pathname.startsWith("/v1/website/")) {
+      return json(res, 200, await websiteRequest(req, url));
+    }
     if (req.method === "GET" && url.pathname === "/v1/sync/pull") {
       const cursor = Math.max(0, Number(url.searchParams.get("cursor") || 0));
       const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit") || 100)));
@@ -178,6 +184,7 @@ const server = http.createServer(async (req, res) => {
     }
     return json(res, 404, { error: "接口不存在" });
   } catch (error) {
+    if (error instanceof WebsiteError) return json(res, error.status, { error: error.message });
     console.error(error);
     return json(res, 500, { error: "服务暂时不可用" });
   }

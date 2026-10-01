@@ -445,6 +445,8 @@ export default function RealMobileApp() {
       } : current);
     }} />);
   if (websiteItem || showWebsiteSettings) return pageWithNavigation(<WebsitePublish item={websiteItem}
+    items={[...articles, ...ideas]}
+    onLogin={() => { setWebsiteItem(null); setShowWebsiteSettings(false); setConnected(false); setShowLogin(true); }}
     close={() => { setWebsiteItem(null); setShowWebsiteSettings(false); }} />);
   if (showTrash) return pageWithNavigation(<LocalTrash close={() => setShowTrash(false)} onRestore={(item) => {
     setItems((current) => [item, ...current.filter((entry) => entry.id !== item.id)]);
@@ -632,7 +634,7 @@ export default function RealMobileApp() {
           </button>
           <div className="setting-row"><span>同步服务器</span><b>poem.timelordtty.cn</b></div>
           <button className="tool-entry" onClick={() => setShowWebsiteSettings(true)}>
-            <span><b>指定网站接口</b><small>登录 LovePoem，上传允许公开的稿件</small></span><i>›</i>
+            <span><b>上传网站</b><small>沿用当前账户，上传所选稿件为网站草稿</small></span><i>›</i>
           </button>
           <button className="tool-entry" onClick={() => setShowTrash(true)}>
             <span><b>本地回收站</b><small>恢复或永久删除当前设备上的稿件</small></span><i>›</i>

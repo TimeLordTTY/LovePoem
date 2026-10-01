@@ -2,7 +2,7 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { queueItem, getLocalItems, fetchServerItems, syncNow, getSyncConflicts, resolveSyncConflict,
   deleteLocalItem, restoreLocalTrashItem } from "../work/writing-tests/sync.mjs";
-import { createBackup, parseBackup, restoreBackup } from "../work/writing-tests/backup.mjs";
+import { createBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
 
 class MemoryStorage {
   data = new Map();
@@ -172,4 +172,8 @@ test("云端响应后本机写入失败，稿件及待同步队列均保留", as
 test("远程图片不可读取时明确拒绝生成不完整备份", async () => {
   await queueItem("article", "图片稿", { text: "正文", images: ["https://example.invalid/photo.png"] });
   await assert.rejects(createBackup(), /完整备份未生成/);
+});
+
+test("凌晨生成的备份使用本机当天日期，而非 UTC 前一天", () => {
+  assert.equal(backupDate(new Date(2026, 9, 2, 0, 15)), "2026-10-02");
 });

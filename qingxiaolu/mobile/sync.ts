@@ -4,6 +4,8 @@ import { storeJson, storeBatch } from "./storage";
 
 const API = "https://poem.timelordtty.cn/qingxiaolu-api";
 const TOKEN_KEY = "qx_sync_token";
+export const SYNC_API = API;
+export function getSyncToken() { return localStorage.getItem(TOKEN_KEY) || ""; }
 
 export function hasSyncLogin() {
   return Boolean(localStorage.getItem(TOKEN_KEY));
