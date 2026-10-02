@@ -2,7 +2,7 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { queueItem, getLocalItems, fetchServerItems, syncNow, getSyncConflicts, resolveSyncConflict,
   deleteLocalItem, restoreLocalTrashItem, queueLocalBatch } from "../work/writing-tests/sync.mjs";
-import { createBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
+import { createBackup, createSnapshotBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
 
 class MemoryStorage {
   data = new Map();
@@ -16,6 +16,23 @@ const read = (key) => JSON.parse(localStorage.getItem(key) || "[]");
 const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, projectId: "project", content: { text, chapterId: "chapter-stable", images: ["data:image/png;base64,AA=="] } });
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
+
+test("旧页面恢复备份保留草稿与图片，排除 AI 密钥等凭据", async () => {
+  const backup = await createSnapshotBackup({ qx_drafts: JSON.stringify([payload("legacy")]),
+    qx_project_workspaces: JSON.stringify({ project: {world:"旧页面资料", aiKey:"test-only"} }),
+    qx_item_versions: "{}", qx_server_cache: "[]", qx_editor_autosave: JSON.stringify({title:"编辑内容",body:"尚未保存"}) });
+  assert.equal(backup.items[0].payload.content.text,"正文");
+  assert.equal(backup.workspaces.project.world,"旧页面资料");assert.equal(backup.workspaces.project.aiKey,undefined);
+  assert.equal(backup.editor.body,"尚未保存");assert.equal(backup.items[0].payload.content.images.length,1);
+});
+
+test("冲突保留双方的最后写入失败时两版、版本、缓存和队列全部保持原状", async () => {
+  await queueItem("article","本机稿",{text:"本机正文"},"project",true,"conflicted",2);
+  localStorage.setItem("qx_sync_conflicts",JSON.stringify([{id:"conflicted",local:read("qx_drafts")[0],server:{revision:3,item_type:"article",project_id:"project",title:"云端稿",content_json:JSON.stringify({text:"云端正文"})}}]));
+  const before=new Map(localStorage.data);localStorage.failKey="qx_drafts";
+  await assert.rejects(resolveSyncConflict("conflicted","both"),/尚未保存/);assert.deepEqual(localStorage.data,before);
+  await resolveSyncConflict("conflicted","both");assert.equal(getLocalItems().length,2);assert.equal(getSyncConflicts().length,0);
+});
 
 test("文件夹整批读回失败撤销资料和版本，成功后保留当前云端基线与旧内容", () => {
   localStorage.setItem("qx_server_cache", JSON.stringify([cloud("a", "旧正文", 7)]));

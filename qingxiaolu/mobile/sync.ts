@@ -1,14 +1,14 @@
 import { Capacitor } from "@capacitor/core";
 import { BackgroundRunner } from "@capacitor/background-runner";
-import { storeJson, storeBatch } from "./storage";
+import { readStored, changeJson } from "./storage";
 
 const API = "https://poem.timelordtty.cn/qingxiaolu-api";
 const TOKEN_KEY = "qx_sync_token";
 export const SYNC_API = API;
-export function getSyncToken() { return localStorage.getItem(TOKEN_KEY) || ""; }
+export function getSyncToken() { return readStored(TOKEN_KEY) || ""; }
 
 export function hasSyncLogin() {
-  return Boolean(localStorage.getItem(TOKEN_KEY));
+  return Boolean(readStored(TOKEN_KEY));
 }
 
 export async function loginSync(username: string, password: string) {
@@ -34,11 +34,12 @@ export async function queueDraft(title: string, content: string) {
   return queueItem("idea", title, { text: content });
 }
 
-export function queueLocalBatch(changes: any[], extra: Record<string, unknown> = {}) {
+export function queueLocalBatch(changes: any[], extra: Record<string, unknown> | (() => Record<string, unknown>) = {}) {
+  return changeJson(() => {
   if (new Set(changes.map(change => change.id)).size !== changes.length) throw new Error("导入内容含重复的稿件 ID，尚未导入任何内容。请核对文件。");
-  const local = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
+  const local = JSON.parse(readStored("qx_drafts") || "[]");
   const current = getLocalItems();
-  const versions = JSON.parse(localStorage.getItem("qx_item_versions") || "{}");
+  const versions = JSON.parse(readStored("qx_item_versions") || "{}");
   const savedAt = new Date().toISOString();
   const records = changes.map(change => {
     const previous = current.find((item: any) => item.id === change.id);
@@ -48,9 +49,10 @@ export function queueLocalBatch(changes: any[], extra: Record<string, unknown> =
     return { ...change, baseRevision: change.baseRevision ?? previous?.revision ?? 0, deleted: false, savedAt, syncState: "local" };
   });
   const ids = new Set(records.map(record => record.id));
-  storeBatch({ ...extra, qx_item_versions: versions,
-    qx_web_outbox: JSON.parse(localStorage.getItem("qx_web_outbox") || "[]").filter((item:any) => !ids.has(item.id)),
-    qx_drafts: [...records, ...local.filter((item:any) => !ids.has(item.id))] });
+  return { values: { ...(typeof extra === "function" ? extra() : extra), qx_item_versions: versions,
+    qx_web_outbox: JSON.parse(readStored("qx_web_outbox") || "[]").filter((item:any) => !ids.has(item.id)),
+    qx_drafts: [...records, ...local.filter((item:any) => !ids.has(item.id))] }, result: undefined };
+  });
 }
 
 export async function queueItem(
@@ -62,8 +64,11 @@ export async function queueItem(
   itemId?: string,
   baseRevision = 0,
   recordVersion = true,
+  extra: Record<string, unknown> | (() => Record<string, unknown>) = {},
 ) {
   const id = itemId || crypto.randomUUID();
+  return changeJson(() => {
+  const additional = typeof extra === "function" ? extra() : extra;
   const change = {
     id,
     itemType,
@@ -73,37 +78,40 @@ export async function queueItem(
     baseRevision,
     deleted: false,
   };
-  const local = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
+  const local = JSON.parse(readStored("qx_drafts") || "[]");
   const previous = local.find((item: any) => item.id === id) ||
     getCachedServerItems().find((item: any) => item.id === id)?.payload;
   if (!sendToServer && previous && previous.title === title && previous.projectId === projectId &&
-    JSON.stringify(previous.content) === JSON.stringify(content)) return id;
+    JSON.stringify(previous.content) === JSON.stringify(content)) return { values: additional, result: id };
+  const values: Record<string, unknown> = { ...additional };
   if (previous && (previous.title !== title || JSON.stringify(previous.content) !== JSON.stringify(content))) {
-    const versions = JSON.parse(localStorage.getItem("qx_item_versions") || "{}");
+    const versions = JSON.parse(readStored("qx_item_versions") || "{}");
     if (recordVersion || !versions[id]?.length || Date.now() - Date.parse(versions[id][0].versionSavedAt) > 60000) {
     versions[id] = [
       { ...previous, versionSavedAt: new Date().toISOString() },
       ...(versions[id] || []),
     ].slice(0, 30);
-    localStorage.setItem("qx_item_versions", JSON.stringify(versions));
+    values.qx_item_versions = versions;
     }
   }
   const withoutOld = local.filter((item: any) => item.id !== id);
   withoutOld.unshift({ ...change, savedAt: new Date().toISOString(), syncState: sendToServer ? "pending" : "local" });
-  storeJson("qx_drafts", withoutOld);
+  values.qx_drafts = withoutOld;
   // 当前页面上的手动同步在网页和 Android 共用队列，错误和冲突也共用界面。
   if (sendToServer) {
-    const webOutbox = JSON.parse(localStorage.getItem("qx_web_outbox") || "[]");
-    storeJson("qx_web_outbox", [...webOutbox.filter((entry: any) => entry.id !== id), change]);
+    const webOutbox = JSON.parse(readStored("qx_web_outbox") || "[]");
+    values.qx_web_outbox = [...webOutbox.filter((entry: any) => entry.id !== id), change];
   } else if (!sendToServer) {
-    storeJson("qx_web_outbox", JSON.parse(localStorage.getItem("qx_web_outbox") || "[]").filter((entry: any) => entry.id !== id));
+    values.qx_web_outbox = JSON.parse(readStored("qx_web_outbox") || "[]").filter((entry: any) => entry.id !== id);
   }
-  return id;
+  return { values, result: id };
+  });
 }
 
 export async function selectItemsForSync(ids: string[]) {
+  return changeJson(() => {
   const wanted = new Set(ids);
-  const drafts = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
+  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
   const changes = drafts.filter((item: any) => wanted.has(item.id)).map((item: any) => ({
     id: item.id,
     itemType: item.itemType,
@@ -113,57 +121,60 @@ export async function selectItemsForSync(ids: string[]) {
     baseRevision: item.baseRevision || 0,
     deleted: false,
   }));
-    const outbox = JSON.parse(localStorage.getItem("qx_web_outbox") || "[]");
-    storeJson("qx_web_outbox", [...outbox.filter((entry: any) => !wanted.has(entry.id)), ...changes]);
-    storeJson("qx_drafts", drafts.map((item: any) => wanted.has(item.id) ? { ...item, syncState: "pending" } : item));
+    const outbox = JSON.parse(readStored("qx_web_outbox") || "[]");
+    return { values: { qx_web_outbox: [...outbox.filter((entry: any) => !wanted.has(entry.id)), ...changes],
+      qx_drafts: drafts.map((item: any) => wanted.has(item.id) ? { ...item, syncState: "pending" } : item) }, result: undefined };
+  });
 }
 
 export function deleteLocalItem(item: any) {
+  return changeJson(() => {
   const id = String(item.id);
-  const drafts = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
-  const trash = JSON.parse(localStorage.getItem("qx_local_trash") || "[]");
-  const deleted = JSON.parse(localStorage.getItem("qx_deleted_ids") || "[]");
-  storeBatch({ qx_drafts: drafts.filter((entry: any) => entry.id !== id), qx_local_trash: [
+  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  const trash = JSON.parse(readStored("qx_local_trash") || "[]");
+  const deleted = JSON.parse(readStored("qx_deleted_ids") || "[]");
+  return { values: { qx_drafts: drafts.filter((entry: any) => entry.id !== id), qx_local_trash: [
     { ...item, deletedAt: new Date().toISOString() },
     ...trash.filter((entry: any) => entry.id !== id),
-  ], qx_web_outbox: JSON.parse(localStorage.getItem("qx_web_outbox") || "[]").filter((entry: any) => entry.id !== id),
-    qx_deleted_ids: deleted.includes(id) ? deleted : [id, ...deleted] });
+  ], qx_web_outbox: JSON.parse(readStored("qx_web_outbox") || "[]").filter((entry: any) => entry.id !== id),
+    qx_deleted_ids: deleted.includes(id) ? deleted : [id, ...deleted] }, result: undefined };
+  });
 }
 
 export function getLocalTrash() {
-  return JSON.parse(localStorage.getItem("qx_local_trash") || "[]");
+  return JSON.parse(readStored("qx_local_trash") || "[]");
 }
 
 export function restoreLocalTrashItem(id: string) {
+  return changeJson(() => {
   const trash = getLocalTrash();
   const item = trash.find((entry: any) => entry.id === id);
-  const deleted = JSON.parse(localStorage.getItem("qx_deleted_ids") || "[]");
+  const deleted = JSON.parse(readStored("qx_deleted_ids") || "[]");
   if (item) {
     const payload = item.payload || item;
-    const drafts = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
-    storeBatch({ qx_drafts: [{ ...payload, syncState: "local", savedAt: new Date().toISOString() }, ...drafts.filter((entry: any) => entry.id !== id)],
-      qx_local_trash: trash.filter((entry: any) => entry.id !== id), qx_deleted_ids: deleted.filter((entry: string) => entry !== id) });
+    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+    return { values: { qx_drafts: [{ ...payload, syncState: "local", savedAt: new Date().toISOString() }, ...drafts.filter((entry: any) => entry.id !== id)],
+      qx_local_trash: trash.filter((entry: any) => entry.id !== id), qx_deleted_ids: deleted.filter((entry: string) => entry !== id) }, result: item };
   }
-  return item;
+  return { values: {}, result: item };
+  });
 }
 
 export function permanentlyDeleteLocalTrashItem(id: string) {
-  localStorage.setItem("qx_local_trash", JSON.stringify(
-    getLocalTrash().filter((entry: any) => entry.id !== id),
-  ));
+  return changeJson(() => ({ values: { qx_local_trash: getLocalTrash().filter((entry: any) => entry.id !== id) }, result: undefined }));
 }
 
 export function getItemVersions(id: string) {
-  const versions = JSON.parse(localStorage.getItem("qx_item_versions") || "{}");
+  const versions = JSON.parse(readStored("qx_item_versions") || "{}");
   return versions[id] || [];
 }
 
 export function getLocallyDeletedIds() {
-  return new Set<string>(JSON.parse(localStorage.getItem("qx_deleted_ids") || "[]"));
+  return new Set<string>(JSON.parse(readStored("qx_deleted_ids") || "[]"));
 }
 
 export async function fetchServerItems() {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = readStored(TOKEN_KEY);
   if (!token) return [];
   let cursor = 0;
   const latest = new Map<string, any>();
@@ -185,10 +196,10 @@ export async function fetchServerItems() {
   const result = [...latest.values()]
     .filter((change) => change.operation !== "delete")
     .sort((a, b) => Number(b.seq) - Number(a.seq));
-  storeJson("qx_server_cache", result);
-  const drafts = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
-  // 已同步稿件使用云端最新版本；本机未同步的改动始终保留。
-  storeJson("qx_drafts", drafts.filter((item: any) => item.syncState !== "synced"));
+  await changeJson(() => {
+    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+    return { values: { qx_server_cache: result, qx_drafts: drafts.filter((item: any) => item.syncState !== "synced") }, result: undefined };
+  });
   localStorage.setItem("qx_last_sync", new Date().toISOString());
   return result;
 }
@@ -198,7 +209,7 @@ export function disconnectSync() {
 }
 
 export function getLocalItems() {
-  const drafts = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
+  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
   const local = drafts.map((item: any, index: number) => ({
     id: item.id,
     seq: Date.parse(item.savedAt || "") || Date.now() - index,
@@ -214,52 +225,67 @@ export function getLocalItems() {
 }
 
 export function getCachedServerItems(): any[] {
-  return JSON.parse(localStorage.getItem("qx_server_cache") || "[]").map((item: any) => ({ ...item, revision: item.revision || item.payload?.revision, syncState: "synced" }));
+  return JSON.parse(readStored("qx_server_cache") || "[]").map((item: any) => ({ ...item, revision: item.revision || item.payload?.revision, syncState: "synced" }));
 }
 
 export function getSyncConflicts(): any[] {
-  const drafts = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
-  return JSON.parse(localStorage.getItem("qx_sync_conflicts") || "[]").map((item: any) => ({
+  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  return JSON.parse(readStored("qx_sync_conflicts") || "[]").map((item: any) => ({
     ...item, local: drafts.find((draft: any) => draft.id === item.id) || item.local,
   }));
 }
 
 export async function resolveSyncConflict(id: string, choice: "cloud" | "local" | "both") {
+  return changeJson(() => {
   const conflict = getSyncConflicts().find((item: any) => item.id === id);
-  if (!conflict) return;
+  if (!conflict) return { values: {}, result: undefined };
   const server = conflict.server;
   const cloud = { id, seq: Date.now(), revision: Number(server.revision), payload: {
     id, itemType: server.item_type, projectId: server.project_id, title: server.title,
     content: typeof server.content_json === "string" ? JSON.parse(server.content_json) : server.content_json,
     baseRevision: Number(server.revision),
   } };
+  const values: Record<string, unknown> = {};
+  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  const outbox = JSON.parse(readStored("qx_web_outbox") || "[]").filter((item: any) => item.id !== id);
+  let restored: any = cloud.payload;
   if (choice === "local") {
     const item = conflict.local;
-    await queueItem(item.itemType, item.title, item.content, item.projectId, true, id, Number(server.revision));
+    const change = { id, itemType: item.itemType, projectId: item.projectId, title: item.title, content: item.content,
+      baseRevision: Number(server.revision), deleted: false };
+    restored = { ...change, savedAt: new Date().toISOString(), syncState: "pending" };
+    values.qx_drafts = [restored, ...drafts.filter((item: any) => item.id !== id)];
+    values.qx_web_outbox = [...outbox, change];
   } else {
-    const versions = JSON.parse(localStorage.getItem("qx_item_versions") || "{}");
+    const versions = JSON.parse(readStored("qx_item_versions") || "{}");
     versions[id] = [{ ...conflict.local, versionSavedAt: new Date().toISOString() }, ...(versions[id] || [])].slice(0, 30);
-    storeJson("qx_item_versions", versions);
+    values.qx_item_versions = versions;
+    let copy: any;
     if (choice === "both") {
       const item = conflict.local;
-      await queueItem(item.itemType, `${item.title}（本机副本）`, item.content, item.projectId);
+      copy = { ...item, id: crypto.randomUUID(), title: `${item.title}（本机副本）`, baseRevision: 0,
+        deleted: false, savedAt: new Date().toISOString(), syncState: "local" };
     }
-    storeJson("qx_server_cache", [cloud, ...getCachedServerItems().filter((item: any) => item.id !== id)]);
+    values.qx_server_cache = [cloud, ...getCachedServerItems().filter((item: any) => item.id !== id)];
     if (cloud.payload.itemType === "project") {
-      const workspaces = JSON.parse(localStorage.getItem("qx_project_workspaces") || "{}");
-      storeJson("qx_project_workspaces", { ...workspaces, [id]: { ...cloud.payload.content, aiKey: workspaces[id]?.aiKey || "" } });
+      const workspaces = JSON.parse(readStored("qx_project_workspaces") || "{}");
+      values.qx_project_workspaces = { ...workspaces,
+        ...(copy ? { [copy.id]: { ...copy.content, aiKey: workspaces[id]?.aiKey || "" } } : {}),
+        [id]: { ...cloud.payload.content, aiKey: workspaces[id]?.aiKey || "" } };
     }
-    storeJson("qx_drafts", JSON.parse(localStorage.getItem("qx_drafts") || "[]").filter((item: any) => item.id !== id));
-    storeJson("qx_web_outbox", JSON.parse(localStorage.getItem("qx_web_outbox") || "[]").filter((item: any) => item.id !== id));
+    values.qx_drafts = [...(copy ? [copy] : []), ...drafts.filter((item: any) => item.id !== id)];
+    values.qx_web_outbox = outbox;
   }
-  storeJson("qx_sync_conflicts", getSyncConflicts().filter((item: any) => item.id !== id));
-  const editor = JSON.parse(localStorage.getItem("qx_editor_autosave") || "null");
+  values.qx_sync_conflicts = getSyncConflicts().filter((item: any) => item.id !== id);
+  values.qx_deleted_ids = JSON.parse(readStored("qx_deleted_ids") || "[]").filter((item: string) => item !== id);
+  const editor = JSON.parse(readStored("qx_editor_autosave") || "null");
   if (editor?.editingId === id) {
-    const current = getLocalItems().find((item: any) => item.id === id);
-    if (current) storeJson("qx_editor_autosave", { ...editor, title: current.payload.title, body: current.payload.content?.text || "",
-      images: current.payload.content?.images || [], metadata: { ...current.payload.content, projectId: current.payload.projectId,
-        _baseRevision: current.revision, syncToServer: false }, savedAt: new Date().toISOString() });
+    values.qx_editor_autosave = { ...editor, title: restored.title, body: restored.content?.text || "",
+      images: restored.content?.images || [], metadata: { ...restored.content, projectId: restored.projectId,
+        _baseRevision: Number(server.revision), syncToServer: false }, savedAt: new Date().toISOString() };
   }
+  return { values, result: undefined };
+  });
 }
 
 let runningSync: Promise<void> | null = null;
@@ -270,9 +296,9 @@ export async function syncNow(force = true) {
 }
 
 async function pushPending(force: boolean) {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = readStored(TOKEN_KEY);
   if (!token) return;
-    const changes = JSON.parse(localStorage.getItem("qx_web_outbox") || "[]").slice(0, 500);
+    const changes = JSON.parse(readStored("qx_web_outbox") || "[]").slice(0, 500);
     if (!changes.length) return;
     const response = await fetch(`${API}/v1/sync/push`, {
       method: "POST",
@@ -284,23 +310,25 @@ async function pushPending(force: boolean) {
     const result = await response.json();
     const appliedIds = new Set<string>((result.applied || []).map((item: any) => String(item.id)));
     const conflictIds = new Set<string>((result.conflicts || []).map((item: any) => String(item.id)));
+    const remaining = await changeJson(() => {
     const conflicts = [...getSyncConflicts().filter((item: any) => !conflictIds.has(item.id)),
       ...(result.conflicts || []).map((item: any) => ({ ...item, local: changes.find((change: any) => change.id === item.id) }))];
     const submitted = new Map(changes.map((item: any) => [item.id, JSON.stringify(item)]));
-    const remaining = JSON.parse(localStorage.getItem("qx_web_outbox") || "[]").filter((item: any) =>
+    const remaining = JSON.parse(readStored("qx_web_outbox") || "[]").filter((item: any) =>
       !appliedIds.has(String(item.id)) || JSON.stringify(item) !== submitted.get(item.id)).map((item: any) => {
         const applied = (result.applied || []).find((entry: any) => entry.id === item.id);
         return applied ? { ...item, baseRevision: applied.revision } : item;
       });
-    const drafts = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
-    storeBatch({ qx_web_outbox: remaining, qx_sync_conflicts: conflicts, qx_drafts:
+    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+    return { values: { qx_web_outbox: remaining, qx_sync_conflicts: conflicts, qx_drafts:
         drafts.map((item: any) => {
           const applied = (result.applied || []).find((entry: any) => entry.id === item.id);
           const sent = changes.find((entry: any) => entry.id === item.id);
           const unchanged = sent && item.title === sent.title && JSON.stringify(item.content) === JSON.stringify(sent.content);
           return applied ? { ...item, baseRevision: applied.revision, syncState: unchanged ? "synced" : remaining.some((entry: any) => entry.id === item.id) ? "pending" : "local" } :
             conflictIds.has(item.id) ? { ...item, syncState: "conflict" } : item;
-        }) });
+        }) }, result: remaining };
+    });
     if (conflictIds.size) throw new Error(`有 ${conflictIds.size} 篇稿件有版本冲突，请在稿件库选择保留方式，两版都已保留。`);
     if (remaining.length && appliedIds.size) await pushPending(force);
     else if (remaining.length) throw new Error("云端未确认保存，待同步内容仍保留在本机，请稍后重试。");

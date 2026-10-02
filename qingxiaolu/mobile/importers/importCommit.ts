@@ -1,10 +1,11 @@
-import { readJson, storeBatch } from "../storage";
+import { readJson, changeJson } from "../storage";
 import type { ImportCandidate } from "./types";
 
 // 先准备整个批次再统一保存；存储失败时不会留下半批稿件。
 export function commitImport(items: ImportCandidate[], options: {
   projectId?: string; category?: string; skipDuplicates?: boolean;
 } = {}) {
+  return changeJson(() => {
   const projectId = options.projectId || undefined;
   const category = options.category || "正文";
   const material = Boolean(projectId && category !== "正文");
@@ -48,7 +49,7 @@ export function commitImport(items: ImportCandidate[], options: {
     }
   }
   const added = items.filter(item => item.selected).length - skipped;
-  if (!added) return { added, skipped };
+  if (!added) return { values: {}, result: { added, skipped } };
   const values: Record<string, unknown> = {};
   if (material) {
     workspace.importSignatures = [...materialKnown];
@@ -62,6 +63,6 @@ export function commitImport(items: ImportCandidate[], options: {
   }
   const ids = new Set(additions.map(entry => entry.id));
   values.qx_drafts = [...additions, ...drafts.filter(entry => !ids.has(entry.id))];
-  storeBatch(values);
-  return { added, skipped };
+  return { values, result: { added, skipped } };
+  });
 }

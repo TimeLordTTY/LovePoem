@@ -1,5 +1,5 @@
 import { getLocalItems } from "./sync";
-import { readJson, storeJson } from "./storage";
+import { readJson, readStored, changeJson } from "./storage";
 
 export type WritingBackup = {
   format: "qingxiaolu-backup";
@@ -83,6 +83,18 @@ export async function createBackup(projectId?: string, currentDraft?: any): Prom
   }), new Map());
 }
 
+export async function createSnapshotBackup(source: Record<string, string>): Promise<WritingBackup> {
+  const get = (key: string, fallback: any) => source[key] ? JSON.parse(source[key]) : fallback;
+  const drafts = get("qx_drafts", []);
+  const ids = new Set(drafts.map((item: any) => item.id));
+  return embed(clean({ format: "qingxiaolu-backup", version: 1, createdAt: new Date().toISOString(),
+    items: [...drafts.map((item: any) => ({ id: item.id, revision: item.baseRevision || 0, payload: item })),
+      ...get("qx_server_cache", []).filter((item: any) => !ids.has(item.id))],
+    workspaces: get("qx_project_workspaces", {}), versions: get("qx_item_versions", {}),
+    trash: get("qx_local_trash", []), editor: get("qx_editor_autosave", null), deletedIds: get("qx_deleted_ids", []),
+  }), new Map());
+}
+
 export function parseBackup(text: string): WritingBackup {
   const data = clean(JSON.parse(text));
   if (data.format !== "qingxiaolu-backup" || data.version !== 1 || !Array.isArray(data.items) ||
@@ -99,29 +111,25 @@ export function parseBackup(text: string): WritingBackup {
 }
 
 export function restoreBackup(data: WritingBackup) {
+  return changeJson(() => {
   // 相同 ID 的现有稿件优先保留；恢复不加入同步队列。
   const current = getLocalItems();
   const ids = new Set(current.map((item) => item.id));
   const incoming = data.items.filter((item) => !ids.has(item.id));
-  const keys = ["qx_drafts", "qx_project_workspaces", "qx_item_versions", "qx_local_trash", "qx_editor_autosave", "qx_deleted_ids"];
-  const before = new Map(keys.map((key) => [key, localStorage.getItem(key)]));
-  try {
-    storeJson("qx_drafts", [...incoming.map((item) => ({ ...item.payload, id: item.id, baseRevision: item.revision || item.payload.baseRevision || 0, syncState: "local", savedAt: new Date().toISOString() })),
-      ...readJson<any[]>("qx_drafts", []).filter((item) => !incoming.some((entry) => entry.id === item.id))]);
-    storeJson("qx_project_workspaces", { ...data.workspaces, ...readJson("qx_project_workspaces", {}) });
-    storeJson("qx_item_versions", { ...data.versions, ...readJson("qx_item_versions", {}) });
+  const values: Record<string, unknown> = {
+    qx_drafts: [...incoming.map((item) => ({ ...item.payload, id: item.id, baseRevision: item.revision || item.payload.baseRevision || 0, syncState: "local", savedAt: new Date().toISOString() })),
+      ...readJson<any[]>("qx_drafts", []).filter((item) => !incoming.some((entry) => entry.id === item.id))],
+    qx_project_workspaces: { ...data.workspaces, ...readJson("qx_project_workspaces", {}) },
+    qx_item_versions: { ...data.versions, ...readJson("qx_item_versions", {}) },
+  };
     const trash = readJson<any[]>("qx_local_trash", []);
     const trashIds = new Set(trash.map((item) => item.id));
-    storeJson("qx_local_trash", [...trash, ...data.trash.filter((item) => !trashIds.has(item.id) && !ids.has(item.id))]);
-    if (!localStorage.getItem("qx_editor_autosave") && data.editor) storeJson("qx_editor_autosave", data.editor);
-    storeJson("qx_deleted_ids", [...new Set([...readJson<string[]>("qx_deleted_ids", []), ...(data.deletedIds || [])])]
-      .filter((id) => !incoming.some((item) => item.id === id)));
-  } catch (error) {
-    // 本地写入不是事务，失败时撤销本次已写入的键。
-    for (const [key, value] of before) { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); }
-    throw error;
-  }
-  return { restored: incoming.length, skipped: data.items.length - incoming.length };
+    values.qx_local_trash = [...trash, ...data.trash.filter((item) => !trashIds.has(item.id) && !ids.has(item.id))];
+    if (!readStored("qx_editor_autosave") && data.editor) values.qx_editor_autosave = data.editor;
+    values.qx_deleted_ids = [...new Set([...readJson<string[]>("qx_deleted_ids", []), ...(data.deletedIds || [])])]
+      .filter((id) => !incoming.some((item) => item.id === id));
+  return { values, result: { restored: incoming.length, skipped: data.items.length - incoming.length } };
+  });
 }
 
 export function backupDate(date = new Date()) {

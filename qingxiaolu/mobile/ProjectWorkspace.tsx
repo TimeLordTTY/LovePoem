@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEve
 import { Share } from "@capacitor/share";
 import { queueItem, queueLocalBatch, getLocalItems } from "./sync";
 import { writeProjectFolder, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile } from "./folderSync";
-import { storeJson } from "./storage";
+import { storeJson, readStored } from "./storage";
 import { createBackup, downloadBackup, parseBackup } from "./backup";
 
 export type ProjectWorkspaceData = {
@@ -46,17 +46,17 @@ const emptyData: ProjectWorkspaceData = {
 };
 
 function load(projectId: string, fallback: Partial<ProjectWorkspaceData> = {}): ProjectWorkspaceData {
-  const all = JSON.parse(localStorage.getItem("qx_project_workspaces") || "{}");
+  const all = JSON.parse(readStored("qx_project_workspaces") || "{}");
   return { ...emptyData, ...fallback, ...(all[projectId] || {}) };
 }
 
 function save(projectId: string, data: ProjectWorkspaceData) {
-  const all = JSON.parse(localStorage.getItem("qx_project_workspaces") || "{}");
+  const all = JSON.parse(readStored("qx_project_workspaces") || "{}");
   all[projectId] = data;
-  storeJson("qx_project_workspaces", all);
+  return storeJson("qx_project_workspaces", all);
 }
 
-export function appendProjectImport(projectId: string, category: string, title: string, text: string) {
+export async function appendProjectImport(projectId: string, category: string, title: string, text: string) {
   const data = load(projectId);
   if (category === "人物") {
     data.characterCards.push({ id: crypto.randomUUID(), name: title, role: "导入资料", description: text });
@@ -69,7 +69,7 @@ export function appendProjectImport(projectId: string, category: string, title: 
   } else {
     data.privateNotes = `${data.privateNotes}${data.privateNotes ? "\n\n" : ""}## ${title}\n${text}`;
   }
-  save(projectId, data);
+  await save(projectId, data);
 }
 
 function packageText(title: string, data: ProjectWorkspaceData) {
@@ -197,10 +197,11 @@ export default function ProjectWorkspace({
   const patch = (next: Partial<ProjectWorkspaceData>) => setData((current) => ({ ...current, ...next }));
 
   async function persist(upload = syncProject, snapshot = { title, data }) {
+    if (folderBusyRef.current) return true;
     try {
-    save(projectId, snapshot.data);
     const { aiKey, ...syncData } = snapshot.data;
-    await queueItem("project", snapshot.title, syncData, undefined, upload, projectId, Number(project.revision || 0), upload);
+    await queueItem("project", snapshot.title, syncData, undefined, upload, projectId, Number(project.revision || 0), upload,
+      () => ({ qx_project_workspaces: { ...JSON.parse(readStored("qx_project_workspaces") || "{}"), [projectId]: snapshot.data } }));
     onUpdated?.(snapshot.title, syncData);
     setMessage(upload ? "本机已保存，项目资料等待同步；请点击主页面同步" : "项目资料已自动保存到本机");
     return true;
@@ -438,7 +439,7 @@ export default function ProjectWorkspace({
       if(original && change.id!==projectId && (original.payload.itemType!=="article" || String(original.payload.projectId||original.payload.content?.projectId||"")!==projectId))
         throw new Error("文件中的稿件 ID 属于其他项目，尚未导入任何内容。请复制为新稿件后再导入。");
     }
-    queueLocalBatch(changes, { qx_project_workspaces: { ...JSON.parse(localStorage.getItem("qx_project_workspaces") || "{}"), [projectId]: next } });
+    await queueLocalBatch(changes, () => ({ qx_project_workspaces: { ...JSON.parse(readStored("qx_project_workspaces") || "{}"), [projectId]: next } }));
     setData(next);
     onUpdated?.(title, syncData);
     try { await acknowledgeFolderChanges(projectDirectory, projectId, associations); }

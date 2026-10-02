@@ -123,7 +123,7 @@ export default function HistoryImport({
     setMessage(`正在导入 ${selected.length} 条…`);
     busyRef.current = true; setBusy(true);
     try {
-      const result = commitImport(selected, { projectId: targetProjectId, category: kind === "documents" ? targetCategory : "正文", skipDuplicates });
+      const result = await commitImport(selected, { projectId: targetProjectId, category: kind === "documents" ? targetCategory : "正文", skipDuplicates });
       clearPreview();
       setMessage(`已正式导入 ${result.added} 条内容${result.skipped ? `，跳过 ${result.skipped} 条相同内容` : ""}`);
       window.setTimeout(close, 800);

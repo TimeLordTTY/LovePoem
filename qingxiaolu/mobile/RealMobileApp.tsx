@@ -9,7 +9,8 @@ import {
   getItemVersions, getLocalTrash, restoreLocalTrashItem, permanentlyDeleteLocalTrashItem,
   getSyncConflicts, resolveSyncConflict,
 } from "./sync";
-import { storeJson } from "./storage";
+import { storeJson, readStored, removeStored } from "./storage";
+import { pendingWritingTransactions } from "./storageDatabase";
 import { createBackup, downloadBackup, parseBackup, restoreBackup } from "./backup";
 import HistoryImport from "./HistoryImport";
 import ProjectWorkspace from "./ProjectWorkspace";
@@ -37,15 +38,17 @@ function itemTitle(item: any, fallback = "未命名项目") {
 
 export default function RealMobileApp() {
   const [initialEditorDraft] = useState<any>(() => {
-    try { return JSON.parse(localStorage.getItem("qx_editor_autosave") || "{}"); } catch { return {}; }
+    try { return JSON.parse(readStored("qx_editor_autosave") || "{}"); } catch { return {}; }
   });
   const [connected, setConnected] = useState(hasSyncLogin());
-  const [tab, setTab] = useState<Tab>(initialEditorDraft.body || initialEditorDraft.title ? "创作" : "项目");
+  const [tab, setTab] = useState<Tab>(initialEditorDraft.body || initialEditorDraft.title || initialEditorDraft.images?.length ? "创作" : "项目");
   const [editorSession, setEditorSession] = useState(0);
+  const [changingDraft, setChangingDraft] = useState(false);
+  const changingDraftRef = useRef(false);
   const [items, setItems] = useState<any[]>(getLocalItems);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [showLogin, setShowLogin] = useState(!connected && !localStorage.getItem("qx_local_mode"));
+  const [showLogin, setShowLogin] = useState(!connected && !readStored("qx_local_mode"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [title, setTitle] = useState(String(initialEditorDraft.title || ""));
@@ -149,6 +152,11 @@ export default function RealMobileApp() {
   }
 
   useEffect(() => { if (connected) void refresh(false); }, [connected]);
+  useEffect(() => {
+    const changed = () => { setItems(getLocalItems()); setConflicts(getSyncConflicts()); };
+    window.addEventListener("qx-writing-change", changed);
+    return () => window.removeEventListener("qx-writing-change", changed);
+  }, []);
 
   async function saveLocalDraft() {
     if (!title.trim() && !body.trim() && !images.length) return;
@@ -158,14 +166,13 @@ export default function RealMobileApp() {
     const content: Record<string, any> = { ...editingMetadata, text: body, images, status: "draft" };
     delete content._baseRevision;
     delete content.syncToServer;
-    storeJson("qx_editor_autosave", { title, body, images, creationType, projectId, editingId: id,
-      savedAt, metadata: editingMetadata, position: editorPosition.current });
-    const pending = queueItem(creationType, title.trim() || body.trim().slice(0, 20) || "图片稿件", content,
-      projectId || undefined, false, id, Number(editingMetadata._baseRevision || 0), false);
     setEditingId(id);
+    await queueItem(creationType, title.trim() || body.trim().slice(0, 20) || "图片稿件", content,
+      projectId || undefined, false, id, Number(editingMetadata._baseRevision || 0), false,
+      { qx_editor_autosave: { title, body, images, creationType, projectId, editingId: id,
+        savedAt, metadata: editingMetadata, position: editorPosition.current } });
     setAutoSavedAt(savedAt);
     setItems(getLocalItems());
-    await pending;
   }
 
   useEffect(() => {
@@ -178,9 +185,23 @@ export default function RealMobileApp() {
 
   useEffect(() => {
     const leave = (event: BeforeUnloadEvent) => {
+      if (pendingWritingTransactions()) { event.preventDefault(); event.returnValue = ""; }
       if (tab !== "创作" || (!title && !body && !images.length)) return;
-      try { storeJson("qx_editor_autosave", { title, body, images, creationType, projectId: editingMetadata.projectId ?? activeProjectId,
-        editingId, metadata: editingMetadata, position: editorPosition.current, savedAt: new Date().toISOString() }); }
+      try {
+        const previous = JSON.parse(readStored("qx_editor_autosave") || "{}");
+        const metadataSignature = (value: Record<string, unknown>) => JSON.stringify(Object.fromEntries(Object.entries({
+          ...value, _baseRevision: Number(value._baseRevision || 0), projectId: value.projectId || "", chapterId: value.chapterId || "",
+        }).filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b))));
+        const changed = previous.title !== title || previous.body !== body || previous.editingId !== editingId ||
+          previous.creationType !== creationType || previous.projectId !== (editingMetadata.projectId ?? activeProjectId) ||
+          JSON.stringify(previous.images || []) !== JSON.stringify(images) || metadataSignature(previous.metadata || {}) !== metadataSignature(editingMetadata);
+        if (changed) {
+          event.preventDefault(); event.returnValue = "";
+          void saveLocalDraft().catch(error => { setAutoSavedAt(""); setMessage(error.message); });
+        } else if (JSON.stringify(previous.position) !== JSON.stringify(editorPosition.current)) {
+          void Promise.resolve(storeJson("qx_editor_autosave", { ...previous, position: editorPosition.current })).catch(error => setMessage(error.message));
+        }
+      }
       catch { event.preventDefault(); event.returnValue = ""; }
     };
     window.addEventListener("beforeunload", leave);
@@ -221,19 +242,19 @@ export default function RealMobileApp() {
     if (!title.trim() && !body.trim() && !images.length) return setMessage("请先写一点内容");
     try {
     const savedTitle = title.trim() || body.trim().slice(0, 20) || "图片稿件";
-    const { _baseRevision, syncToServer, ...cleanMetadata } = metadata;
+    const { _baseRevision, syncToServer, ...cleanMetadata } = { ...editingMetadata, ...metadata };
     const savedContent = {
-      text: body, status: "draft", images, ...cleanMetadata,
+      ...cleanMetadata, text: body, status: "draft", images,
     };
+    const requestedId = editingId || crypto.randomUUID();
+    const savedAt = new Date().toISOString();
     const savedId = await queueItem(
       type, savedTitle, savedContent, metadata.projectId || undefined, Boolean(metadata.syncToServer),
-      editingId || undefined, Number(_baseRevision || 0),
+      requestedId, Number(_baseRevision || 0), true,
+      { qx_editor_autosave: { title, body, images, creationType: type, projectId: metadata.projectId || "", editingId: requestedId,
+        savedAt, metadata, position: editorPosition.current } },
     );
-    setItems((current) => [{
-      id: savedId,
-      seq: Date.now(),
-      payload: { id: savedId, itemType: type, title: savedTitle, content: savedContent },
-    }, ...current.filter((item) => String(item.id) !== String(savedId))]);
+    setItems(getLocalItems());
     setEditingId(savedId);
     setEditingMetadata((current) => ({ ...current, ...metadata }));
     setAutoSavedAt(new Date().toISOString());
@@ -271,7 +292,7 @@ export default function RealMobileApp() {
     try {
       const backup = parseBackup(await file.text());
       if (!window.confirm(`备份包含 ${backup.items.length} 条内容。仅补充当前设备缺少的稿件，相同稿件保留本机版本。继续恢复吗？`)) return;
-      const result = restoreBackup(backup);
+      const result = await restoreBackup(backup);
       setItems(getLocalItems());
       setMessage(`已恢复 ${result.restored} 条，保留本机已有 ${result.skipped} 条。恢复内容尚未上传云端。`);
     } catch (error) { setMessage((error as Error).message); }
@@ -348,16 +369,20 @@ export default function RealMobileApp() {
   }
 
   async function newDraft(projectId = "", chapterId = "", type: "article" | "idea" = "article") {
+    if (changingDraftRef.current) return;
+    changingDraftRef.current = true; setChangingDraft(true);
+    setMessage("正在保存当前稿件并打开新稿…");
     try {
       await saveLocalDraft();
       setTitle(""); setBody(""); setImages([]); setEditingId(""); setAutoSavedAt("");
       setCreationType(type);
       setEditingMetadata({ projectId, chapterId }); setActiveProjectId(projectId);
-      localStorage.removeItem("qx_editor_autosave");
+      await removeStored("qx_editor_autosave");
       editorPosition.current = { start: 0, end: 0, scroll: 0 };
       setEditorSession((value) => value + 1);
       setOpenProject(null); setTab("创作"); setMessage("");
     } catch (error) { setMessage((error as Error).message); }
+    finally { changingDraftRef.current = false; setChangingDraft(false); }
   }
 
   async function resolveConflict(id: string, choice: "cloud" | "local" | "both") {
@@ -378,18 +403,19 @@ export default function RealMobileApp() {
   async function removeItem(item: any) {
     if (!window.confirm(`确定删除《${item.payload.title || "未命名稿件"}》吗？`)) return;
     try {
-    deleteLocalItem(item);
+    await deleteLocalItem(item);
     setItems((current) => current.filter((entry) => entry.id !== item.id));
     setSelectedForSync((current) => current.filter((id) => id !== item.id));
     setMessage("稿件已从当前设备删除，服务器内容未改动");
     if (editingId === item.id) {
       setTitle(""); setBody(""); setImages([]); setEditingId(""); setEditingMetadata({});
-      localStorage.removeItem("qx_editor_autosave"); setEditorSession((value) => value + 1);
+      await removeStored("qx_editor_autosave"); setEditorSession((value) => value + 1);
     }
     } catch (error) { setMessage((error as Error).message); }
   }
 
   function goToMainTab(next: Tab) {
+    if (changingDraftRef.current) return;
     if (tab === "创作") void saveLocalDraft().catch((error) => setMessage(error.message));
     setShowImport(false);
     setShowDocumentImport(false);
@@ -467,22 +493,27 @@ export default function RealMobileApp() {
       setTab("创作");
     }} />);
   if (tab === "创作") return <><ArticleEditor key={editorSession}
+    busy={changingDraft}
     title={title}
     body={body}
     images={images}
-    onTitle={setTitle}
-    onBody={setBody}
-    onImages={setImages}
+    onTitle={(value) => { if (value !== title) { setTitle(value); setAutoSavedAt(""); } }}
+    onBody={(value) => { if (value !== body) { setBody(value); setAutoSavedAt(""); } }}
+    onImages={(value) => { if (value.length !== images.length || value.some((image, index) => image !== images[index])) { setImages(value); setAutoSavedAt(""); } }}
     onBack={() => goToMainTab("项目")}
     projects={projects}
     creationType={creationType}
-    onCreationType={setCreationType}
+    onCreationType={(value) => { if (value !== creationType) { setCreationType(value); setAutoSavedAt(""); } }}
     onNavigate={goToMainTab}
     initialProjectId={activeProjectId}
     initialMetadata={editingMetadata}
     autoSavedAt={autoSavedAt}
     message={message}
-    onMetadata={setEditingMetadata}
+    onMetadata={(value) => {
+      const fields = ["visibility", "publicationState", "tags", "projectId", "chapterId", "syncToServer", "shareTargets"];
+      if (fields.every(key => JSON.stringify(editingMetadata[key]) === JSON.stringify(value[key]))) return;
+      setEditingMetadata(value); setAutoSavedAt("");
+    }}
     position={editorPosition.current}
     onPosition={(value) => { editorPosition.current = value; }}
     onNewDraft={() => void newDraft(editingMetadata.projectId ?? activeProjectId)}
@@ -494,7 +525,7 @@ export default function RealMobileApp() {
   return (
     <main className="real-app">
       <header>
-        <div><b>情晓录</b><span>{connected ? `云端已连接${localStorage.getItem("qx_last_sync") ? ` · 上次同步 ${new Date(localStorage.getItem("qx_last_sync")!).toLocaleString()}` : " · 尚未同步"}` : "本机写作 · 可离线使用"}</span></div>
+        <div><b>情晓录</b><span>{connected ? `云端已连接${readStored("qx_last_sync") ? ` · 上次同步 ${new Date(readStored("qx_last_sync")!).toLocaleString()}` : " · 尚未同步"}` : "本机写作 · 可离线使用"}</span></div>
         <button disabled={loading} onClick={() => connected ? void refresh() : setShowLogin(true)}>{loading ? "同步中…" : "同步"}</button>
       </header>
 
@@ -519,11 +550,12 @@ export default function RealMobileApp() {
             {visibleProjects.map((item) => <article className="project-card" key={item.id}
               onClick={() => { setOpenProjectSection("项目"); setOpenProject(item); }}><small>{item.payload.content?.archived ? "已归档" : "项目"}</small>
               <h2 title={itemTitle(item)}>{itemTitle(item)}</h2><div><button>进入项目</button>
-                <button className="delete-project" onClick={(event) => {
+                <button className="delete-project" onClick={async (event) => {
                   event.stopPropagation();
                   if (!window.confirm(`从当前设备删除项目《${itemTitle(item)}》吗？`)) return;
-                  deleteLocalItem(item);
+                  try { await deleteLocalItem(item);
                   setItems((current) => current.filter((entry) => entry.id !== item.id));
+                  } catch (error) { setMessage((error as Error).message); }
                 }}>本地删除</button></div></article>)}
           </div>
         </>}
@@ -680,22 +712,31 @@ export default function RealMobileApp() {
 
 function LocalTrash({ close, onRestore }: { close: () => void; onRestore: (item: any) => void }) {
   const [trash, setTrash] = useState<any[]>(() => getLocalTrash());
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    const changed = () => setTrash(getLocalTrash());
+    window.addEventListener("qx-writing-change", changed); changed();
+    return () => window.removeEventListener("qx-writing-change", changed);
+  }, []);
   return <main className="local-manager-page">
     <header><button onClick={close}>‹ 返回</button><b>本地回收站</b><span /></header>
     <section>
+      {message && <p role="status">{message}</p>}
       {!trash.length && <p className="empty">回收站为空。</p>}
       {trash.map((item) => <article key={item.id}>
         <small>{item.deletedAt ? new Date(item.deletedAt).toLocaleString() : ""}</small>
         <h2>{item.payload?.title || item.title || "未命名稿件"}</h2>
         <p>{String(item.payload?.content?.text || item.content?.text || "").slice(0, 180)}</p>
-        <div><button onClick={() => {
-          const restored = restoreLocalTrashItem(String(item.id));
+        <div><button onClick={async () => {
+          try { const restored = await restoreLocalTrashItem(String(item.id));
           if (restored) onRestore(restored);
           setTrash((current) => current.filter((entry) => entry.id !== item.id));
-        }}>恢复</button><button className="danger" onClick={() => {
+          } catch (error) { setMessage((error as Error).message); }
+        }}>恢复</button><button className="danger" onClick={async () => {
           if (!window.confirm("永久删除这条本地记录吗？")) return;
-          permanentlyDeleteLocalTrashItem(String(item.id));
+          try { await permanentlyDeleteLocalTrashItem(String(item.id));
           setTrash((current) => current.filter((entry) => entry.id !== item.id));
+          } catch (error) { setMessage((error as Error).message); }
         }}>永久删除</button></div>
       </article>)}
     </section>
@@ -728,7 +769,7 @@ function ArticleEditor({
   initialProjectId,
   initialMetadata,
   autoSavedAt,
-  message, onMetadata, position, onPosition, onNewDraft, onNewIdea, onBackup,
+  message, onMetadata, position, onPosition, onNewDraft, onNewIdea, onBackup, busy = false,
 }: {
   title: string;
   body: string;
@@ -752,6 +793,7 @@ function ArticleEditor({
   onNewDraft: () => void;
   onNewIdea: () => void;
   onBackup: () => void;
+  busy?: boolean;
 }) {
   const editor = useRef<HTMLTextAreaElement>(null);
   const imagePicker = useRef<HTMLInputElement>(null);
@@ -778,6 +820,8 @@ function ArticleEditor({
   const [showReference, setShowReference] = useState(false);
   const [findText, setFindText] = useState("");
   const [imageMessage, setImageMessage] = useState("");
+  const [readingImages, setReadingImages] = useState(false);
+  const blocked = busy || readingImages;
   useEffect(() => {
     onMetadata({ ...initialMetadata, visibility, publicationState, tags: tags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean),
       projectId, chapterId: chapterId || undefined, syncToServer, shareTargets });
@@ -824,8 +868,12 @@ function ArticleEditor({
   }
 
   async function addImages(files: File[]) {
+    if (blocked) return;
+    setReadingImages(true);
     const accepted = files.filter((file) => file.type.startsWith("image/") && file.size <= 4 * 1024 * 1024);
-    setImageMessage(files.length !== accepted.length || accepted.length + images.length > 9 ? "最多加入 9 张图片，每张不超过 4 MB；超出限制的图片没有加入。" : "");
+    const warning = files.length !== accepted.length || accepted.length + images.length > 9 ? "最多加入 9 张图片，每张不超过 4 MB；超出限制的图片没有加入。" : "";
+    setImageMessage("正在读取图片…");
+    try {
     const encoded = await Promise.all(accepted.map((file) => new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
@@ -833,14 +881,17 @@ function ArticleEditor({
       reader.readAsDataURL(file);
     })));
     onImages([...images, ...encoded].slice(0, 9));
+    setImageMessage(warning);
+    } catch { setImageMessage("图片读取失败，请保留原文件后重新选择。"); }
+    finally { setReadingImages(false); }
   }
 
   return (
-    <main className={`article-editor qzone-editor ${focused ? "writing-focused" : ""}`}>
+    <main inert={blocked} aria-busy={blocked} className={`article-editor qzone-editor ${focused ? "writing-focused" : ""}`}>
       <header>
         <button className="editor-cancel" onClick={onBack}>返回</button>
         <div><b>{creationType === "article" ? "写作" : "记录灵感"}</b></div>
-        <button className="editor-publish" disabled={!dirty}
+        <button className="editor-publish" disabled={!dirty || blocked}
           onClick={() => onSave({
             visibility,
             tags: tags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean),
@@ -854,8 +905,8 @@ function ArticleEditor({
       </header>
       {message && <div className="real-message" role="status">{message}</div>}
       <div className="writing-tools">
-        <button onClick={onNewDraft}>新稿件</button>
-        <button onClick={onNewIdea}>新灵感</button>
+        <button disabled={blocked} onClick={onNewDraft}>新稿件</button>
+        <button disabled={blocked} onClick={onNewIdea}>新灵感</button>
         <button onClick={onBackup}>完整备份</button>
         <button className="focus-toggle" onClick={() => { if (!focused) setShowReference(false); setFocused(!focused); }}>{focused ? "退出专注" : "专注写作"}</button>
         <button onClick={() => setShowReference(!showReference)}>{showReference ? "收起资料" : "查看项目资料"}</button>
@@ -884,7 +935,7 @@ function ArticleEditor({
           </button>
         </div>
         <input className="document-title" value={title} onChange={(event) => onTitle(event.target.value)}
-          aria-label="稿件标题" placeholder="稿件标题（可选）" maxLength={100} />
+          disabled={blocked} aria-label="稿件标题" placeholder="稿件标题（可选）" maxLength={100} />
         {documentMode && <>
           <div className="word-toolbar">
             <button onClick={() => insert("# ")}>标题 1</button>
@@ -897,7 +948,7 @@ function ArticleEditor({
             <button onClick={() => insert("\n---\n")}>分隔线</button>
           </div>
         </>}
-        {preview ? <WritingPreview text={body} /> : <textarea ref={editor} value={body} onChange={(event) => onBody(event.target.value)}
+        {preview ? <WritingPreview text={body} /> : <textarea disabled={blocked} ref={editor} value={body} onChange={(event) => onBody(event.target.value)}
           onSelect={(event) => { const field = event.currentTarget; onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
           onScroll={(event) => { const field = event.currentTarget; onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
           placeholder={documentMode ? "开始编辑文档正文……" : "这一刻，想写点什么……"} autoFocus />}
@@ -905,7 +956,7 @@ function ArticleEditor({
           <figure key={`${image.slice(-16)}-${index}`}><img src={image} alt={`插图 ${index + 1}`} referrerPolicy="no-referrer" />
             <button onClick={() => onImages(images.filter((_, at) => at !== index))}>×</button></figure>)}
         </div>}
-        <input ref={imagePicker} hidden multiple type="file" accept="image/*"
+        <input disabled={blocked} ref={imagePicker} hidden multiple type="file" accept="image/*"
           onChange={(event) => void addImages(Array.from(event.target.files || [])).catch(() => setImageMessage("图片无法读取，请重新选择"))} />
         {imageMessage && <p role="status">{imageMessage}</p>}
       </section>
