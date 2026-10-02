@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { importAdapters, type ImportCandidate, type ImportMode } from "./importers";
 import { candidate } from "./importers/types";
 import { commitImport } from "./importers/importCommit";
 import { nativeCaptureAvailable, openNativeCaptureSettings } from "./nativeHistory";
+import { loadImportPreview, saveImportPreview, removeImportPreview, type ImportPreview } from "./importPreviewStore";
 
 const modeLabels: Record<ImportMode, string> = {
   browser: "电脑网页辅助",
@@ -22,6 +23,12 @@ export default function HistoryImport({
   projects?: any[];
 }) {
   const previewKey = `qx_import_preview_${kind}`;
+  const [previewStoreKey] = useState(() => {
+    const key = `qx_import_session_${kind}`;
+    const id = sessionStorage.getItem(key) || crypto.randomUUID();
+    sessionStorage.setItem(key, id);
+    return `${kind}:${id}`;
+  });
   const [initialPreview] = useState<any>(() => {
     try { const value = JSON.parse(sessionStorage.getItem(previewKey) || "null"); return Array.isArray(value?.candidates) ? value : null; }
     catch { return null; }
@@ -29,6 +36,8 @@ export default function HistoryImport({
   const [step, setStep] = useState<"source" | "preview">(initialPreview ? "preview" : "source");
   const [candidates, setCandidates] = useState<ImportCandidate[]>(initialPreview?.candidates || []);
   const [message, setMessage] = useState("");
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState("正在恢复临时预览…");
   const fileInput = useRef<HTMLInputElement>(null);
   const [targetProjectId, setTargetProjectId] = useState(initialPreview?.targetProjectId || "");
   const [targetCategory, setTargetCategory] = useState(initialPreview?.targetCategory || "正文");
@@ -36,40 +45,86 @@ export default function HistoryImport({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [skipDuplicates, setSkipDuplicates] = useState(initialPreview?.skipDuplicates !== false);
-  const previewRef = useRef<any>(null);
+  const previewRef = useRef<ImportPreview>(null);
   const previewDone = useRef(false);
-  previewRef.current = { candidates, targetProjectId, targetCategory, skipDuplicates };
-  function clearPreview() { previewDone.current = true; sessionStorage.removeItem(previewKey); sessionStorage.removeItem("qx_import_active"); }
+  const persistedPreview = useRef<ImportPreview | null>(null);
+  const preview = useMemo(() => ({ candidates, targetProjectId, targetCategory, skipDuplicates }),
+    [candidates, targetProjectId, targetCategory, skipDuplicates]);
+  previewRef.current = preview;
+  async function clearPreview() {
+    previewDone.current = true;
+    try {
+      await removeImportPreview(previewStoreKey);
+      sessionStorage.removeItem(previewKey); sessionStorage.removeItem("qx_import_active");
+    } catch (error) { previewDone.current = false; throw error; }
+  }
   useEffect(() => {
-    if (step !== "preview") return;
-    const persist = () => {
+    let active = true;
+    void (async () => {
+      const saved = await loadImportPreview(previewStoreKey);
+      const restored = saved || initialPreview;
+      if (!active) return;
+      if (restored) {
+        setCandidates(restored.candidates); setTargetProjectId(restored.targetProjectId || "");
+        setTargetCategory(restored.targetCategory || "正文"); setSkipDuplicates(restored.skipDuplicates !== false);
+        setStep("preview");
+      }
+      setPreviewLoaded(true); setPreviewStatus("");
+    })().catch(error => {
+      if (active) setPreviewStatus(`${error.message || "临时预览无法读取"}。请保留原文件后重试。`);
+    });
+    return () => { active = false; };
+  }, [previewStoreKey, initialPreview]);
+  useEffect(() => {
+    if (!previewLoaded || step !== "preview") return;
+    let active = true;
+    const persist = async () => {
       if (previewDone.current) return;
-      try { sessionStorage.setItem(previewKey, JSON.stringify(previewRef.current)); sessionStorage.setItem("qx_import_active", kind); }
-      catch { setMessage("预览内容较大，无法保留刷新副本；请先完成导入再刷新页面。"); }
+      const value = previewRef.current;
+      try {
+        await saveImportPreview(previewStoreKey, value);
+        persistedPreview.current = value;
+        if (!previewDone.current) {
+          sessionStorage.setItem("qx_import_active", kind); sessionStorage.removeItem(previewKey);
+          if (active && previewRef.current === value) setPreviewStatus("预览已保存在本机，刷新可恢复");
+        }
+      } catch {
+        if (active) setPreviewStatus("预览未能保存刷新副本。请保留当前页面和原文件，完成导入或重试后再刷新。");
+      }
     };
-    persist(); window.addEventListener("beforeunload", persist);
-    return () => window.removeEventListener("beforeunload", persist);
-  }, [step, candidates, targetProjectId, targetCategory, skipDuplicates, previewKey, kind]);
+    setPreviewStatus("正在保留预览…");
+    const timer = window.setTimeout(() => void persist(), 200);
+    const leave = (event: BeforeUnloadEvent) => {
+      if (!previewDone.current && persistedPreview.current !== previewRef.current) {
+        event.preventDefault(); event.returnValue = ""; void persist();
+      }
+    };
+    window.addEventListener("beforeunload", leave);
+    return () => { active = false; window.clearTimeout(timer); window.removeEventListener("beforeunload", leave); };
+  }, [step, preview, previewLoaded, previewStoreKey, previewKey, kind]);
   const isAndroid = nativeCaptureAvailable();
   const platformUrls: Record<string, string> = {
     weibo: "https://weibo.com/",
     qqzone: "https://user.qzone.qq.com/",
   };
 
-  function goBack() {
+  async function goBack() {
     if (busyRef.current) return;
+    if (!previewLoaded) { close(); return; }
+    try {
     if (step === "preview") {
-      clearPreview();
+      await clearPreview();
       setStep("source");
       setCandidates([]);
       setMessage("");
       return;
     }
-    clearPreview(); close();
+    await clearPreview(); close();
+    } catch { setMessage("临时预览尚未清理，当前内容已保留，请稍后重试。"); }
   }
 
   useEffect(() => {
-    const handleBack = () => goBack();
+    const handleBack = () => { void goBack(); };
     window.addEventListener("qx-history-back", handleBack);
     return () => window.removeEventListener("qx-history-back", handleBack);
   });
@@ -100,6 +155,7 @@ export default function HistoryImport({
     if (mode === "accessibility" && adapter && nativeCaptureAvailable()) {
       const captured = await adapter.collect({ mode });
       if (captured.length) {
+        previewDone.current = false;
         setCandidates(captured);
         setStep("preview");
         setMessage(`已读取 ${captured.length} 条手机采集内容`);
@@ -124,7 +180,8 @@ export default function HistoryImport({
     busyRef.current = true; setBusy(true);
     try {
       const result = await commitImport(selected, { projectId: targetProjectId, category: kind === "documents" ? targetCategory : "正文", skipDuplicates });
-      clearPreview();
+      try { await clearPreview(); }
+      catch { setMessage(`已正式导入 ${result.added} 条内容，但临时预览清理失败。稿件已保存，重新导入会按原去重设置处理。`); busyRef.current = false; setBusy(false); return; }
       setMessage(`已正式导入 ${result.added} 条内容${result.skipped ? `，跳过 ${result.skipped} 条相同内容` : ""}`);
       window.setTimeout(close, 800);
     } catch (error) {
@@ -143,18 +200,20 @@ export default function HistoryImport({
 
   return (
     <div className="history-import">
-      <header><button disabled={busy} onClick={goBack}>‹ 返回</button><div>
+      <header><button disabled={busy} onClick={() => void goBack()}>‹ 返回</button><div>
         <b>{kind === "documents" ? "导入本地文档" : "历史导入"}</b>
         <span>{kind === "documents" ? "解析后先预览，再保存到项目" : "一次性导入，不会实时同步"}</span>
       </div></header>
       {message && <div className="import-message">{message}</div>}
+      {previewStatus && <p role="status" className="import-message">{previewStatus}</p>}
+      {!previewLoaded && <button onClick={() => window.location.reload()}>重试打开预览</button>}
       <input ref={fileInput} hidden multiple type="file"
         accept={kind === "documents"
           ? ".doc,.docx,.txt,.md,.markdown,.pdf,.json,.xmind,.mm,.opml,.csv,text/plain,text/markdown,application/pdf,application/json"
           : ".json,application/json"}
         onChange={(event) => void importFiles(Array.from(event.target.files || []))} />
 
-      {step === "source" && <section>
+      {previewLoaded && step === "source" && <section>
         <h1>{kind === "documents" ? "选择本地文件" : "选择内容来源"}</h1>
         <p>采集结果会先进入临时预览，不会直接写入正式数据。</p>
         <div className="import-sources">
@@ -182,9 +241,9 @@ export default function HistoryImport({
         </div>}
       </section>}
 
-      {step === "preview" && <section><fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+      {previewLoaded && step === "preview" && <section><fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="preview-head"><div><h1>临时预览</h1><p>可以勾选、修改或删除，再正式导入。</p></div>
-          <button onClick={() => { clearPreview(); setStep("source"); setCandidates([]); }}>重新选择</button></div>
+          <button onClick={() => void goBack()}>重新选择</button></div>
         {kind === "documents" && <div className="import-destination">
           <label>归入项目<select value={targetProjectId} onChange={(event) => setTargetProjectId(event.target.value)}>
             <option value="">不归入项目</option>
