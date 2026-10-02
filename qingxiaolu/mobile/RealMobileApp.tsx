@@ -54,8 +54,8 @@ export default function RealMobileApp() {
     Array.isArray(initialEditorDraft.images) ? initialEditorDraft.images : [],
   );
   const [projectTitle, setProjectTitle] = useState("");
-  const [showImport, setShowImport] = useState(false);
-  const [showDocumentImport, setShowDocumentImport] = useState(false);
+  const [showImport, setShowImport] = useState(() => sessionStorage.getItem("qx_import_active") === "history");
+  const [showDocumentImport, setShowDocumentImport] = useState(() => sessionStorage.getItem("qx_import_active") === "documents");
   const [creationType, setCreationType] = useState<"article" | "idea">(
     initialEditorDraft.creationType === "idea" ? "idea" : "article",
   );
@@ -315,7 +315,7 @@ export default function RealMobileApp() {
         String(item.payload.content?.text || ""),
         Array.isArray(item.payload.content?.images) ? item.payload.content.images : [],
       );
-      setMessage(result === "shared" ? "长图已交给系统分享" : "长图已下载");
+      setMessage(result === "shared" ? "长图已交给系统分享" : result === "cancelled" ? "已取消长图分享，原稿仍保留" : "长图已下载");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "长图生成失败");
     }

@@ -34,6 +34,25 @@ export async function queueDraft(title: string, content: string) {
   return queueItem("idea", title, { text: content });
 }
 
+export function queueLocalBatch(changes: any[], extra: Record<string, unknown> = {}) {
+  if (new Set(changes.map(change => change.id)).size !== changes.length) throw new Error("导入内容含重复的稿件 ID，尚未导入任何内容。请核对文件。");
+  const local = JSON.parse(localStorage.getItem("qx_drafts") || "[]");
+  const current = getLocalItems();
+  const versions = JSON.parse(localStorage.getItem("qx_item_versions") || "{}");
+  const savedAt = new Date().toISOString();
+  const records = changes.map(change => {
+    const previous = current.find((item: any) => item.id === change.id);
+    if (previous && (previous.payload.title !== change.title || JSON.stringify(previous.payload.content) !== JSON.stringify(change.content))) {
+      versions[change.id] = [{ ...previous.payload, versionSavedAt: savedAt }, ...(versions[change.id] || [])].slice(0, 30);
+    }
+    return { ...change, baseRevision: change.baseRevision ?? previous?.revision ?? 0, deleted: false, savedAt, syncState: "local" };
+  });
+  const ids = new Set(records.map(record => record.id));
+  storeBatch({ ...extra, qx_item_versions: versions,
+    qx_web_outbox: JSON.parse(localStorage.getItem("qx_web_outbox") || "[]").filter((item:any) => !ids.has(item.id)),
+    qx_drafts: [...records, ...local.filter((item:any) => !ids.has(item.id))] });
+}
+
 export async function queueItem(
   itemType: "idea" | "article" | "project",
   title: string,

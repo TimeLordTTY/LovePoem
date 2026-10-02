@@ -1,7 +1,7 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { queueItem, getLocalItems, fetchServerItems, syncNow, getSyncConflicts, resolveSyncConflict,
-  deleteLocalItem, restoreLocalTrashItem } from "../work/writing-tests/sync.mjs";
+  deleteLocalItem, restoreLocalTrashItem, queueLocalBatch } from "../work/writing-tests/sync.mjs";
 import { createBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
 
 class MemoryStorage {
@@ -16,6 +16,19 @@ const read = (key) => JSON.parse(localStorage.getItem(key) || "[]");
 const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, projectId: "project", content: { text, chapterId: "chapter-stable", images: ["data:image/png;base64,AA=="] } });
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
+
+test("文件夹整批读回失败撤销资料和版本，成功后保留当前云端基线与旧内容", () => {
+  localStorage.setItem("qx_server_cache", JSON.stringify([cloud("a", "旧正文", 7)]));
+  const before=new Map(localStorage.data);localStorage.failKey="qx_drafts";
+  const change={...payload("a","文件夹新正文"),title:"新标题"};
+  assert.throws(()=>queueLocalBatch([change],{qx_project_workspaces:{project:{world:"新资料"}}}),/尚未保存/);
+  assert.deepEqual(localStorage.data,before);
+  queueLocalBatch([change],{qx_project_workspaces:{project:{world:"新资料"}}});
+  assert.equal(read("qx_drafts")[0].baseRevision,7);assert.equal(JSON.parse(localStorage.getItem("qx_item_versions")).a[0].content.text,"旧正文");
+  queueLocalBatch([{...change,title:"只改标题"}]);
+  assert.equal(JSON.parse(localStorage.getItem("qx_item_versions")).a[0].title,"新标题");
+  assert.throws(()=>queueLocalBatch([change,change]),/重复/);
+});
 
 test("超过 500 条不会删掉旧稿，存储失败明确报错且原稿保留", async () => {
   localStorage.setItem("qx_drafts", JSON.stringify(Array.from({ length: 500 }, (_, i) => payload(`old-${i}`))));

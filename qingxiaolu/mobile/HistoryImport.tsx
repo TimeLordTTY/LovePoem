@@ -21,16 +21,35 @@ export default function HistoryImport({
   kind?: "history" | "documents";
   projects?: any[];
 }) {
-  const [step, setStep] = useState<"source" | "preview">("source");
-  const [candidates, setCandidates] = useState<ImportCandidate[]>([]);
+  const previewKey = `qx_import_preview_${kind}`;
+  const [initialPreview] = useState<any>(() => {
+    try { const value = JSON.parse(sessionStorage.getItem(previewKey) || "null"); return Array.isArray(value?.candidates) ? value : null; }
+    catch { return null; }
+  });
+  const [step, setStep] = useState<"source" | "preview">(initialPreview ? "preview" : "source");
+  const [candidates, setCandidates] = useState<ImportCandidate[]>(initialPreview?.candidates || []);
   const [message, setMessage] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
-  const [targetProjectId, setTargetProjectId] = useState("");
-  const [targetCategory, setTargetCategory] = useState("正文");
+  const [targetProjectId, setTargetProjectId] = useState(initialPreview?.targetProjectId || "");
+  const [targetCategory, setTargetCategory] = useState(initialPreview?.targetCategory || "正文");
   const [pastedResult, setPastedResult] = useState("");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const [skipDuplicates, setSkipDuplicates] = useState(true);
+  const [skipDuplicates, setSkipDuplicates] = useState(initialPreview?.skipDuplicates !== false);
+  const previewRef = useRef<any>(null);
+  const previewDone = useRef(false);
+  previewRef.current = { candidates, targetProjectId, targetCategory, skipDuplicates };
+  function clearPreview() { previewDone.current = true; sessionStorage.removeItem(previewKey); sessionStorage.removeItem("qx_import_active"); }
+  useEffect(() => {
+    if (step !== "preview") return;
+    const persist = () => {
+      if (previewDone.current) return;
+      try { sessionStorage.setItem(previewKey, JSON.stringify(previewRef.current)); sessionStorage.setItem("qx_import_active", kind); }
+      catch { setMessage("预览内容较大，无法保留刷新副本；请先完成导入再刷新页面。"); }
+    };
+    persist(); window.addEventListener("beforeunload", persist);
+    return () => window.removeEventListener("beforeunload", persist);
+  }, [step, candidates, targetProjectId, targetCategory, skipDuplicates, previewKey, kind]);
   const isAndroid = nativeCaptureAvailable();
   const platformUrls: Record<string, string> = {
     weibo: "https://weibo.com/",
@@ -40,12 +59,13 @@ export default function HistoryImport({
   function goBack() {
     if (busyRef.current) return;
     if (step === "preview") {
+      clearPreview();
       setStep("source");
       setCandidates([]);
       setMessage("");
       return;
     }
-    close();
+    clearPreview(); close();
   }
 
   useEffect(() => {
@@ -57,6 +77,7 @@ export default function HistoryImport({
   async function importFiles(files: File[]) {
     if (busyRef.current || !files.length) return;
     busyRef.current = true; setBusy(true);
+    previewDone.current = false;
     setMessage("正在解析文件…");
     try {
       const adapter = importAdapters.find((item) => item.id === "other")!;
@@ -103,6 +124,7 @@ export default function HistoryImport({
     busyRef.current = true; setBusy(true);
     try {
       const result = commitImport(selected, { projectId: targetProjectId, category: kind === "documents" ? targetCategory : "正文", skipDuplicates });
+      clearPreview();
       setMessage(`已正式导入 ${result.added} 条内容${result.skipped ? `，跳过 ${result.skipped} 条相同内容` : ""}`);
       window.setTimeout(close, 800);
     } catch (error) {
@@ -162,7 +184,7 @@ export default function HistoryImport({
 
       {step === "preview" && <section><fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="preview-head"><div><h1>临时预览</h1><p>可以勾选、修改或删除，再正式导入。</p></div>
-          <button onClick={() => { setStep("source"); setCandidates([]); }}>重新选择</button></div>
+          <button onClick={() => { clearPreview(); setStep("source"); setCandidates([]); }}>重新选择</button></div>
         {kind === "documents" && <div className="import-destination">
           <label>归入项目<select value={targetProjectId} onChange={(event) => setTargetProjectId(event.target.value)}>
             <option value="">不归入项目</option>

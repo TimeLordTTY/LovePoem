@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Share } from "@capacitor/share";
-import { queueItem } from "./sync";
+import { queueItem, queueLocalBatch, getLocalItems } from "./sync";
+import { writeProjectFolder, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile } from "./folderSync";
 import { storeJson } from "./storage";
 import { createBackup, downloadBackup, parseBackup } from "./backup";
 
@@ -161,6 +162,8 @@ export default function ProjectWorkspace({
   const [projectDirectory, setProjectDirectory] = useState<any>(null);
   const [projectDirectoryName, setProjectDirectoryName] = useState("");
   const [rootDirectoryName, setRootDirectoryName] = useState("");
+  const [folderBusy, setFolderBusy] = useState(false);
+  const folderBusyRef = useRef(false);
   const coverInput = useRef<HTMLInputElement>(null);
 
   const markdown = useMemo(() => packageText(title, data), [title, data]);
@@ -218,13 +221,6 @@ export default function ProjectWorkspace({
       payload: { id: projectId, itemType: "project", title, content: data } }), title); }
     catch (error) { setMessage((error as Error).message); }
     finally { setBackupBusy(false); }
-  }
-
-  async function writeFile(directory: any, name: string, content: string, type = "text/markdown;charset=utf-8") {
-    const fileHandle = await directory.getFileHandle(name, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(new Blob([content], { type }));
-    await writable.close();
   }
 
   function safeFileName(name: string, fallback: string) {
@@ -290,44 +286,46 @@ export default function ProjectWorkspace({
   }
 
   async function syncAppToLocal() {
+    if (folderBusyRef.current) return;
     if (!projectDirectory) return void chooseProjectDirectory();
     if (!await ensureDirectoryPermission()) return setMessage("未获得文件夹读写权限");
     if (!window.confirm(`将 ${articles.length} 篇稿件及项目资料写入所选文件夹。同名文件将更新，完整备份会包含图片。继续吗？`)) return;
     if (!await persist(false)) return;
+    folderBusyRef.current = true; setFolderBusy(true);
+    try {
     const backup = await createBackup(projectId);
-    await writeFile(projectDirectory, "完整备份.json", JSON.stringify(backup), "application/json");
-    await writeFile(projectDirectory, "项目信息.md",
+    const files: FolderFile[] = [];
+    const add = (directory: string, name: string, text: string, id?: string, type?: string) => files.push({ directory, name, text, id, type });
+    add("", "完整备份.json", JSON.stringify(backup), undefined, "application/json");
+    add("", "项目信息.md",
       `# ${title}\n\n类型：${data.type}\n\n标签：${data.tags}\n\n${data.description}`);
-    await writeFile(projectDirectory, "世界观.md", `# 世界观\n\n${data.world}`);
-    await writeFile(projectDirectory, "情节.md", `# 情节\n\n${data.plot}`);
-    await writeFile(projectDirectory, "私密备注.md", `# 私密备注\n\n${data.privateNotes}`);
-    await writeFile(projectDirectory, "项目全文.doc", wordHtml, "application/msword;charset=utf-8");
+    add("", "世界观.md", `# 世界观\n\n${data.world}`);
+    add("", "情节.md", `# 情节\n\n${data.plot}`);
+    add("", "私密备注.md", `# 私密备注\n\n${data.privateNotes}`);
+    add("", "项目全文.doc", wordHtml, undefined, "application/msword;charset=utf-8");
 
-    const characterDirectory = await projectDirectory.getDirectoryHandle("人物", { create: true });
-    for (const card of data.characterCards) await writeFile(characterDirectory,
-      `${safeFileName(card.name, "未命名人物")}.md`, `# ${card.name}\n\n人物ID：${card.id}\n身份：${card.role}\n\n${card.description}`);
-    const outlineDirectory = await projectDirectory.getDirectoryHandle("大纲", { create: true });
-    for (const [index, chapter] of data.chapters.entries()) await writeFile(outlineDirectory,
+    for (const card of data.characterCards) add("人物",
+      `${card.id}--${safeFileName(card.name, "未命名人物")}.md`, `# ${card.name}\n\n人物ID：${card.id}\n身份：${card.role}\n\n${card.description}`, card.id);
+    for (const [index, chapter] of data.chapters.entries()) add("大纲",
       `${String(index + 1).padStart(3, "0")}-${safeFileName(chapter.title, "未命名章节")}.md`,
-      `# ${chapter.title}\n\n章节ID：${chapter.id}\n状态：${chapter.status}\n\n${chapter.summary}`);
-    const timelineDirectory = await projectDirectory.getDirectoryHandle("时间轴", { create: true });
-    for (const [index, event] of data.timelineEvents.entries()) await writeFile(timelineDirectory,
+      `# ${chapter.title}\n\n章节ID：${chapter.id}\n顺序：${index + 1}\n状态：${chapter.status}\n\n${chapter.summary}`, chapter.id);
+    for (const [index, event] of data.timelineEvents.entries()) add("时间轴",
       `${String(index + 1).padStart(3, "0")}-${safeFileName(event.title, "未命名事件")}.md`,
-      `# ${event.title}\n\n事件ID：${event.id}\n时间：${event.time}\n\n${event.detail}`);
-    const articleDirectory = await projectDirectory.getDirectoryHandle("正文", { create: true });
-    for (const article of articles) await writeFile(articleDirectory,
+      `# ${event.title}\n\n事件ID：${event.id}\n顺序：${index + 1}\n时间：${event.time}\n\n${event.detail}`, event.id);
+    for (const article of articles) add("正文",
       `${article.id}--${safeFileName(article.payload?.title, "未命名稿件")}.md`,
-      `# ${article.payload?.title || "未命名稿件"}\n\n章节ID：${article.payload?.content?.chapterId || ""}\n\n${article.payload?.content?.text || ""}`);
-    const discussionDirectory = await projectDirectory.getDirectoryHandle("AI讨论", { create: true });
-    for (const discussion of discussions) await writeFile(discussionDirectory,
+      `# ${article.payload?.title || "未命名稿件"}\n\n稿件ID：${article.id}\n章节ID：${article.payload?.content?.chapterId || ""}\n\n${article.payload?.content?.text || ""}`, String(article.id));
+    for (const discussion of discussions) add("AI讨论",
       `${discussion.id}--${safeFileName(discussion.payload?.title, "未命名讨论")}.md`,
-      `# ${discussion.payload?.title || "未命名讨论"}\n\n来源链接：${discussion.payload?.content?.sourceUrl || ""}\n\n${discussion.payload?.content?.text || ""}`);
+      `# ${discussion.payload?.title || "未命名讨论"}\n\n讨论ID：${discussion.id}\n来源链接：${discussion.payload?.content?.sourceUrl || ""}\n\n${discussion.payload?.content?.text || ""}`, String(discussion.id));
+    await writeProjectFolder(projectDirectory, projectId, files);
     setMessage(`已从 App 同步到“${rootDirectoryName}\\${projectDirectoryName}”`);
+    } finally { folderBusyRef.current = false; setFolderBusy(false); }
   }
 
   async function readTextFile(directory: any, name: string) {
     try { return await (await directory.getFileHandle(name)).getFile().then((file: File) => file.text()); }
-    catch { return ""; }
+    catch(error:any) { if(error?.name==="NotFoundError") return null; throw error; }
   }
 
   async function markdownFiles(directoryName: string) {
@@ -339,30 +337,40 @@ export default function ProjectWorkspace({
           result.push({ name, text: await (await handle.getFile()).text() });
         }
       }
-    } catch { /* 文件夹不存在时保留当前数据 */ }
-    return result.sort((a, b) => a.name.localeCompare(b.name));
+    } catch(error:any) { if(error?.name!=="NotFoundError") throw error; }
+    return (await filterRetiredFiles(projectDirectory,projectId,directoryName,result)).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   async function syncLocalToApp() {
+    if (folderBusyRef.current) return;
     if (!projectDirectory) return void chooseProjectDirectory();
     if (!await ensureDirectoryPermission()) return setMessage("未获得文件夹读写权限");
+    folderBusyRef.current = true; setFolderBusy(true);
+    try {
     const world = await readTextFile(projectDirectory, "世界观.md");
     const plot = await readTextFile(projectDirectory, "情节.md");
-    const characterFiles = await markdownFiles("人物");
-    const chapterFiles = await markdownFiles("大纲");
-    const timelineFiles = await markdownFiles("时间轴");
-    const articleFiles = await markdownFiles("正文");
-    const discussionFiles = await markdownFiles("AI讨论");
+    const characterFiles = uniqueFolderFiles(await markdownFiles("人物"), "人物");
+    const chapterFiles = uniqueFolderFiles(await markdownFiles("大纲"), "章节");
+    const timelineFiles = uniqueFolderFiles(await markdownFiles("时间轴"), "事件");
+    const articleFiles = uniqueFolderFiles(await markdownFiles("正文"), "稿件");
+    const discussionFiles = uniqueFolderFiles(await markdownFiles("AI讨论"), "讨论");
     const backupText = await readTextFile(projectDirectory, "完整备份.json");
     const folderBackup = backupText ? parseBackup(backupText) : undefined;
-    const folderProject = folderBackup?.items.find((item: any) => item.payload.itemType === "project")?.payload.content || {};
+    const folderProjectItem = folderBackup?.items.find((item: any) => item.payload.itemType === "project");
+    if (folderProjectItem && folderProjectItem.id !== projectId) throw new Error("文件夹备份属于其他项目，尚未导入任何内容。");
+    const folderProject = folderProjectItem?.payload.content || {};
     const privateNotes = await readTextFile(projectDirectory, "私密备注.md");
     const projectInfo = await readTextFile(projectDirectory, "项目信息.md");
     if (!window.confirm(`将读取 ${articleFiles.length} 篇正文、${chapterFiles.length} 个章节、${characterFiles.length} 个人物。现有同名稿件将更新并保留版本记录，不上传服务器。继续吗？`)) return;
     const stripHeading = (text: string) => text.replace(/^# .*\r?\n+/, "");
-    const field = (text: string, label: string) => {
-      const match = text.match(new RegExp(`${label}：([^\\n\\r]*)`));
+    const field = (text: string | null, label: string) => {
+      const match = (text || "").match(new RegExp(`${label}：([^\\n\\r]*)`));
       return match?.[1]?.trim() || "";
+    };
+    const associations: Array<{directory:string;name:string;id:string}> = [];
+    const identity = (file:FolderInputFile, directory:string, label:string, fallback?:string) => {
+      const id=field(file.text,`${label}ID`) || file.id || fallback || crypto.randomUUID();
+      associations.push({directory,name:file.name,id});return id;
     };
     const next: ProjectWorkspaceData = {
       ...data,
@@ -371,54 +379,72 @@ export default function ProjectWorkspace({
       description: projectInfo ? stripHeading(projectInfo).replace(/^(?:类型|标签)：[^\n\r]*\r?\n*/gm, "").trim() : folderProject.description || data.description,
       type: field(projectInfo, "类型") || folderProject.type || data.type,
       tags: field(projectInfo, "标签") || folderProject.tags || data.tags,
-      privateNotes: privateNotes ? stripHeading(privateNotes).trim() : folderProject.privateNotes || data.privateNotes,
-      world: world ? stripHeading(world).trim() : folderProject.world || data.world,
-      plot: plot ? stripHeading(plot).trim() : folderProject.plot || data.plot,
-      characterCards: characterFiles.length ? characterFiles.map((file) => ({
-        id: field(file.text, "人物ID") || (folderProject.characterCards || data.characterCards).find((card: any) => card.name === file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id || crypto.randomUUID(),
+      privateNotes: privateNotes !== null ? stripHeading(privateNotes).trim() : folderProject.privateNotes || data.privateNotes,
+      world: world !== null ? stripHeading(world).trim() : folderProject.world || data.world,
+      plot: plot !== null ? stripHeading(plot).trim() : folderProject.plot || data.plot,
+      characterCards: characterFiles.length ? characterFiles.map((file) => {
+        const existingId=field(file.text,"人物ID") || file.id;
+        const original=[...data.characterCards,...(folderProject.characterCards || [])].find((card:any)=>existingId ? card.id===existingId : card.name===file.text.match(/^# (.*)$/m)?.[1]?.trim());
+        return { ...original,
+        id: identity(file,"人物","人物",original?.id),
         name: file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/\.md$/i, ""),
         role: field(file.text, "身份"),
         description: stripHeading(file.text).replace(/^(?:人物ID|身份)：[^\n\r]*\r?\n*/gm, "").trim(),
-      })) : data.characterCards,
-      chapters: chapterFiles.length ? chapterFiles.map((file) => ({
-        id: field(file.text, "章节ID") || (folderProject.chapters || data.chapters).find((chapter: any) => chapter.title === file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id || crypto.randomUUID(),
+      }; }) : data.characterCards,
+      chapters: chapterFiles.length ? chapterFiles.map((file) => {
+        const existingId=field(file.text,"章节ID") || file.id;
+        const original=[...data.chapters,...(folderProject.chapters || [])].find((chapter:any)=>existingId ? chapter.id===existingId : chapter.title===file.text.match(/^# (.*)$/m)?.[1]?.trim());
+        return { ...original,
+        id: identity(file,"大纲","章节",original?.id),
         title: file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/^\d+-/, "").replace(/\.md$/i, ""),
         status: field(file.text, "状态") || "待修改",
-        summary: stripHeading(file.text).replace(/^(?:章节ID|状态)：[^\n\r]*\r?\n*/gm, "").trim(),
-      })) : data.chapters,
-      timelineEvents: timelineFiles.length ? timelineFiles.map((file) => ({
-        id: field(file.text, "事件ID") || crypto.randomUUID(),
+        summary: stripHeading(file.text).replace(/^(?:章节ID|顺序|状态)：[^\n\r]*\r?\n*/gm, "").trim(),
+      }; }) : data.chapters,
+      timelineEvents: timelineFiles.length ? timelineFiles.map((file) => {
+        const original=[...data.timelineEvents,...(folderProject.timelineEvents || [])].find((event:any)=>event.id===(field(file.text,"事件ID") || file.id));
+        return { ...original,
+        id: identity(file,"时间轴","事件",original?.id),
         title: file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/^\d+-/, "").replace(/\.md$/i, ""),
         time: field(file.text, "时间"),
-        detail: stripHeading(file.text).replace(/^(?:事件ID|时间)：[^\n\r]*\r?\n*/gm, "").trim(),
-      })) : data.timelineEvents,
+        detail: stripHeading(file.text).replace(/^(?:事件ID|顺序|时间)：[^\n\r]*\r?\n*/gm, "").trim(),
+      }; }) : data.timelineEvents,
     };
-    setData(next);
-    save(projectId, next);
     const { aiKey, ...syncData } = next;
-    await queueItem("project", title, syncData, undefined, false, projectId);
+    const changes: any[] = [{ id: projectId, itemType: "project", title, content: syncData }];
     for (const file of articleFiles) {
-      const articleId = file.name.includes("--") ? file.name.split("--")[0] : crypto.randomUUID();
+      const articleId = identity(file,"正文","稿件",file.name.includes("--") ? file.name.split("--")[0] : articles.find(article=>article.payload.title===file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id);
       const articleTitle = file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/\.md$/i, "");
       const original = articles.find((article) => article.id === articleId) || folderBackup?.items.find((item) => item.id === articleId);
-      await queueItem("article", articleTitle, {
+      changes.push({ id: articleId, itemType: "article", title: articleTitle, projectId, content: {
         ...original?.payload?.content,
-        text: stripHeading(file.text).replace(/^章节ID：[^\n\r]*\r?\n+/, "").trim(),
+        text: stripHeading(file.text).replace(/^(?:稿件ID|章节ID)：[^\n\r]*\r?\n*/gm, "").trim(),
         projectId, chapterId: field(file.text, "章节ID") || undefined,
         visibility: "qingxiaolu", publicationState: "editing",
-      }, projectId, false, articleId, Number(original?.revision || 0));
+      } });
     }
     for (const file of discussionFiles) {
-      const discussionId = file.name.includes("--") ? file.name.split("--")[0] : crypto.randomUUID();
+      const discussionId = identity(file,"AI讨论","讨论",file.name.includes("--") ? file.name.split("--")[0] : discussions.find(discussion=>discussion.payload.title===file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id);
       const discussionTitle = file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/\.md$/i, "");
-      await queueItem("article", discussionTitle, {
-        text: stripHeading(file.text).replace(/^来源链接：[^\n\r]*\r?\n+/, "").trim(),
+      changes.push({ id: discussionId, itemType: "article", title: discussionTitle, projectId, content: {
+        ...discussions.find(discussion => discussion.id === discussionId)?.payload?.content,
+        text: stripHeading(file.text).replace(/^(?:讨论ID|来源链接)：[^\n\r]*\r?\n*/gm, "").trim(),
         projectId, sourceLabel: "ChatGPT", sourceUrl: field(file.text, "来源链接"),
         imported: true, visibility: "qingxiaolu", publicationState: "editing",
-      }, projectId, false, discussionId);
+      } });
     }
+    const existing = getLocalItems();
+    for (const change of changes) {
+      const original = existing.find(item=>item.id===change.id);
+      if(original && change.id!==projectId && (original.payload.itemType!=="article" || String(original.payload.projectId||original.payload.content?.projectId||"")!==projectId))
+        throw new Error("文件中的稿件 ID 属于其他项目，尚未导入任何内容。请复制为新稿件后再导入。");
+    }
+    queueLocalBatch(changes, { qx_project_workspaces: { ...JSON.parse(localStorage.getItem("qx_project_workspaces") || "{}"), [projectId]: next } });
+    setData(next);
     onUpdated?.(title, syncData);
+    try { await acknowledgeFolderChanges(projectDirectory, projectId, associations); }
+    catch { setMessage("稿件和资料已保存到 App，但文件夹清单更新失败。请恢复文件夹读写权限后，再次从本地同步到 App。未上传服务器。"); return; }
     setMessage(`已从“${rootDirectoryName}\\${projectDirectoryName}”同步到 App，未上传服务器`);
+    } finally { folderBusyRef.current = false; setFolderBusy(false); }
   }
 
   async function setCover(file?: File) {
@@ -749,8 +775,8 @@ export default function ProjectWorkspace({
           <button onClick={() => void chooseProjectDirectory()}>
             {projectDirectoryName ? "更换总文件夹" : "关联总文件夹"}
           </button>
-          <button disabled={!projectDirectory} onClick={() => void syncAppToLocal().catch((error) => setMessage(error.message))}>从 App 同步到本地</button>
-          <button disabled={!projectDirectory} onClick={() => void syncLocalToApp().catch((error) => setMessage(error.message))}>从本地同步到 App</button>
+          <button disabled={!projectDirectory || folderBusy} onClick={() => void syncAppToLocal().catch((error) => setMessage(error.message))}>从 App 同步到本地</button>
+          <button disabled={!projectDirectory || folderBusy} onClick={() => void syncLocalToApp().catch((error) => setMessage(error.message))}>从本地同步到 App</button>
         </div>
         <h2>导出项目设定</h2>
         <div className="project-export-actions">

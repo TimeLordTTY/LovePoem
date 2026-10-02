@@ -28,8 +28,10 @@ function canvasBlob(canvas: HTMLCanvasElement) {
 function loadImage(src: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("文章图片读取失败"));
+    image.crossOrigin = "anonymous";
+    const timer = window.setTimeout(() => reject(new Error("文章图片读取超时，请检查网络后重试")), 15000);
+    image.onload = () => { window.clearTimeout(timer); resolve(image); };
+    image.onerror = () => { window.clearTimeout(timer); reject(new Error("文章图片读取失败，请检查链接或先保存到本机后重试")); };
     image.src = src;
   });
 }
@@ -44,28 +46,29 @@ export async function createArticleImages(title: string, text: string, images: s
   const ctx = canvas.getContext("2d")!;
   ctx.font = "38px system-ui, sans-serif";
   const lines = wrap(ctx, text, width - margin * 2);
-  const perPage = 28;
   const pages: Blob[] = [];
-  const pageCount = Math.max(1, Math.ceil(lines.length / perPage));
+  ctx.font = "bold 58px system-ui, sans-serif";
+  const titleLines = wrap(ctx, title || "未命名稿件", width - margin * 2);
+  const layout: Array<Array<{ text: string; y: number; title: boolean }>> = [[]];
+  let cursor = margin;
+  for (const [isTitle, values] of [[true, titleLines], [false, lines]] as const) {
+    for (const line of values) {
+      const fontSize = isTitle ? 58 : 38;
+      if (cursor + fontSize > height - 120) { layout.push([]); cursor = margin; }
+      layout[layout.length - 1].push({ text: line, y: cursor + fontSize, title: isTitle });
+      cursor += isTitle ? 78 : 57;
+    }
+    if (isTitle) cursor += 25;
+  }
+  const pageCount = layout.length;
 
   for (let page = 0; page < pageCount; page++) {
     ctx.fillStyle = "#fffdf8";
     ctx.fillRect(0, 0, width, height);
     ctx.fillStyle = "#332d38";
-    let y = margin;
-    if (page === 0) {
-      ctx.font = "bold 58px system-ui, sans-serif";
-      const titleLines = wrap(ctx, title || "未命名稿件", width - margin * 2).slice(0, 3);
-      for (const line of titleLines) {
-        ctx.fillText(line, margin, y);
-        y += 78;
-      }
-      y += 25;
-    }
-    ctx.font = "38px system-ui, sans-serif";
-    for (const line of lines.slice(page * perPage, (page + 1) * perPage)) {
-      ctx.fillText(line, margin, y);
-      y += 57;
+    for (const line of layout[page]) {
+      ctx.font = line.title ? "bold 58px system-ui, sans-serif" : "38px system-ui, sans-serif";
+      ctx.fillText(line.text, margin, line.y);
     }
     ctx.fillStyle = "#8a818d";
     ctx.font = "26px system-ui, sans-serif";
@@ -81,16 +84,19 @@ export async function createArticleImages(title: string, text: string, images: s
     const drawWidth = image.width * ratio;
     const drawHeight = image.height * ratio;
     ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+    ctx.fillStyle = "#8a818d"; ctx.font = "26px system-ui, sans-serif";
+    ctx.fillText(`情晓录 · ${pages.length + 1}/${pageCount + images.filter(Boolean).length}`, margin, height - 52);
     pages.push(await canvasBlob(canvas));
   }
-  return pages.map((blob, index) => new File([blob], `${title || "情晓录"}-${index + 1}.png`, { type: "image/png" }));
+  const name = (title || "情晓录").replace(/[\\/:*?"<>|\r\n]/g, "_").slice(0, 80);
+  return pages.map((blob, index) => new File([blob], `${name}-${index + 1}.png`, { type: "image/png" }));
 }
 
 export async function shareOrDownloadArticleImages(title: string, text: string, images: string[]) {
   const files = await createArticleImages(title, text, images);
-  if (navigator.share && navigator.canShare?.({ files })) {
-    await navigator.share({ title: `${title} · 手机长图`, files });
-    return "shared";
+  if (window.matchMedia("(pointer: coarse)").matches && navigator.share && navigator.canShare?.({ files })) {
+    try { await navigator.share({ title: `${title} · 手机长图`, files }); return "shared"; }
+    catch (error: any) { if (error?.name === "AbortError") return "cancelled"; }
   }
   for (const file of files) {
     const url = URL.createObjectURL(file);
