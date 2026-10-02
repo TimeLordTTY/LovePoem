@@ -72,7 +72,7 @@ export async function appendProjectImport(projectId: string, category: string, t
   await save(projectId, data);
 }
 
-function packageText(title: string, data: ProjectWorkspaceData) {
+function packageText(title: string, data: ProjectWorkspaceData, includePrivateNotes = true) {
   return `# ${title}
 
 ## 项目类型
@@ -102,9 +102,16 @@ ${data.plot || "未填写"}
 ${data.timeline || "未填写"}
 ${data.timelineEvents.map((item) => `- ${item.time}｜${item.title}：${item.detail}`).join("\n")}
 
-## 私密创作备注
-${data.privateNotes || "未填写"}
+${includePrivateNotes ? `## 私密创作备注\n${data.privateNotes || "未填写"}\n` : ""}
 `;
+}
+
+async function copyText(text: string) {
+  try {
+    if (!navigator.clipboard?.writeText) return false;
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch { return false; }
 }
 
 function download(name: string, content: string, type: string) {
@@ -157,6 +164,8 @@ export default function ProjectWorkspace({
   const [syncProject, setSyncProject] = useState(false);
   const [message, setMessage] = useState("");
   const [backupBusy, setBackupBusy] = useState(false);
+  const [includePrivateNotesForAi, setIncludePrivateNotesForAi] = useState(false);
+  const [selectionBusy, setSelectionBusy] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [selectionMenu, setSelectionMenu] = useState<{ x: number; y: number; mobile: boolean } | null>(null);
   const [projectDirectory, setProjectDirectory] = useState<any>(null);
@@ -456,8 +465,15 @@ export default function ProjectWorkspace({
   }
 
   async function sharePackage(target: string) {
-    await navigator.clipboard?.writeText(markdown).catch(() => undefined);
-    await Share.share({ title: `${title}设定包`, text: markdown, dialogTitle: `发送到 ${target}` });
+    const text = packageText(title, data, includePrivateNotesForAi);
+    const copied = await copyText(text);
+    try {
+      await Share.share({ title: `${title}设定包`, text, dialogTitle: `发送到 ${target}` });
+      setMessage(`设定包已交给系统分享${includePrivateNotesForAi ? "（含私密备注）" : "（不含私密备注）"}`);
+    } catch (error) {
+      setMessage(error instanceof Error && error.name === "AbortError" ? "已取消分享，项目资料仍保留" :
+        copied ? "系统分享不可用，设定包已复制；请打开目标 AI 后粘贴。" : "分享和复制未成功，请使用 Markdown 导出，或允许剪贴板访问后重试。");
+    }
   }
 
   useEffect(() => {
@@ -482,17 +498,31 @@ export default function ProjectWorkspace({
   }
 
   async function copySelection() {
-    await navigator.clipboard?.writeText(selectedText);
+    if (!await copyText(selectedText)) { setMessage("复制未成功，请允许剪贴板访问后重试，或导出选段。"); return; }
     setMessage("已复制选中文字");
     setSelectionMenu(null);
   }
 
   async function sendSelectionToChatGpt() {
-    await navigator.clipboard?.writeText(selectedText).catch(() => undefined);
-    const opened = window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
-    if (!opened) await Share.share({ title: `${title}选段`, text: selectedText, dialogTitle: "发送选中文字" });
-    setMessage("选中文字已复制并打开 ChatGPT");
-    setSelectionMenu(null);
+    const copying = copyText(selectedText);
+    // 在点击事件内打开；noopener 返回 null 不代表弹窗被拦截。
+    let requested = true;
+    try { window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer"); } catch { requested = false; }
+    const copied = await copying;
+    setMessage(copied ? `${requested ? "已请求打开 ChatGPT" : "未能打开 ChatGPT"}，选中文字已复制，请粘贴。` :
+      "选中文字未能复制，请允许剪贴板访问后重试，或导出选段；ChatGPT 需手动粘贴内容。");
+    if (copied) setSelectionMenu(null);
+  }
+
+  async function saveSelectionAsIdea() {
+    if (selectionBusy) return;
+    setSelectionBusy(true);
+    try {
+      await queueItem("idea", selectedText.slice(0, 20), { text: selectedText, projectId }, projectId);
+      setMessage("选中文字已保存为灵感");
+      setSelectionMenu(null);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "灵感未保存，请保留选段后重试。"); }
+    finally { setSelectionBusy(false); }
   }
 
   const textSections: Record<string, [keyof ProjectWorkspaceData, string]> = {
@@ -780,6 +810,8 @@ export default function ProjectWorkspace({
           <button disabled={!projectDirectory || folderBusy} onClick={() => void syncLocalToApp().catch((error) => setMessage(error.message))}>从本地同步到 App</button>
         </div>
         <h2>导出项目设定</h2>
+        <label><input type="checkbox" checked={includePrivateNotesForAi}
+          onChange={event => setIncludePrivateNotesForAi(event.target.checked)} />发送设定包时包含私密备注</label>
         <div className="project-export-actions">
           <button onClick={() => download(`${title}-设定包.md`, markdown, "text/markdown")}>Markdown</button>
           <button onClick={() => download(`${title}-设定包.json`,
@@ -807,11 +839,7 @@ export default function ProjectWorkspace({
         <button onClick={() => { download(`${title}-选段.txt`, selectedText, "text/plain"); setSelectionMenu(null); }}>导出 TXT</button>
         <button onClick={() => { download(`${title}-选段.md`, `> ${selectedText.replace(/\n/g, "\n> ")}`, "text/markdown"); setSelectionMenu(null); }}>导出 Markdown</button>
         <button onClick={() => void sendSelectionToChatGpt()}>打开 ChatGPT</button>
-        <button onClick={() => {
-          void queueItem("idea", selectedText.slice(0, 20), { text: selectedText, projectId }, projectId);
-          setMessage("选中文字已保存为灵感");
-          setSelectionMenu(null);
-        }}>保存为灵感</button>
+        <button disabled={selectionBusy} onClick={() => void saveSelectionAsIdea()}>{selectionBusy ? "正在保存…" : "保存为灵感"}</button>
       </div>
     </aside>}
   </main>;
