@@ -11,7 +11,9 @@ async page => {
     try {
       const original = preview('作者修改');
       await saveImportPreview(keys[0], original);
-      assert(JSON.stringify(await loadImportPreview(keys[0])) === JSON.stringify(original), '大预览往返不完整');
+      const stored = await loadImportPreview(keys[0]);
+      assert(JSON.stringify({ ...stored, updatedAt: undefined, leaseVersion: undefined }) === JSON.stringify(original), '大预览往返不完整');
+      assert(Boolean(stored.updatedAt), '缺少恢复列表的保存时间');
       await Promise.all([saveImportPreview(keys[0], preview('第一笔')), saveImportPreview(keys[0], preview('第二笔'))]);
       assert((await loadImportPreview(keys[0])).candidates[0].text === '第二笔', '连续保存次序错误');
       await saveImportPreview(keys[1], preview('另一标签页'));

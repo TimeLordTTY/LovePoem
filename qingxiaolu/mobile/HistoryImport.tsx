@@ -3,7 +3,8 @@ import { importAdapters, type ImportCandidate, type ImportMode } from "./importe
 import { candidate } from "./importers/types";
 import { commitImport } from "./importers/importCommit";
 import { nativeCaptureAvailable, openNativeCaptureSettings } from "./nativeHistory";
-import { loadImportPreview, saveImportPreview, removeImportPreview, type ImportPreview } from "./importPreviewStore";
+import { loadImportPreview, saveImportPreview, removeImportPreview, listImportPreviews, claimImportPreview,
+  discardImportPreview, type ImportPreview, type ImportPreviewSummary } from "./importPreviewStore";
 
 const modeLabels: Record<ImportMode, string> = {
   browser: "电脑网页辅助",
@@ -23,12 +24,16 @@ export default function HistoryImport({
   projects?: any[];
 }) {
   const previewKey = `qx_import_preview_${kind}`;
-  const [previewStoreKey] = useState(() => {
+  const [initialStoreKey] = useState(() => {
     const key = `qx_import_session_${kind}`;
     const id = sessionStorage.getItem(key) || crypto.randomUUID();
     sessionStorage.setItem(key, id);
     return `${kind}:${id}`;
   });
+  const [sourceStoreKey, setSourceStoreKey] = useState(initialStoreKey);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [previewStoreKey, setPreviewStoreKey] = useState(initialStoreKey);
+  const [recoverable, setRecoverable] = useState<ImportPreviewSummary[]>([]);
   const [initialPreview] = useState<any>(() => {
     try { const value = JSON.parse(sessionStorage.getItem(previewKey) || "null"); return Array.isArray(value?.candidates) ? value : null; }
     catch { return null; }
@@ -51,30 +56,41 @@ export default function HistoryImport({
   const preview = useMemo(() => ({ candidates, targetProjectId, targetCategory, skipDuplicates }),
     [candidates, targetProjectId, targetCategory, skipDuplicates]);
   previewRef.current = preview;
+  async function refreshRecoverable() {
+    try { setRecoverable(await listImportPreviews(kind)); }
+    catch { setMessage("未完成预览列表暂时无法读取，请重新打开导入页面。现有预览尚未删除。"); }
+  }
   async function clearPreview() {
     previewDone.current = true;
     try {
       await removeImportPreview(previewStoreKey);
+      setRecoverable(current => current.filter(saved => saved.key !== previewStoreKey));
+      setPreviewStatus("");
       sessionStorage.removeItem(previewKey); sessionStorage.removeItem("qx_import_active");
     } catch (error) { previewDone.current = false; throw error; }
   }
   useEffect(() => {
     let active = true;
     void (async () => {
-      const saved = await loadImportPreview(previewStoreKey);
-      const restored = saved || initialPreview;
+      const key = await claimImportPreview(sourceStoreKey);
+      const saved = await loadImportPreview(key);
+      const restored = saved || (sourceStoreKey === initialStoreKey ? initialPreview : null);
+      const summaries = await listImportPreviews(kind);
       if (!active) return;
+      setPreviewStoreKey(key); setRecoverable(summaries);
+      sessionStorage.setItem(`qx_import_session_${kind}`, key.slice(kind.length + 1));
+      previewDone.current = false; persistedPreview.current = null;
       if (restored) {
         setCandidates(restored.candidates); setTargetProjectId(restored.targetProjectId || "");
         setTargetCategory(restored.targetCategory || "正文"); setSkipDuplicates(restored.skipDuplicates !== false);
         setStep("preview");
-      }
+      } else { setStep("source"); setCandidates([]); }
       setPreviewLoaded(true); setPreviewStatus("");
     })().catch(error => {
       if (active) setPreviewStatus(`${error.message || "临时预览无法读取"}。请保留原文件后重试。`);
     });
     return () => { active = false; };
-  }, [previewStoreKey, initialPreview]);
+  }, [sourceStoreKey, restoreAttempt, initialStoreKey, initialPreview, kind]);
   useEffect(() => {
     if (!previewLoaded || step !== "preview") return;
     let active = true;
@@ -117,10 +133,26 @@ export default function HistoryImport({
       setStep("source");
       setCandidates([]);
       setMessage("");
+      void refreshRecoverable();
       return;
     }
     await clearPreview(); close();
     } catch { setMessage("临时预览尚未清理，当前内容已保留，请稍后重试。"); }
+  }
+
+  function restorePreview(key: string) {
+    if (busyRef.current) return;
+    setPreviewLoaded(false); setPreviewStatus("正在恢复临时预览…"); setMessage("");
+    setSourceStoreKey(key);
+    setRestoreAttempt(value => value + 1);
+  }
+
+  async function discardPreview(summary: ImportPreviewSummary) {
+    if (busyRef.current || !window.confirm(`丢弃《${summary.title}》的未完成预览吗？尚未正式导入的修改将被删除。`)) return;
+    busyRef.current = true; setBusy(true);
+    try { await discardImportPreview(summary.key); await refreshRecoverable(); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "预览未删除，请重试。"); }
+    finally { busyRef.current = false; setBusy(false); }
   }
 
   useEffect(() => {
@@ -216,6 +248,14 @@ export default function HistoryImport({
       {previewLoaded && step === "source" && <section>
         <h1>{kind === "documents" ? "选择本地文件" : "选择内容来源"}</h1>
         <p>采集结果会先进入临时预览，不会直接写入正式数据。</p>
+        {!!recoverable.length && <section className="candidate-list"><h2>未完成的导入预览</h2>
+          <p>可以继续上次的修改。其他页面正在使用的预览会作为独立副本恢复。</p>
+          {recoverable.map(saved => <article key={saved.key}>
+            <h3>{saved.title}</h3><p>{saved.count} 条内容{saved.updatedAt ? ` · ${new Date(saved.updatedAt).toLocaleString()}` : ""}</p>
+            <button disabled={busy} onClick={() => restorePreview(saved.key)}>恢复预览</button>
+            <button disabled={busy} onClick={() => void discardPreview(saved)}>丢弃预览</button>
+          </article>)}
+        </section>}
         <div className="import-sources">
           {kind === "history" && importAdapters.filter((item) => item.id !== "other").map((adapter) =>
             <article key={adapter.id}>

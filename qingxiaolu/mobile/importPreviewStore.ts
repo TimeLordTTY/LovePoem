@@ -5,6 +5,8 @@ export type ImportPreview = {
   targetProjectId: string;
   targetCategory: string;
   skipDuplicates: boolean;
+  updatedAt?: string;
+  leaseVersion?: number;
 };
 
 // 临时预览独立保存，不扩大旧创作数据库的格式，也不进入云端待同步队列。
@@ -55,9 +57,82 @@ export async function loadImportPreview(key: string): Promise<ImportPreview | nu
 }
 
 export function saveImportPreview(key: string, value: ImportPreview) {
-  return operation("readwrite", store => store.put(value, key));
+  return operation("readwrite", store => store.put({ ...value, updatedAt: new Date().toISOString(), leaseVersion: 1 }, key));
 }
 
 export function removeImportPreview(key: string) {
-  return operation("readwrite", store => store.delete(key));
+  return operation("readwrite", store => store.delete(key)).then(result => {
+    const source = forkSources.get(key);
+    if (source) { claims.delete(source); forkSources.delete(key); }
+    return result;
+  });
+}
+
+export type ImportPreviewSummary = { key: string; title: string; count: number; updatedAt: string };
+export function listImportPreviews(kind: string) {
+  const result = chain.then(async () => {
+    const db = await open();
+    return new Promise<ImportPreviewSummary[]>((resolve, reject) => {
+      const transaction = db.transaction("previews", "readonly");
+      const summaries: ImportPreviewSummary[] = [];
+      const request = transaction.objectStore("previews").openCursor(IDBKeyRange.bound(`${kind}:`, `${kind}:\uffff`));
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        const value = cursor.value;
+        summaries.push({ key: String(cursor.key), title: value?.candidates?.[0]?.title || "未命名预览",
+          count: Array.isArray(value?.candidates) ? value.candidates.length : 0, updatedAt: value?.updatedAt || "" });
+        cursor.continue();
+      };
+      transaction.oncomplete = () => resolve(summaries.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+      transaction.onabort = () => reject(transaction.error || new Error("未完成预览列表无法读取"));
+      transaction.onerror = () => { /* 原预览保留 */ };
+    });
+  });
+  chain = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+// 页面整个生命周期持有锁；复制标签页的 sessionStorage 相同，也不能共用写入目标。
+const owned = new Set<string>();
+const claims = new Map<string, Promise<string>>();
+const forkSources = new Map<string, string>();
+async function reserve(key: string) {
+  if (!navigator.locks) return false;
+  return new Promise<boolean>((resolve, reject) => {
+    void navigator.locks.request(`qingxiaolu-import:${key}`, { ifAvailable: true }, async lock => {
+      if (!lock) { resolve(false); return; }
+      owned.add(key); resolve(true);
+      // 浏览器在页面关闭或导航时释放；离开导入面板仍保护本页面的预览。
+      await new Promise<void>(() => {});
+    }).catch(reject);
+  });
+}
+
+export function claimImportPreview(key: string): Promise<string> {
+  if (claims.has(key)) return claims.get(key)!;
+  const result = (async () => {
+    const source = await loadImportPreview(key);
+    // 旧版本没有页面锁，迁移时先另存副本，保留仍打开的旧页面原有写入目标。
+    if ((!source || source.leaseVersion === 1) && await reserve(key)) return key;
+    const kind = key.split(":")[0];
+    const independent = `${kind}:${crypto.randomUUID()}`;
+    await reserve(independent);
+    if (source) await saveImportPreview(independent, { ...source,
+      candidates: source.candidates.map(item => ({ ...item, id: crypto.randomUUID() })) });
+    forkSources.set(independent, key);
+    claims.set(independent, Promise.resolve(independent));
+    return independent;
+  })();
+  claims.set(key, result);
+  void result.catch(() => { claims.delete(key); });
+  return result;
+}
+
+export async function discardImportPreview(key: string) {
+  if (!navigator.locks || owned.has(key)) return removeImportPreview(key);
+  return navigator.locks.request(`qingxiaolu-import:${key}`, { ifAvailable: true }, async lock => {
+    if (!lock) throw new Error("该预览正在其他页面使用，请先关闭那个页面，再丢弃预览。");
+    await removeImportPreview(key);
+  });
 }
