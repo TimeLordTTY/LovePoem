@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { csvCandidates, decodeDocument, parseCsv, parseXmindJson, outlineText } from "../work/writing-tests/importers/documentParsing.mjs";
 import { candidate } from "../work/writing-tests/importers/types.mjs";
 import { commitImport } from "../work/writing-tests/importers/importCommit.mjs";
+import { pdfText, pdfPixels } from "../work/writing-tests/importers/pdfParsing.mjs";
 class MemoryStorage {
   data = new Map(); failKey = "";
   getItem(key) { return this.data.get(key) ?? null; }
@@ -12,6 +13,19 @@ class MemoryStorage {
 beforeEach(() => { globalThis.localStorage = new MemoryStorage(); });
 const read = key => JSON.parse(localStorage.getItem(key));
 const items = () => [candidate("txt", "TXT", "第一篇", "正文一"), candidate("txt", "TXT", "第二篇", "正文二")];
+test("PDF 保留换行、段落和中文相邻文字，不把一页合成长行", () => {
+  const item=(str,x,y,hasEOL=false)=>({str,transform:[1,0,0,12,x,y],height:12,width:str.length*12,hasEOL});
+  assert.equal(pdfText([item("海边",0,100),item("小城",24,100,true),item("另一行",0,81,true),item("新的段落",0,43)]),"海边小城\n另一行\n\n新的段落");
+  assert.equal(pdfText([item("first",0,100),item("word",72,100)]),"first word");
+  assert.equal(pdfText([{type:"beginMarkedContent"},item("正文",0,100)]),"正文");
+});
+test("PDF 图片像素保留 RGB、透明通道与每行不足 8 位的灰度图", () => {
+  assert.deepEqual([...pdfPixels({width:1,height:1,kind:2,data:Uint8Array.from([17,23,99])})],[17,23,99,255]);
+  assert.deepEqual([...pdfPixels({width:1,height:1,kind:3,data:Uint8Array.from([17,23,99,42])})],[17,23,99,42]);
+  const grey=pdfPixels({width:3,height:2,kind:1,data:Uint8Array.from([0b10100000,0b01000000])});
+  assert.deepEqual([grey[0],grey[4],grey[8],grey[12],grey[16],grey[20]],[255,0,255,0,255,0]);
+  assert.throws(()=>pdfPixels({width:2,height:1,kind:2,data:Uint8Array.from([1,2,3])}),/完整解码/);
+});
 test("CSV 保留中文、引号逗号、跨行正文和原日期，并逐篇预览", () => {
   const entries = csvCandidates('\uFEFF标题,正文,日期\r\n海边,"风,海\n说""你好""",2026-09-28\r\n雨夜,雨声,2026-09-29', "日记.csv");
   assert.equal(entries.length, 2); assert.equal(entries[0].text, '风,海\n说"你好"');

@@ -7,6 +7,7 @@ export default defineConfig({
   root: resolve(__dirname, "mobile"),
   base: "./",
   publicDir: resolve(__dirname, "public"),
+  worker: { format: "es" },
   plugins: [
     react(),
     {

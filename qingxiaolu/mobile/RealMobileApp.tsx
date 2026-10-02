@@ -639,6 +639,9 @@ export default function RealMobileApp() {
                     image && <img key={index} src={image} alt="" referrerPolicy="no-referrer" />)}
                 </div>}
                 <div className="article-actions"><button onClick={() => editItem(item)}>继续编辑</button>
+                  {item.payload.content?.importSource === "pdf" && typeof item.payload.content?.importRaw?.originalPdf === "string" &&
+                    item.payload.content.importRaw.originalPdf.startsWith("data:application/pdf;base64,") &&
+                    <a href={item.payload.content.importRaw.originalPdf} download={item.payload.content.importRaw.fileName || "原始文档.pdf"}>下载原始 PDF</a>}
                   {item.payload.content?.publicationState === "ready" &&
                     item.payload.content?.visibility === "public" &&
                     <button onClick={() => setWebsiteItem(item)}>上传网站</button>}

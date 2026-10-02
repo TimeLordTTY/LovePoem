@@ -1,9 +1,10 @@
 import mammoth from "mammoth";
 import * as pdfjs from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?worker&url";
 import JSZip from "jszip";
 import { candidate, type ImportAdapter, type ImportCandidate, type ImportContext, type ImportSource } from "./types";
 import { decodeDocument, csvCandidates, parseOutlineXml, parseXmindJson, outlineText, wordHtmlText, safeImageSource } from "./documentParsing";
+import { readPdfContent } from "./pdfParsing";
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
@@ -19,14 +20,19 @@ function sourceFor(file: File): ImportSource {
 }
 
 async function readPdf(file: File) {
-  const document = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-  const pages: string[] = [];
-  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
-    const page = await document.getPage(pageNumber);
-    const content = await page.getTextContent();
-    pages.push(content.items.map((item: any) => item.str || "").join(" "));
-  }
-  return pages.join("\n\n");
+  const originalPdf = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(new Blob([file], { type: "application/pdf" }));
+  });
+  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  try {
+    const document = await task.promise;
+    const result = await readPdfContent(document, pdfjs.OPS);
+    return { ...result, raw: { ...result.raw, originalPdf } };
+  } catch (error) {
+    if ((error as Error).name === "PasswordException") throw new Error("PDF 受到密码保护，请先解锁原文件后重新导入。");
+    throw error;
+  } finally { await task.destroy(); }
 }
 
 async function readFile(file: File): Promise<{ text: string; images?: string[]; warnings?: string[]; raw?: Record<string, unknown> }> {
@@ -60,7 +66,7 @@ async function readFile(file: File): Promise<{ text: string; images?: string[]; 
     });
     return { ...wordHtmlText(result.value), warnings: result.messages.length ? ["文档含部分无法原样还原的样式，请核对预览中的段落和插图。"] : [] };
   }
-  if (source === "pdf") return { text: await readPdf(file), warnings: ["PDF 按文字解析，原始分页和图片未提取；请在预览中核对内容。"] };
+  if (source === "pdf") return readPdf(file);
   return decodeDocument(await file.arrayBuffer());
 }
 

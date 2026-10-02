@@ -261,6 +261,8 @@ export default function HistoryImport({
             <button className="remove" onClick={() => setCandidates((items) => items.filter((entry) => entry.id !== item.id))}>删除</button>
             <small>{item.sourceLabel}{item.publishedAt ? ` · ${item.publishedAt}` : ""}</small>
             {item.warnings?.map((warning, index) => <p key={index} role="note">{warning}</p>)}
+            {item.source === "pdf" && typeof (item.raw as any)?.originalPdf === "string" && (item.raw as any).originalPdf.startsWith("data:application/pdf;base64,") &&
+              <a href={(item.raw as any).originalPdf} download={(item.raw as any).fileName || `${item.title}.pdf`}>下载原始 PDF 核对</a>}
             {Array.isArray((item.raw as any)?.outlineEntries) && <button onClick={() => splitOutline(item)}>按导图节点拆分</button>}
             {item.source !== "qqzone" && <input value={item.title}
               onChange={(event) => update(item.id, { title: event.target.value })} />}
