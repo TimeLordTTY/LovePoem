@@ -452,13 +452,17 @@ export default function RealMobileApp() {
   }} />);
   if (versionItem) return pageWithNavigation(<VersionHistory item={versionItem} close={() => setVersionItem(null)}
     onRestore={(version) => {
+      editorPosition.current = { start: 0, end: 0, scroll: 0 };
+      setEditorSession((value) => value + 1);
+      setAutoSavedAt("");
       setEditingId(String(versionItem.id));
       setTitle(String(version.title || ""));
       setBody(String(version.content?.text || ""));
       setImages(Array.isArray(version.content?.images) ? version.content.images : []);
       setCreationType(version.itemType === "idea" ? "idea" : "article");
       setActiveProjectId(String(version.projectId || ""));
-      setEditingMetadata(version.content || {});
+      setEditingMetadata({ ...(version.content || {}), projectId: version.projectId || version.content?.projectId || "",
+        _baseRevision: Number(versionItem.revision || versionItem.payload?.baseRevision || 0), syncToServer: false });
       setVersionItem(null);
       setTab("创作");
     }} />);
