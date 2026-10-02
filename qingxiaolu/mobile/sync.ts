@@ -1,6 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import { BackgroundRunner } from "@capacitor/background-runner";
 import { readStored, changeJson } from "./storage";
+import { prepareSyncBatch, type ContentMemo } from "./sync-content";
 
 const API = "https://poem.timelordtty.cn/qingxiaolu-api";
 const TOKEN_KEY = "qx_sync_token";
@@ -179,8 +180,9 @@ export async function fetchServerItems() {
   let cursor = 0;
   const latest = new Map<string, any>();
   let hasMore = true;
+  let watermark = 0;
   while (hasMore) {
-    const response = await fetch(`${API}/v1/sync/pull?cursor=${cursor}&limit=500`, {
+    const response = await fetch(`${API}/v1/sync/pull?cursor=${cursor}&limit=500&snapshot=1${watermark ? `&watermark=${watermark}` : ""}`, {
       headers: { authorization: `Bearer ${token}` },
     });
     if (response.status === 401) {
@@ -189,6 +191,7 @@ export async function fetchServerItems() {
     }
     if (!response.ok) throw new Error("读取服务器数据失败");
     const page = await response.json();
+    watermark = Number(page.watermark || watermark);
     for (const change of page.changes) latest.set(change.id, change);
     cursor = page.nextCursor;
     hasMore = page.hasMore;
@@ -225,7 +228,10 @@ export function getLocalItems() {
 }
 
 export function getCachedServerItems(): any[] {
-  return JSON.parse(readStored("qx_server_cache") || "[]").map((item: any) => ({ ...item, revision: item.revision || item.payload?.revision, syncState: "synced" }));
+  return JSON.parse(readStored("qx_server_cache") || "[]").map((item: any) => ({ ...item,
+    cursorSeq: item.cursorSeq || item.seq,
+    seq: Date.parse(String(item.changedAt || item.payload?.savedAt || "")) || item.seq,
+    revision: item.revision || item.payload?.revision, syncState: "synced" }));
 }
 
 export function getSyncConflicts(): any[] {
@@ -291,19 +297,23 @@ export async function resolveSyncConflict(id: string, choice: "cloud" | "local" 
 let runningSync: Promise<void> | null = null;
 export async function syncNow(force = true) {
   if (runningSync) return runningSync;
-  runningSync = pushPending(force).finally(() => { runningSync = null; });
+  runningSync = pushPending(force, new Map()).finally(() => { runningSync = null; });
   return runningSync;
 }
 
-async function pushPending(force: boolean) {
+async function pushPending(force: boolean, memo: ContentMemo) {
   const token = readStored(TOKEN_KEY);
   if (!token) return;
-    const changes = JSON.parse(readStored("qx_web_outbox") || "[]").slice(0, 500);
+    const pending = JSON.parse(readStored("qx_web_outbox") || "[]");
+    let batch;
+    try { batch = await prepareSyncBatch(pending, API, token, memo); }
+    catch (error) { if ((error as Error).message.includes("登录状态已失效")) localStorage.removeItem(TOKEN_KEY); throw error; }
+    const changes = batch.changes;
     if (!changes.length) return;
     const response = await fetch(`${API}/v1/sync/push`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ deviceId: "qingxiaolu-web", changes }),
+      body: batch.body,
     });
     if (response.status === 401) { localStorage.removeItem(TOKEN_KEY); throw new Error("登录状态已失效，请重新登录"); }
     if (!response.ok) throw new Error("同步失败");
@@ -330,6 +340,6 @@ async function pushPending(force: boolean) {
         }) }, result: remaining };
     });
     if (conflictIds.size) throw new Error(`有 ${conflictIds.size} 篇稿件有版本冲突，请在稿件库选择保留方式，两版都已保留。`);
-    if (remaining.length && appliedIds.size) await pushPending(force);
+    if (remaining.length && appliedIds.size) await pushPending(force, memo);
     else if (remaining.length) throw new Error("云端未确认保存，待同步内容仍保留在本机，请稍后重试。");
 }

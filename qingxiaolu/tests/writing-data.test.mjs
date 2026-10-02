@@ -17,6 +17,11 @@ const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, 
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
 
+test("云端稿件的展示时间使用实际改稿日期，保留原同步序号用于游标", () => {
+  localStorage.setItem("qx_server_cache",JSON.stringify([{...cloud("dated"),changedAt:"2026-10-03T02:00:00.000Z"}]));
+  const item=getLocalItems()[0];assert.equal(item.seq,Date.parse("2026-10-03T02:00:00.000Z"));assert.equal(item.cursorSeq,42);
+});
+
 test("旧页面恢复备份保留草稿与图片，排除 AI 密钥等凭据", async () => {
   const backup = await createSnapshotBackup({ qx_drafts: JSON.stringify([payload("legacy")]),
     qx_project_workspaces: JSON.stringify({ project: {world:"旧页面资料", aiKey:"test-only"} }),
