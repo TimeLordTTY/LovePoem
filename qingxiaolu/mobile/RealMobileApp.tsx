@@ -347,10 +347,11 @@ export default function RealMobileApp() {
     setTab("创作");
   }
 
-  async function newDraft(projectId = "", chapterId = "") {
+  async function newDraft(projectId = "", chapterId = "", type: "article" | "idea" = "article") {
     try {
       await saveLocalDraft();
       setTitle(""); setBody(""); setImages([]); setEditingId(""); setAutoSavedAt("");
+      setCreationType(type);
       setEditingMetadata({ projectId, chapterId }); setActiveProjectId(projectId);
       localStorage.removeItem("qx_editor_autosave");
       editorPosition.current = { start: 0, end: 0, scroll: 0 };
@@ -435,9 +436,7 @@ export default function RealMobileApp() {
       const recent = articles.filter((item) => String(item.payload.projectId || item.payload.content?.projectId || "") === String(openProject.id))
         .sort((a, b) => Number(b.seq || 0) - Number(a.seq || 0))[0];
       if (recent) { setOpenProject(null); editItem(recent); return; }
-      setActiveProjectId(String(openProject.id));
-      setOpenProject(null);
-      setTab("创作");
+      void newDraft(String(openProject.id));
     }} onUpdated={(nextTitle, content) => {
       setItems(getLocalItems());
       setOpenProject((current: any) => current ? {
@@ -483,6 +482,7 @@ export default function RealMobileApp() {
     position={editorPosition.current}
     onPosition={(value) => { editorPosition.current = value; }}
     onNewDraft={() => void newDraft(editingMetadata.projectId ?? activeProjectId)}
+    onNewIdea={() => void newDraft(editingMetadata.projectId ?? activeProjectId, "", "idea")}
     onBackup={() => void exportAll()}
     onSave={(metadata) => void save(creationType, metadata)}
   />{loginPanel}</>;
@@ -724,7 +724,7 @@ function ArticleEditor({
   initialProjectId,
   initialMetadata,
   autoSavedAt,
-  message, onMetadata, position, onPosition, onNewDraft, onBackup,
+  message, onMetadata, position, onPosition, onNewDraft, onNewIdea, onBackup,
 }: {
   title: string;
   body: string;
@@ -746,6 +746,7 @@ function ArticleEditor({
   position: { start: number; end: number; scroll: number };
   onPosition: (position: { start: number; end: number; scroll: number }) => void;
   onNewDraft: () => void;
+  onNewIdea: () => void;
   onBackup: () => void;
 }) {
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -850,6 +851,7 @@ function ArticleEditor({
       {message && <div className="real-message" role="status">{message}</div>}
       <div className="writing-tools">
         <button onClick={onNewDraft}>新稿件</button>
+        <button onClick={onNewIdea}>新灵感</button>
         <button onClick={onBackup}>完整备份</button>
         <button className="focus-toggle" onClick={() => { if (!focused) setShowReference(false); setFocused(!focused); }}>{focused ? "退出专注" : "专注写作"}</button>
         <button onClick={() => setShowReference(!showReference)}>{showReference ? "收起资料" : "查看项目资料"}</button>

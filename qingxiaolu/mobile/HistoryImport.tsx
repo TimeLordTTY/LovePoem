@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { importAdapters, type ImportCandidate, type ImportMode } from "./importers";
-import { queueItem } from "./sync";
+import { candidate } from "./importers/types";
+import { commitImport } from "./importers/importCommit";
 import { nativeCaptureAvailable, openNativeCaptureSettings } from "./nativeHistory";
-import { appendProjectImport } from "./ProjectWorkspace";
 
 const modeLabels: Record<ImportMode, string> = {
   browser: "电脑网页辅助",
@@ -28,6 +28,9 @@ export default function HistoryImport({
   const [targetProjectId, setTargetProjectId] = useState("");
   const [targetCategory, setTargetCategory] = useState("正文");
   const [pastedResult, setPastedResult] = useState("");
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [skipDuplicates, setSkipDuplicates] = useState(true);
   const isAndroid = nativeCaptureAvailable();
   const platformUrls: Record<string, string> = {
     weibo: "https://weibo.com/",
@@ -35,6 +38,7 @@ export default function HistoryImport({
   };
 
   function goBack() {
+    if (busyRef.current) return;
     if (step === "preview") {
       setStep("source");
       setCandidates([]);
@@ -51,6 +55,8 @@ export default function HistoryImport({
   });
 
   async function importFiles(files: File[]) {
+    if (busyRef.current || !files.length) return;
+    busyRef.current = true; setBusy(true);
     setMessage("正在解析文件…");
     try {
       const adapter = importAdapters.find((item) => item.id === "other")!;
@@ -60,7 +66,7 @@ export default function HistoryImport({
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "文件解析失败");
-    }
+    } finally { busyRef.current = false; setBusy(false); if (fileInput.current) fileInput.current.value = ""; }
   }
 
   async function importPastedResult() {
@@ -90,41 +96,39 @@ export default function HistoryImport({
   }
 
   async function commit() {
+    if (busyRef.current) return;
     const selected = candidates.filter((item) => item.selected);
     if (!selected.length) return setMessage("请至少选择一条内容");
     setMessage(`正在导入 ${selected.length} 条…`);
-    for (const item of selected) {
-      if (kind === "documents" && targetProjectId && targetCategory !== "正文") {
-        appendProjectImport(targetProjectId, targetCategory, item.title || item.text.slice(0, 20), item.text);
-        continue;
-      }
-      const savedTitle = item.source === "qqzone" ? "" : (item.title || item.text.slice(0, 20));
-      await queueItem("article", savedTitle, {
-        text: item.text,
-        imported: true,
-        importSource: item.source,
-        sourceLabel: item.sourceLabel,
-        publishedAt: item.publishedAt,
-        images: item.images,
-        originalUrl: item.originalUrl,
-        projectId: targetProjectId || undefined,
-        materialCategory: kind === "documents" ? targetCategory : undefined,
-      }, targetProjectId || undefined);
+    busyRef.current = true; setBusy(true);
+    try {
+      const result = commitImport(selected, { projectId: targetProjectId, category: kind === "documents" ? targetCategory : "正文", skipDuplicates });
+      setMessage(`已正式导入 ${result.added} 条内容${result.skipped ? `，跳过 ${result.skipped} 条相同内容` : ""}`);
+      window.setTimeout(close, 800);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "导入失败，预览内容已保留，请重试。");
+      busyRef.current = false; setBusy(false);
     }
-    setMessage(`已正式导入 ${selected.length} 条内容`);
-    window.setTimeout(close, 800);
+  }
+
+  function splitOutline(item: ImportCandidate) {
+    const entries = (item.raw as any)?.outlineEntries;
+    if (!Array.isArray(entries)) return;
+    const nodes = entries.filter((entry: any, index: number) => entry.text || !entries[index + 1] || entries[index + 1].depth <= entry.depth);
+    setCandidates(items => items.flatMap(entry => entry.id !== item.id ? [entry] : nodes.map((node: any) =>
+      candidate(item.source, item.sourceLabel, node.title, node.text || node.title, { raw: { ...(item.raw as any), outlineEntries: undefined, outlineDepth: node.depth }, warnings: item.warnings }))));
   }
 
   return (
     <div className="history-import">
-      <header><button onClick={goBack}>‹ 返回</button><div>
+      <header><button disabled={busy} onClick={goBack}>‹ 返回</button><div>
         <b>{kind === "documents" ? "导入本地文档" : "历史导入"}</b>
         <span>{kind === "documents" ? "解析后先预览，再保存到项目" : "一次性导入，不会实时同步"}</span>
       </div></header>
       {message && <div className="import-message">{message}</div>}
       <input ref={fileInput} hidden multiple type="file"
         accept={kind === "documents"
-          ? ".docx,.txt,.md,.markdown,.pdf,.json,.xmind,.mm,.opml,.csv,text/plain,text/markdown,application/pdf,application/json"
+          ? ".doc,.docx,.txt,.md,.markdown,.pdf,.json,.xmind,.mm,.opml,.csv,text/plain,text/markdown,application/pdf,application/json"
           : ".json,application/json"}
         onChange={(event) => void importFiles(Array.from(event.target.files || []))} />
 
@@ -156,7 +160,7 @@ export default function HistoryImport({
         </div>}
       </section>}
 
-      {step === "preview" && <section>
+      {step === "preview" && <section><fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
         <div className="preview-head"><div><h1>临时预览</h1><p>可以勾选、修改或删除，再正式导入。</p></div>
           <button onClick={() => { setStep("source"); setCandidates([]); }}>重新选择</button></div>
         {kind === "documents" && <div className="import-destination">
@@ -168,12 +172,15 @@ export default function HistoryImport({
             {["正文", "大纲", "人物", "背景", "时间轴", "资料"].map((name) => <option key={name}>{name}</option>)}
           </select></label>
         </div>}
+        <label><input type="checkbox" checked={skipDuplicates} onChange={event => setSkipDuplicates(event.target.checked)} /> 跳过已导入的相同内容</label>
         <div className="candidate-list">
           {candidates.map((item) => <article key={item.id}>
             <label><input type="checkbox" checked={item.selected}
               onChange={(event) => update(item.id, { selected: event.target.checked })} /> 导入</label>
             <button className="remove" onClick={() => setCandidates((items) => items.filter((entry) => entry.id !== item.id))}>删除</button>
             <small>{item.sourceLabel}{item.publishedAt ? ` · ${item.publishedAt}` : ""}</small>
+            {item.warnings?.map((warning, index) => <p key={index} role="note">{warning}</p>)}
+            {Array.isArray((item.raw as any)?.outlineEntries) && <button onClick={() => splitOutline(item)}>按导图节点拆分</button>}
             {item.source !== "qqzone" && <input value={item.title}
               onChange={(event) => update(item.id, { title: event.target.value })} />}
             <textarea value={item.text} onChange={(event) => update(item.id, { text: event.target.value })} />
@@ -187,7 +194,7 @@ export default function HistoryImport({
         </div>
         <button className="commit-import" onClick={() => void commit()}>
           正式导入已选内容（{candidates.filter((item) => item.selected).length}）
-        </button>
+        </button></fieldset>
       </section>}
     </div>
   );

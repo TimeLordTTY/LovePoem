@@ -1,5 +1,5 @@
 export type ImportSource =
-  | "weibo" | "qqzone" | "wechat" | "yiyan" | "word" | "txt" | "markdown" | "pdf" | "other";
+  | "weibo" | "qqzone" | "wechat" | "yiyan" | "word" | "txt" | "markdown" | "pdf" | "csv" | "other";
 
 export type ImportMode = "browser" | "root" | "accessibility" | "ocr" | "file";
 
@@ -14,6 +14,7 @@ export type ImportCandidate = {
   originalUrl?: string;
   selected: boolean;
   raw?: unknown;
+  warnings?: string[];
 };
 
 export type ImportContext = {
