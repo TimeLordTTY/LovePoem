@@ -4,7 +4,7 @@ import { App as CapacitorApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import {
   disconnectSync, fetchServerItems, hasSyncLogin, loginSync, queueItem, syncNow,
-  getLocalItems, selectItemsForSync,
+  getLocalItems, selectItemsForSync, getEditorBaseRevision,
   deleteLocalItem, getLocallyDeletedIds,
   getItemVersions, getLocalTrash, restoreLocalTrashItem, permanentlyDeleteLocalTrashItem,
   getSyncConflicts, resolveSyncConflict,
@@ -43,6 +43,8 @@ export default function RealMobileApp() {
   const [connected, setConnected] = useState(hasSyncLogin());
   const [tab, setTab] = useState<Tab>(initialEditorDraft.body || initialEditorDraft.title || initialEditorDraft.images?.length ? "创作" : "项目");
   const [editorSession, setEditorSession] = useState(0);
+  const [editorPageId] = useState(() => crypto.randomUUID());
+  const editorSessionId = `${editorPageId}:${editorSession}`;
   const [changingDraft, setChangingDraft] = useState(false);
   const changingDraftRef = useRef(false);
   const [items, setItems] = useState<any[]>(getLocalItems);
@@ -153,10 +155,16 @@ export default function RealMobileApp() {
 
   useEffect(() => { if (connected) void refresh(false); }, [connected]);
   useEffect(() => {
-    const changed = () => { setItems(getLocalItems()); setConflicts(getSyncConflicts()); };
+    const changed = () => {
+      setItems(getLocalItems()); setConflicts(getSyncConflicts());
+      setEditingMetadata(current => {
+        const revision = getEditorBaseRevision(editingId, editorSessionId, Number(current._baseRevision || 0));
+        return revision === Number(current._baseRevision || 0) ? current : { ...current, _baseRevision: revision };
+      });
+    };
     window.addEventListener("qx-writing-change", changed);
     return () => window.removeEventListener("qx-writing-change", changed);
-  }, []);
+  }, [editingId, editorSessionId]);
 
   async function saveLocalDraft() {
     if (!title.trim() && !body.trim() && !images.length) return;
@@ -169,7 +177,7 @@ export default function RealMobileApp() {
     setEditingId(id);
     await queueItem(creationType, title.trim() || body.trim().slice(0, 20) || "图片稿件", content,
       projectId || undefined, false, id, Number(editingMetadata._baseRevision || 0), false,
-      { qx_editor_autosave: { title, body, images, creationType, projectId, editingId: id,
+      { qx_editor_autosave: { title, body, images, creationType, projectId, editingId: id, sessionId: editorSessionId,
         savedAt, metadata: editingMetadata, position: editorPosition.current } });
     setAutoSavedAt(savedAt);
     setItems(getLocalItems());
@@ -181,7 +189,7 @@ export default function RealMobileApp() {
       void saveLocalDraft().catch((error) => { setAutoSavedAt(""); setMessage(error.message); });
     }, 900);
     return () => window.clearTimeout(timer);
-  }, [title, body, images, creationType, activeProjectId, editingId, editingMetadata, tab]);
+  }, [title, body, images, creationType, activeProjectId, editingId, editingMetadata, editorSessionId, tab]);
 
   useEffect(() => {
     const leave = (event: BeforeUnloadEvent) => {
@@ -251,7 +259,7 @@ export default function RealMobileApp() {
     const savedId = await queueItem(
       type, savedTitle, savedContent, metadata.projectId || undefined, Boolean(metadata.syncToServer),
       requestedId, Number(_baseRevision || 0), true,
-      { qx_editor_autosave: { title, body, images, creationType: type, projectId: metadata.projectId || "", editingId: requestedId,
+      { qx_editor_autosave: { title, body, images, creationType: type, projectId: metadata.projectId || "", editingId: requestedId, sessionId: editorSessionId,
         savedAt, metadata, position: editorPosition.current } },
     );
     setItems(getLocalItems());
@@ -261,8 +269,8 @@ export default function RealMobileApp() {
     setMessage(metadata.syncToServer ? "本机已保存，正在同步所选稿件…" : "已保存到本机，可以继续写作");
     if (metadata.syncToServer && !hasSyncLogin()) { setMessage("本机已保存，登录后可同步这篇稿件"); setShowLogin(true); }
     else if (metadata.syncToServer) await refresh();
-    const updated = getLocalItems().find((item) => item.id === savedId);
-    if (updated) setEditingMetadata((current) => ({ ...current, _baseRevision: Number(updated.revision || 0) }));
+    setEditingMetadata(current => ({ ...current,
+      _baseRevision: getEditorBaseRevision(savedId, editorSessionId, Number(current._baseRevision || 0)) }));
     } catch (error) { setAutoSavedAt(""); setMessage(error instanceof Error ? error.message : "保存失败，请保留编辑内容"); }
   }
 

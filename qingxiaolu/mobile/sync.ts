@@ -35,6 +35,13 @@ export async function queueDraft(title: string, content: string) {
   return queueItem("idea", title, { text: content });
 }
 
+// 只沿用同一编辑会话收到的同步确认；不能把尚未读过的云端版本当成编辑基线。
+export function getEditorBaseRevision(id: string, session: string, fallback = 0) {
+  const editor = JSON.parse(readStored("qx_editor_autosave") || "null");
+  return session && editor?.editingId === id && editor?.sessionId === session
+    ? Math.max(fallback, Number(editor.metadata?._baseRevision || 0)) : fallback;
+}
+
 export function queueLocalBatch(changes: any[], extra: Record<string, unknown> | (() => Record<string, unknown>) = {}) {
   return changeJson(() => {
   if (new Set(changes.map(change => change.id)).size !== changes.length) throw new Error("导入内容含重复的稿件 ID，尚未导入任何内容。请核对文件。");
@@ -70,20 +77,26 @@ export async function queueItem(
   const id = itemId || crypto.randomUUID();
   return changeJson(() => {
   const additional = typeof extra === "function" ? extra() : extra;
+  const editor = additional.qx_editor_autosave as any;
+  const revision = editor?.sessionId ? getEditorBaseRevision(id, editor.sessionId, baseRevision) : baseRevision;
+  if (editor) additional.qx_editor_autosave = { ...editor, metadata: { ...editor.metadata, _baseRevision: revision } };
   const change = {
     id,
     itemType,
     projectId,
     title,
     content,
-    baseRevision,
+    baseRevision: revision,
     deleted: false,
   };
   const local = JSON.parse(readStored("qx_drafts") || "[]");
   const previous = local.find((item: any) => item.id === id) ||
     getCachedServerItems().find((item: any) => item.id === id)?.payload;
   if (!sendToServer && previous && previous.title === title && previous.projectId === projectId &&
-    JSON.stringify(previous.content) === JSON.stringify(content)) return { values: additional, result: id };
+    JSON.stringify(previous.content) === JSON.stringify(content)) return { values: { ...additional,
+      ...(editor?.sessionId && local.some((item: any) => item.id === id) ? {
+        qx_drafts: local.map((item: any) => item.id === id ? { ...item, editorSessionId: editor.sessionId } : item),
+      } : {}) }, result: id };
   const values: Record<string, unknown> = { ...additional };
   if (previous && (previous.title !== title || JSON.stringify(previous.content) !== JSON.stringify(content))) {
     const versions = JSON.parse(readStored("qx_item_versions") || "{}");
@@ -96,7 +109,8 @@ export async function queueItem(
     }
   }
   const withoutOld = local.filter((item: any) => item.id !== id);
-  withoutOld.unshift({ ...change, savedAt: new Date().toISOString(), syncState: sendToServer ? "pending" : "local" });
+  withoutOld.unshift({ ...change, ...(editor?.sessionId ? { editorSessionId: editor.sessionId } : {}),
+    savedAt: new Date().toISOString(), syncState: sendToServer ? "pending" : "local" });
   values.qx_drafts = withoutOld;
   // 当前页面上的手动同步在网页和 Android 共用队列，错误和冲突也共用界面。
   if (sendToServer) {
@@ -305,6 +319,13 @@ async function pushPending(force: boolean, memo: ContentMemo) {
   const token = readStored(TOKEN_KEY);
   if (!token) return;
     const pending = JSON.parse(readStored("qx_web_outbox") || "[]");
+    const origins = new Map<string, string | null | undefined>(JSON.parse(readStored("qx_drafts") || "[]").map((item: any) => {
+      const submitted = pending.find((entry: any) => entry.id === item.id);
+      const matches = submitted && item.title === submitted.title && item.itemType === submitted.itemType &&
+        item.projectId === submitted.projectId && Number(item.baseRevision || 0) === Number(submitted.baseRevision || 0) &&
+        JSON.stringify(item.content) === JSON.stringify(submitted.content);
+      return [item.id, matches ? item.editorSessionId : null];
+    }));
     let batch;
     try { batch = await prepareSyncBatch(pending, API, token, memo); }
     catch (error) { if ((error as Error).message.includes("登录状态已失效")) localStorage.removeItem(TOKEN_KEY); throw error; }
@@ -324,18 +345,27 @@ async function pushPending(force: boolean, memo: ContentMemo) {
     const conflicts = [...getSyncConflicts().filter((item: any) => !conflictIds.has(item.id)),
       ...(result.conflicts || []).map((item: any) => ({ ...item, local: changes.find((change: any) => change.id === item.id) }))];
     const submitted = new Map(changes.map((item: any) => [item.id, JSON.stringify(item)]));
+    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+    const sameSession = (id: string) => origins.get(id) === drafts.find((item: any) => item.id === id)?.editorSessionId;
     const remaining = JSON.parse(readStored("qx_web_outbox") || "[]").filter((item: any) =>
       !appliedIds.has(String(item.id)) || JSON.stringify(item) !== submitted.get(item.id)).map((item: any) => {
         const applied = (result.applied || []).find((entry: any) => entry.id === item.id);
-        return applied ? { ...item, baseRevision: applied.revision } : item;
+        return applied && sameSession(item.id) ? { ...item, baseRevision: applied.revision } : item;
       });
-    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
-    return { values: { qx_web_outbox: remaining, qx_sync_conflicts: conflicts, qx_drafts:
+    const editor = JSON.parse(readStored("qx_editor_autosave") || "null");
+    const editorApplied = (result.applied || []).find((item: any) => item.id === editor?.editingId);
+    const editorSent = changes.find((item: any) => item.id === editor?.editingId);
+    const editorConfirmed = editorApplied && editor?.sessionId && origins.get(editor.editingId) === editor.sessionId &&
+      Number(editor.metadata?._baseRevision || 0) === Number(editorSent?.baseRevision || 0);
+    return { values: { ...(editorConfirmed ? { qx_editor_autosave: { ...editor,
+        metadata: { ...editor.metadata, _baseRevision: editorApplied.revision } } } : {}),
+      qx_web_outbox: remaining, qx_sync_conflicts: conflicts, qx_drafts:
         drafts.map((item: any) => {
           const applied = (result.applied || []).find((entry: any) => entry.id === item.id);
           const sent = changes.find((entry: any) => entry.id === item.id);
           const unchanged = sent && item.title === sent.title && JSON.stringify(item.content) === JSON.stringify(sent.content);
-          return applied ? { ...item, baseRevision: applied.revision, syncState: unchanged ? "synced" : remaining.some((entry: any) => entry.id === item.id) ? "pending" : "local" } :
+          return applied ? { ...item, baseRevision: unchanged || sameSession(item.id) ? applied.revision : item.baseRevision,
+            syncState: unchanged ? "synced" : remaining.some((entry: any) => entry.id === item.id) ? "pending" : "local" } :
             conflictIds.has(item.id) ? { ...item, syncState: "conflict" } : item;
         }) }, result: remaining };
     });

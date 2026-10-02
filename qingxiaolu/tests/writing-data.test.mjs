@@ -90,6 +90,69 @@ test("同步在途继续改稿，响应不会把新文字标成已同步或清�
   assert.equal(getLocalItems()[0].revision, 1);
 });
 
+const editorExtra = (text, sessionId = "editor-a", base = 0) => ({ qx_editor_autosave: {
+  editingId: "a", sessionId, title: "稿件", body: text, metadata: { _baseRevision: base },
+} });
+
+test("列表同步确认更新同一编辑会话，旧闭包自动保存不重置基线", async () => {
+  localStorage.setItem("qx_sync_token", "test-only");
+  await queueItem("article", "稿件", { text: "初稿" }, undefined, true, "a", 0, true, editorExtra("初稿"));
+  globalThis.fetch = async () => response({ applied: [{ id: "a", revision: 1 }], conflicts: [] });
+  await syncNow();
+  assert.equal(JSON.parse(localStorage.getItem("qx_editor_autosave")).metadata._baseRevision, 1);
+  await queueItem("article", "稿件", { text: "继续写" }, undefined, false, "a", 0, false, editorExtra("继续写"));
+  assert.equal(read("qx_drafts")[0].baseRevision, 1);
+  assert.equal(JSON.parse(localStorage.getItem("qx_editor_autosave")).metadata._baseRevision, 1);
+});
+
+test("同一编辑会话同步在途继续写作，确认只更新基线并保留新正文", async () => {
+  localStorage.setItem("qx_sync_token", "test-only");
+  await queueItem("article", "稿件", { text: "初稿" }, undefined, true, "a", 0, true, editorExtra("初稿"));
+  let finish; globalThis.fetch = () => new Promise(resolve => { finish = resolve; });
+  const syncing = syncNow();
+  await queueItem("article", "稿件", { text: "在途新稿" }, undefined, false, "a", 0, false, editorExtra("在途新稿"));
+  finish(response({ applied: [{ id: "a", revision: 1 }], conflicts: [] })); await syncing;
+  const editor = JSON.parse(localStorage.getItem("qx_editor_autosave"));
+  assert.equal(editor.body, "在途新稿"); assert.equal(editor.metadata._baseRevision, 1);
+  assert.equal(read("qx_drafts")[0].content.text, "在途新稿");
+});
+
+test("另一个编辑会话的在途修改不借用前一会话的确认基线", async () => {
+  localStorage.setItem("qx_sync_token", "test-only");
+  await queueItem("article", "稿件", { text: "A 的稿" }, undefined, true, "a", 0, true, editorExtra("A 的稿"));
+  let finish; globalThis.fetch = () => new Promise(resolve => { finish = resolve; });
+  const syncing = syncNow();
+  await queueItem("article", "稿件", { text: "B 的稿" }, undefined, false, "a", 0, false, editorExtra("B 的稿", "editor-b"));
+  finish(response({ applied: [{ id: "a", revision: 1 }], conflicts: [] })); await syncing;
+  assert.equal(read("qx_drafts")[0].baseRevision, 0);
+  assert.equal(JSON.parse(localStorage.getItem("qx_editor_autosave")).metadata._baseRevision, 0);
+  assert.equal(read("qx_drafts")[0].content.text, "B 的稿");
+});
+
+test("读取另一设备新稿不会抬高仍在编辑的旧稿基线", async () => {
+  localStorage.setItem("qx_sync_token", "test-only");
+  await queueItem("article", "稿件", { text: "我的旧稿" }, undefined, false, "a", 1, true, editorExtra("我的旧稿", "editor-a", 1));
+  globalThis.fetch = async () => response({ changes: [cloud("a", "另一设备新稿", 2)], nextCursor: 42, hasMore: false });
+  await fetchServerItems();
+  await queueItem("article", "稿件", { text: "继续写旧稿" }, undefined, true, "a", 1, false, editorExtra("继续写旧稿", "editor-a", 1));
+  assert.equal(read("qx_web_outbox")[0].baseRevision, 1);
+  globalThis.fetch = async () => response({ applied: [], conflicts: [{ id: "a", server: { revision: 2, content_json: JSON.stringify({ text: "另一设备新稿" }) } }] });
+  await assert.rejects(syncNow(), /版本冲突/);
+  assert.equal(getSyncConflicts()[0].local.content.text, "继续写旧稿");
+});
+
+test("历史待同步内容不冒领当前另一编辑会话的确认", async () => {
+  localStorage.setItem("qx_sync_token", "test-only");
+  await queueItem("article", "稿件", { text: "A 的稿" }, undefined, true, "a", 0, true, editorExtra("A 的稿"));
+  const pending = localStorage.getItem("qx_web_outbox");
+  await queueItem("article", "稿件", { text: "B 的稿" }, undefined, false, "a", 0, false, editorExtra("B 的稿", "editor-b"));
+  localStorage.setItem("qx_web_outbox", pending);
+  globalThis.fetch = async () => response({ applied: [{ id: "a", revision: 1 }], conflicts: [] });
+  await syncNow();
+  assert.equal(read("qx_drafts")[0].baseRevision, 0);
+  assert.equal(JSON.parse(localStorage.getItem("qx_editor_autosave")).metadata._baseRevision, 0);
+});
+
 test("重复选择同步同一稿件只发送最新文字", async () => {
   await queueItem("article", "稿件", { text: "初稿" }, undefined, true, "a");
   await queueItem("article", "稿件", { text: "终稿" }, undefined, true, "a");
