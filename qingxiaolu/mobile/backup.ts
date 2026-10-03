@@ -17,7 +17,7 @@ export type WritingBackup = {
 function clean(value: any): any {
   if (Array.isArray(value)) return value.map(clean);
   if (!value || typeof value !== "object") return value;
-  return Object.fromEntries(Object.entries(value).filter(([key]) => !["aiKey", "token", "password", "__proto__", "constructor", "prototype"].includes(key))
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !["aiKey", "token", "password", "_qxEditingSession", "__proto__", "constructor", "prototype"].includes(key))
     .map(([key, item]) => [key, clean(item)]));
 }
 

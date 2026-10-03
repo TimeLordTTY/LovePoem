@@ -468,6 +468,14 @@ textarea {
 .forward-picker button.forward-cancel { width: 100%; color: #6f6873; background: #f1efec; }
 .forward-batches { display: flex; align-items: center; gap: 12px; color: #654694; }
 .forward-batches select { flex: 1; min-width: 0; padding: 10px; border: 1px solid #d9cee5; border-radius: 8px; background: #faf7fd; }
+.project-local-conflict { margin: 12px 20px; padding: 14px; background: #f0e9fa; border-radius: 12px; }
+.project-local-conflict button { margin: 6px 8px 0 0; }
+.project-version-panel { max-height: 85vh; overflow-y: auto; }
+.project-version-heading { position: sticky; top: -24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; background: #fffdfa; z-index: 1; }
+.project-version-heading h2 { margin: 0; }
+.project-version-panel article { margin: 14px 0; padding: 12px; border: 1px solid #ded4e8; border-radius: 10px; }
+.project-version-panel small { display: block; color: #77707d; }
+.project-version-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .batch-sync-bar {
   display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px;
   margin: 14px 0; padding: 12px 14px; border-radius: 13px; background: #f1ebf8;

@@ -1,12 +1,15 @@
 import { Capacitor } from "@capacitor/core";
 import { BackgroundRunner } from "@capacitor/background-runner";
 import { readStored, changeJson } from "./storage";
+import { confirmProjectSessions, projectSessionRevision, projectPayloadFingerprint, projectSessionEntries, PROJECT_SESSION_FIELD, projectDataWithoutSession, projectSnapshotSignature } from "./projectSession";
 import { prepareSyncBatch, type ContentMemo } from "./sync-content";
 
 const API = "https://poem.timelordtty.cn/qingxiaolu-api";
 const TOKEN_KEY = "qx_sync_token";
 export const SYNC_API = API;
 export function getSyncToken() { return readStored(TOKEN_KEY) || ""; }
+// 旧调用方未显式提供编辑会话时，也只复用当前页面自己的写入会话。
+const localWriterSessions = new Map<string, string>();
 
 export function hasSyncLogin() {
   return Boolean(readStored(TOKEN_KEY));
@@ -42,8 +45,9 @@ export function getEditorBaseRevision(id: string, session: string, fallback = 0)
     ? Math.max(fallback, Number(editor.metadata?._baseRevision || 0)) : fallback;
 }
 
-export function queueLocalBatch(changes: any[], extra: Record<string, unknown> | (() => Record<string, unknown>) = {}) {
+export function queueLocalBatch(input: any[] | (() => any[]), extra: Record<string, unknown> | (() => Record<string, unknown>) = {}) {
   return changeJson(() => {
+  const changes = typeof input === "function" ? input() : input;
   if (new Set(changes.map(change => change.id)).size !== changes.length) throw new Error("导入内容含重复的稿件 ID，尚未导入任何内容。请核对文件。");
   const local = JSON.parse(readStored("qx_drafts") || "[]");
   const current = getLocalItems();
@@ -73,12 +77,21 @@ export async function queueItem(
   baseRevision = 0,
   recordVersion = true,
   extra: Record<string, unknown> | (() => Record<string, unknown>) = {},
+  projectSession?: string,
 ) {
   const id = itemId || crypto.randomUUID();
   return changeJson(() => {
   const additional = typeof extra === "function" ? extra() : extra;
   const editor = additional.qx_editor_autosave as any;
-  const revision = editor?.sessionId ? getEditorBaseRevision(id, editor.sessionId, baseRevision) : baseRevision;
+  let editingSession = editor?.sessionId || projectSession;
+  if (!editingSession) {
+    if (!localWriterSessions.has(id)) localWriterSessions.set(id, crypto.randomUUID());
+    editingSession = localWriterSessions.get(id);
+  }
+  const local = JSON.parse(readStored("qx_drafts") || "[]");
+  const revision = editor?.sessionId ? getEditorBaseRevision(id, editor.sessionId, baseRevision)
+    : projectSession ? projectSessionRevision(id, projectSession, baseRevision)
+    : Math.max(baseRevision, Number(local.find((item: any) => item.id === id && item.editorSessionId === editingSession)?.baseRevision || 0));
   if (editor) additional.qx_editor_autosave = { ...editor, metadata: { ...editor.metadata, _baseRevision: revision } };
   const change = {
     id,
@@ -89,13 +102,12 @@ export async function queueItem(
     baseRevision: revision,
     deleted: false,
   };
-  const local = JSON.parse(readStored("qx_drafts") || "[]");
   const previous = local.find((item: any) => item.id === id) ||
     getCachedServerItems().find((item: any) => item.id === id)?.payload;
   if (!sendToServer && previous && previous.title === title && previous.projectId === projectId &&
     JSON.stringify(previous.content) === JSON.stringify(content)) return { values: { ...additional,
-      ...(editor?.sessionId && local.some((item: any) => item.id === id) ? {
-        qx_drafts: local.map((item: any) => item.id === id ? { ...item, editorSessionId: editor.sessionId } : item),
+      ...(editingSession && local.some((item: any) => item.id === id) ? {
+        qx_drafts: local.map((item: any) => item.id === id ? { ...item, editorSessionId: editingSession } : item),
       } : {}) }, result: id };
   const values: Record<string, unknown> = { ...additional };
   if (previous && (previous.title !== title || JSON.stringify(previous.content) !== JSON.stringify(content))) {
@@ -109,7 +121,7 @@ export async function queueItem(
     }
   }
   const withoutOld = local.filter((item: any) => item.id !== id);
-  withoutOld.unshift({ ...change, ...(editor?.sessionId ? { editorSessionId: editor.sessionId } : {}),
+  withoutOld.unshift({ ...change, ...(editingSession ? { editorSessionId: editingSession } : {}),
     savedAt: new Date().toISOString(), syncState: sendToServer ? "pending" : "local" });
   values.qx_drafts = withoutOld;
   // 当前页面上的手动同步在网页和 Android 共用队列，错误和冲突也共用界面。
@@ -215,7 +227,28 @@ export async function fetchServerItems() {
     .sort((a, b) => Number(b.seq) - Number(a.seq));
   await changeJson(() => {
     const drafts = JSON.parse(readStored("qx_drafts") || "[]");
-    return { values: { qx_server_cache: result, qx_drafts: drafts.filter((item: any) => item.syncState !== "synced") }, result: undefined };
+    const workspaces = JSON.parse(readStored("qx_project_workspaces") || "{}");
+    const versions = JSON.parse(readStored("qx_item_versions") || "{}");
+    const oldCache = JSON.parse(readStored("qx_server_cache") || "[]");
+    const dirty = new Set(drafts.filter((item: any) => item.syncState !== "synced").map((item: any) => item.id));
+    let projectChanged = false, versionsChanged = false;
+    for (const incoming of result.filter(item => item.payload?.itemType === "project" && !dirty.has(item.id))) {
+      const saved = workspaces[incoming.id];
+      const { aiKey: ignored, ...content } = projectDataWithoutSession(incoming.payload.content || {});
+      if (saved) {
+        const { aiKey: privateKey, ...oldContent } = projectDataWithoutSession(saved);
+        const previous = drafts.find((item: any) => item.id === incoming.id) || oldCache.find((item: any) => item.id === incoming.id)?.payload;
+        if (projectSnapshotSignature(previous?.title || incoming.payload.title, oldContent) !== projectSnapshotSignature(incoming.payload.title, content)) {
+          versions[incoming.id] = [{ id: incoming.id, itemType: "project", title: previous?.title || incoming.payload.title,
+            content: oldContent, baseRevision: previous?.baseRevision || 0, versionSavedAt: new Date().toISOString() }, ...(versions[incoming.id] || [])].slice(0, 30);
+          versionsChanged = true;
+        }
+      }
+      workspaces[incoming.id] = { ...content, aiKey: saved?.aiKey || "", ...(saved?.[PROJECT_SESSION_FIELD] ? { [PROJECT_SESSION_FIELD]: saved[PROJECT_SESSION_FIELD] } : {}) };
+      projectChanged = true;
+    }
+    return { values: { qx_server_cache: result, qx_drafts: drafts.filter((item: any) => item.syncState !== "synced"),
+      ...(projectChanged ? { qx_project_workspaces: workspaces } : {}), ...(versionsChanged ? { qx_item_versions: versions } : {}) }, result: undefined };
   });
   localStorage.setItem("qx_last_sync", new Date().toISOString());
   return result;
@@ -331,6 +364,9 @@ async function pushPending(force: boolean, memo: ContentMemo) {
     catch (error) { if ((error as Error).message.includes("登录状态已失效")) localStorage.removeItem(TOKEN_KEY); throw error; }
     const changes = batch.changes;
     if (!changes.length) return;
+    const projectChanges = changes.filter(item => item.itemType === "project");
+    const projectFingerprints = new Map<string, string>(projectChanges.length ? await Promise.all(projectChanges
+      .map(async item => [item.id, await projectPayloadFingerprint(item.title || "", item.content)] as [string, string])) : []);
     const response = await fetch(`${API}/v1/sync/push`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -346,7 +382,14 @@ async function pushPending(force: boolean, memo: ContentMemo) {
       ...(result.conflicts || []).map((item: any) => ({ ...item, local: changes.find((change: any) => change.id === item.id) }))];
     const submitted = new Map(changes.map((item: any) => [item.id, JSON.stringify(item)]));
     const drafts = JSON.parse(readStored("qx_drafts") || "[]");
-    const sameSession = (id: string) => origins.get(id) === drafts.find((item: any) => item.id === id)?.editorSessionId;
+    const workspaces = JSON.parse(readStored("qx_project_workspaces") || "{}");
+    const projectConfirmed = confirmProjectSessions(workspaces, result.applied || [], origins, changes, projectFingerprints);
+    const sameSession = (id: string) => {
+      const session = drafts.find((item: any) => item.id === id)?.editorSessionId;
+      const before = projectSessionEntries(workspaces[id]?.[PROJECT_SESSION_FIELD])[session];
+      const after = projectSessionEntries(projectConfirmed[id]?.[PROJECT_SESSION_FIELD])[session];
+      return (Boolean(origins.get(id)) && origins.get(id) === session) || (before && after && before !== after);
+    };
     const remaining = JSON.parse(readStored("qx_web_outbox") || "[]").filter((item: any) =>
       !appliedIds.has(String(item.id)) || JSON.stringify(item) !== submitted.get(item.id)).map((item: any) => {
         const applied = (result.applied || []).find((entry: any) => entry.id === item.id);
@@ -359,6 +402,7 @@ async function pushPending(force: boolean, memo: ContentMemo) {
       Number(editor.metadata?._baseRevision || 0) === Number(editorSent?.baseRevision || 0);
     return { values: { ...(editorConfirmed ? { qx_editor_autosave: { ...editor,
         metadata: { ...editor.metadata, _baseRevision: editorApplied.revision } } } : {}),
+      ...(projectConfirmed !== workspaces ? { qx_project_workspaces: projectConfirmed } : {}),
       qx_web_outbox: remaining, qx_sync_conflicts: conflicts, qx_drafts:
         drafts.map((item: any) => {
           const applied = (result.applied || []).find((entry: any) => entry.id === item.id);

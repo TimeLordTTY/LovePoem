@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Share } from "@capacitor/share";
-import { queueItem, queueLocalBatch, getLocalItems } from "./sync";
+import { queueItem, queueLocalBatch, getLocalItems, getItemVersions } from "./sync";
 import { writeProjectFolder, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile } from "./folderSync";
-import { storeJson, readStored } from "./storage";
+import { storeJson, readStored, changeJson } from "./storage";
+import { PROJECT_SESSION_FIELD, projectDataWithoutSession, projectSessionRevision, projectSnapshotSignature, projectPayloadFingerprint, bindProjectSession } from "./projectSession";
 import { createBackup, downloadBackup, parseBackup } from "./backup";
+import { pendingWritingTransactions } from "./storageDatabase";
 
 export type ProjectWorkspaceData = {
   type: string;
@@ -47,7 +49,7 @@ const emptyData: ProjectWorkspaceData = {
 
 function load(projectId: string, fallback: Partial<ProjectWorkspaceData> = {}): ProjectWorkspaceData {
   const all = JSON.parse(readStored("qx_project_workspaces") || "{}");
-  return { ...emptyData, ...fallback, ...(all[projectId] || {}) };
+  return { ...emptyData, ...projectDataWithoutSession(fallback), ...projectDataWithoutSession(all[projectId] || {}) };
 }
 
 function save(projectId: string, data: ProjectWorkspaceData) {
@@ -139,6 +141,7 @@ export default function ProjectWorkspace({
   onWrite,
   onNewArticle,
   onUpdated,
+  navigationSaveRef,
 }: {
   project: any;
   articles?: any[];
@@ -149,12 +152,34 @@ export default function ProjectWorkspace({
   onWrite: () => void;
   onNewArticle?: (chapterId?: string) => void;
   onUpdated?: (title: string, content: Record<string, unknown>) => void;
+  navigationSaveRef?: { current: (() => Promise<boolean>) | null };
 }) {
   const projectId = String(project.id);
-  const [title, setTitle] = useState(String(
-    project.payload?.title || project.payload?.content?.title || project.title || "未命名项目",
-  ));
-  const [data, setData] = useState(() => load(projectId, project.payload.content || {}));
+  function currentProject() {
+    const item = getLocalItems().find(item => item.id === projectId);
+    const stored = JSON.parse(readStored("qx_project_workspaces") || "{}")[projectId] || {};
+    const recordData = { ...emptyData, ...projectDataWithoutSession(item?.payload?.content || {}), aiKey: stored.aiKey || "" };
+    const data = load(projectId, item?.payload?.content || {});
+    return { item, title: String(item?.payload?.title || "未命名项目"), data, recordData,
+      inconsistent: projectSnapshotSignature("", data) !== projectSnapshotSignature("", recordData),
+      workspaceSignature: projectSnapshotSignature("", stored),
+      payloadSignature: item ? projectSnapshotSignature(String(item.payload.title || ""), item.payload.content || {}) : "missing" };
+  }
+  const [initial] = useState(currentProject);
+  const [title, setTitle] = useState(initial.title);
+  const [data, setData] = useState<ProjectWorkspaceData>(initial.data);
+  const [editingSession] = useState(() => crypto.randomUUID());
+  const baseline = useRef(Number(initial.item?.revision ?? project.revision ?? 0));
+  const known = useRef({ workspaceSignature: initial.workspaceSignature, payloadSignature: initial.payloadSignature });
+  const persistenceChain = useRef<Promise<unknown>>(Promise.resolve());
+  const [initialFingerprint] = useState(() => projectPayloadFingerprint(initial.title, initial.inconsistent ? initial.data : initial.item?.payload?.content || {}));
+  const parentFingerprint = useRef(initialFingerprint);
+  const needsReview = useRef(initial.inconsistent);
+  const retainedSignature = useRef("");
+  const savedViewSignature = useRef(projectSnapshotSignature(initial.title, initial.data));
+  const [localConflict, setLocalConflict] = useState(initial.inconsistent);
+  const [versionPanel, setVersionPanel] = useState(false);
+  const [projectVersions, setProjectVersions] = useState<any[]>([]);
   const [section, setSection] = useState(initialSection);
   const [editingMaterial, setEditingMaterial] = useState<Record<string, boolean>>({});
   const [readerChapter, setReaderChapter] = useState(0);
@@ -208,28 +233,71 @@ export default function ProjectWorkspace({
   [fullText, title]);
   const patch = (next: Partial<ProjectWorkspaceData>) => setData((current) => ({ ...current, ...next }));
 
-  async function persist(upload = syncProject, snapshot = { title, data }) {
+  function assertUnchanged() {
+    const current = currentProject();
+    if (needsReview.current || current.workspaceSignature !== known.current.workspaceSignature || current.payloadSignature !== known.current.payloadSignature)
+      throw new Error("项目资料已在其他页面或设备更新，当前修改尚未保存，请先保留当前资料为版本再读取最新内容。");
+  }
+  function acceptSaved(fingerprint: string) {
+    const saved = currentProject();
+    known.current = { workspaceSignature: saved.workspaceSignature, payloadSignature: saved.payloadSignature };
+    parentFingerprint.current = Promise.resolve(fingerprint);
+    retainedSignature.current = ""; setLocalConflict(false);
+  }
+  function persist(upload = syncProject, snapshot?: { title: string; data: ProjectWorkspaceData }, forceVersion = false) {
+    const operation = persistenceChain.current.then(async () => {
     if (folderBusyRef.current) return true;
     try {
-    const { aiKey, ...syncData } = snapshot.data;
-    await queueItem("project", snapshot.title, syncData, undefined, upload, projectId, Number(project.revision || 0), upload,
-      () => ({ qx_project_workspaces: { ...JSON.parse(readStored("qx_project_workspaces") || "{}"), [projectId]: snapshot.data } }));
-    onUpdated?.(snapshot.title, syncData);
+    const value = snapshot || latest.current;
+    const { aiKey, ...syncData } = value.data;
+    const fingerprint = await projectPayloadFingerprint(value.title, syncData);
+    const parent = await parentFingerprint.current;
+    await queueItem("project", value.title, syncData, undefined, upload, projectId, baseline.current, upload || forceVersion,
+      () => {
+        assertUnchanged();
+        return { qx_project_workspaces: { ...JSON.parse(readStored("qx_project_workspaces") || "{}"), [projectId]: {
+          ...value.data, [PROJECT_SESSION_FIELD]: bindProjectSession(JSON.parse(readStored("qx_project_workspaces") || "{}")[projectId]?.[PROJECT_SESSION_FIELD], editingSession,
+            projectSessionRevision(projectId, editingSession, baseline.current), fingerprint, parent),
+        } } };
+      }, editingSession);
+    acceptSaved(fingerprint); savedViewSignature.current = projectSnapshotSignature(value.title, value.data); onUpdated?.(value.title, syncData);
     setMessage(upload ? "本机已保存，项目资料等待同步；请点击主页面同步" : "项目资料已自动保存到本机");
     return true;
-    } catch (error) { setMessage((error as Error).message); return false; }
+    } catch (error) { setMessage((error as Error).message); if ((error as Error).message.includes("其他页面或设备更新")) setLocalConflict(true); return false; }
+    });
+    persistenceChain.current = operation.then(() => undefined, () => undefined);
+    return operation;
   }
 
   const latest = useRef({ title, data });
   latest.current = { title, data };
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (pendingWritingTransactions() || projectSnapshotSignature(latest.current.title, latest.current.data) !== savedViewSignature.current) {
+        event.preventDefault(); event.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, []);
+  async function saveBeforeNavigation() {
+    if (retainedSignature.current === projectSnapshotSignature(latest.current.title, latest.current.data)) return true;
+    if (folderBusyRef.current) { setMessage("文件夹同步正在进行，请完成后再返回"); return false; }
+    setClosing(true);
+    try { return await persist(false); } finally { setClosing(false); }
+  }
+  useEffect(() => {
+    if (navigationSaveRef) navigationSaveRef.current = saveBeforeNavigation;
+    return () => { if (navigationSaveRef) navigationSaveRef.current = null; };
+  }, [navigationSaveRef]);
   async function closeWithSave() {
     if (closingRef.current) return;
     if (folderBusyRef.current) { setMessage("文件夹同步正在进行，请完成后再返回"); return; }
     closingRef.current = true; setClosing(true);
-    try { if (await persist(false, latest.current)) close(); }
+    try { if (await saveBeforeNavigation()) close(); }
     finally { closingRef.current = false; setClosing(false); }
   }
-  projectBackAction.current = () => { void closeWithSave(); };
+  projectBackAction.current = () => { if (versionPanel) setVersionPanel(false); else void closeWithSave(); };
   useEffect(() => {
     const back = () => projectBackAction.current();
     window.addEventListener("qx-project-back", back);
@@ -239,11 +307,48 @@ export default function ProjectWorkspace({
     const timer = window.setTimeout(() => void persist(false), 800);
     return () => window.clearTimeout(timer);
   }, [title, data]);
-  useEffect(() => () => { void persist(false, latest.current); }, []);
+  async function retainAndReadLatest() {
+    if (closingRef.current) return;
+    closingRef.current = true; setClosing(true);
+    const operation = persistenceChain.current.then(async () => {
+    try {
+      const own = latest.current;
+      const next = await changeJson(() => {
+        const { aiKey, ...content } = own.data;
+        const all = JSON.parse(readStored("qx_item_versions") || "{}");
+        all[projectId] = [{ id: projectId, itemType: "project", title: own.title, content,
+          baseRevision: projectSessionRevision(projectId, editingSession, baseline.current), versionSavedAt: new Date().toISOString() }, ...(all[projectId] || [])].slice(0, 30);
+        return { values: { qx_item_versions: all }, result: currentProject() };
+      });
+      retainedSignature.current = projectSnapshotSignature(own.title, own.data);
+      if (!next.item) { setMessage("当前创作资料已保留为项目版本。项目已被删除，请从回收站恢复后查看版本；现在可以返回。"); return; }
+      known.current = { workspaceSignature: next.workspaceSignature, payloadSignature: next.payloadSignature };
+      baseline.current = Number(next.item.revision || 0);
+      needsReview.current = false;
+      parentFingerprint.current = projectPayloadFingerprint(next.title, next.item.payload.content || {});
+      latest.current = { title: next.title, data: next.recordData };
+      savedViewSignature.current = projectSnapshotSignature(next.title, next.recordData);
+      setTitle(next.title); setData(next.recordData); setLocalConflict(false); setSection("项目");
+      setMessage("当前创作资料已留为版本，已读取最新资料；可从“项目版本”对照或恢复。版本不包含 AI 密钥。");
+    } catch (error) { setMessage((error as Error).message); }
+    finally { closingRef.current = false; setClosing(false); }
+    });
+    persistenceChain.current = operation.then(() => undefined, () => undefined);
+    await operation;
+  }
+  async function restoreProjectVersion(version: any) {
+    const next = { ...emptyData, ...projectDataWithoutSession(version.content || {}), aiKey: latest.current.data.aiKey };
+    if (await persist(false, { title: version.title || title, data: next }, true)) {
+      latest.current = { title: version.title || title, data: next };
+      setTitle(version.title || title); setData(next); setVersionPanel(false);
+      setSection("项目");
+      setMessage("已恢复这版项目资料，恢复前资料仍保留在版本中；尚未上传云端。");
+    }
+  }
 
   async function exportProjectBackup() {
     setBackupBusy(true);
-    try { downloadBackup(await createBackup(projectId, { id: projectId, revision: project.revision || 0,
+    try { downloadBackup(await createBackup(projectId, { id: projectId, revision: projectSessionRevision(projectId, editingSession, baseline.current),
       payload: { id: projectId, itemType: "project", title, content: data } }), title); }
     catch (error) { setMessage((error as Error).message); }
     finally { setBackupBusy(false); }
@@ -436,6 +541,8 @@ export default function ProjectWorkspace({
       }; }) : data.timelineEvents,
     };
     const { aiKey, ...syncData } = next;
+    const folderFingerprint = await projectPayloadFingerprint(title, syncData);
+    const folderParent = await parentFingerprint.current;
     const changes: any[] = [{ id: projectId, itemType: "project", title, content: syncData }];
     for (const file of articleFiles) {
       const articleId = identity(file,"正文","稿件",file.name.includes("--") ? file.name.split("--")[0] : articles.find(article=>article.payload.title===file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id);
@@ -464,7 +571,15 @@ export default function ProjectWorkspace({
       if(original && change.id!==projectId && (original.payload.itemType!=="article" || String(original.payload.projectId||original.payload.content?.projectId||"")!==projectId))
         throw new Error("文件中的稿件 ID 属于其他项目，尚未导入任何内容。请复制为新稿件后再导入。");
     }
-    await queueLocalBatch(changes, () => ({ qx_project_workspaces: { ...JSON.parse(readStored("qx_project_workspaces") || "{}"), [projectId]: next } }));
+    await queueLocalBatch(() => {
+      assertUnchanged();
+      return changes.map(change => change.id === projectId ? { ...change, baseRevision: projectSessionRevision(projectId, editingSession, baseline.current), editorSessionId: editingSession } : change);
+    }, () => ({ qx_project_workspaces: { ...JSON.parse(readStored("qx_project_workspaces") || "{}"), [projectId]: {
+      ...next, [PROJECT_SESSION_FIELD]: bindProjectSession(JSON.parse(readStored("qx_project_workspaces") || "{}")[projectId]?.[PROJECT_SESSION_FIELD], editingSession,
+        projectSessionRevision(projectId, editingSession, baseline.current), folderFingerprint, folderParent),
+    } } }));
+    acceptSaved(folderFingerprint);
+    savedViewSignature.current = projectSnapshotSignature(title, next);
     setData(next);
     onUpdated?.(title, syncData);
     try { await acknowledgeFolderChanges(projectDirectory, projectId, associations); }
@@ -555,6 +670,11 @@ export default function ProjectWorkspace({
     <header><button disabled={closing} onClick={() => void closeWithSave()}>‹ 返回</button><div><b>{title}</b><span>{data.type}项目</span></div>
       <button className="save-project" onClick={() => void persist()}>保存</button></header>
     {message && <div className="real-message">{message}</div>}
+    {localConflict && <aside className="project-local-conflict" role="alert">
+      <p>另一页的资料保持原样。当前创作资料可先留为版本，再读取最新资料及设置；版本不包含 AI 密钥。</p>
+      <button disabled={closing} onClick={() => void retainAndReadLatest()}>保留当前资料为版本并读取最新</button>
+      <button disabled={backupBusy} onClick={() => void exportProjectBackup()}>下载当前项目完整备份</button>
+    </aside>}
     <nav className="project-section-tabs">
       {(data.type === "小说" ? ["项目", "正文", "人物", "世界观", "大纲", "情节", "时间轴", "AI 讨论", "私密", "导出"] :
         ["项目", "正文", "资料", "AI 讨论", "私密", "导出"]).map((name) =>
@@ -569,6 +689,7 @@ export default function ProjectWorkspace({
           <article><b>{data.timelineEvents.length}</b><span>时间轴事件</span></article>
         </div>
         <div className="project-quick-actions">
+          <button onClick={() => { setProjectVersions(getItemVersions(projectId)); setVersionPanel(true); }}>项目版本</button>
           <button onClick={onWrite}>继续写作</button>
           <button onClick={() => setSection("正文")}>查看正文</button>
           <button onClick={() => setSection("大纲")}>阅读大纲</button>
@@ -589,7 +710,7 @@ export default function ProjectWorkspace({
           <label>项目类型<select value={data.type} onChange={(event) => patch({ type: event.target.value })}>
             {["小说", "随笔日记", "诗歌", "读书札记", "自定义"].map((name) => <option key={name}>{name}</option>)}
           </select></label>
-          <label>项目简介<textarea value={data.description}
+          <label>项目简介<textarea aria-label="项目简介" value={data.description}
             onChange={(event) => patch({ description: event.target.value })} /></label>
           <label>分类与标签<input value={data.tags} placeholder="原创、同人、悬疑……"
             onChange={(event) => patch({ tags: event.target.value })} /></label>
@@ -846,6 +967,16 @@ export default function ProjectWorkspace({
         </div>
       </div>}
     </section>
+    {versionPanel && <div className="sync-login-mask"><div className="sync-login-card project-version-panel">
+      <header className="project-version-heading"><h2>项目资料版本</h2><button aria-label="关闭项目版本" onClick={() => setVersionPanel(false)}>关闭</button></header>
+      <p>恢复只改变本机资料；恢复前的资料也会保留，AI 密钥保持当前设置。</p>
+      {!projectVersions.length && <p>还没有较早的项目资料版本。</p>}
+      {projectVersions.map((version, index) => <article key={`${version.versionSavedAt}-${index}`}>
+        <b>{version.title || "未命名项目"}</b><small>{version.versionSavedAt ? new Date(version.versionSavedAt).toLocaleString() : "较早版本"}</small>
+        <details><summary>查看这版资料</summary><pre>{packageText(version.title || title, { ...emptyData, ...projectDataWithoutSession(version.content || {}) })}</pre></details>
+        <button onClick={() => void restoreProjectVersion(version)}>恢复这版项目资料</button>
+      </article>)}
+    </div></div>}
     {selectionMenu && selectedText && <aside className={`selection-action-menu ${selectionMenu.mobile ? "mobile" : ""}`}
       style={selectionMenu.mobile ? undefined : { left: selectionMenu.x, top: selectionMenu.y }}>
       <header><b>已选择 {selectedText.length} 字</b><button onClick={() => setSelectionMenu(null)}>×</button></header>

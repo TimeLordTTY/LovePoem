@@ -50,6 +50,7 @@ export default function RealMobileApp() {
   const [changingDraft, setChangingDraft] = useState(false);
   const changingDraftRef = useRef(false);
   const nativeBackAction = useRef<() => void>(() => {});
+  const projectNavigationSave = useRef<(() => Promise<boolean>) | null>(null);
   const [items, setItems] = useState<any[]>(getLocalItems);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -469,6 +470,7 @@ export default function RealMobileApp() {
     if (changingDraftRef.current) return;
     changingDraftRef.current = true; setChangingDraft(true);
     try {
+    if (openProject && projectNavigationSave.current && !await projectNavigationSave.current()) return;
     if (tab === "创作") {
       await saveLocalDraft();
       if (title.trim() || body.trim() || images.length) setMessage("已保存到本机");
@@ -504,19 +506,25 @@ export default function RealMobileApp() {
   if (showDocumentImport) return pageWithNavigation(<HistoryImport kind="documents" projects={projects}
     close={() => { setShowDocumentImport(false); void refresh(false); }} />);
   if (openProject) return pageWithNavigation(<ProjectWorkspace project={openProject}
+    navigationSaveRef={projectNavigationSave}
     initialSection={openProjectSection}
     articles={articles.filter((item) =>
       String(item.payload?.projectId || item.payload?.content?.projectId || "") === String(openProject.id))}
     discussions={discussions.filter((item) =>
       String(item.payload?.projectId || item.payload?.content?.projectId || "") === String(openProject.id) &&
       item.payload?.content?.sourceLabel === "ChatGPT")}
-    onEditArticle={(article) => {
+    onEditArticle={async (article) => {
+      if (projectNavigationSave.current && !await projectNavigationSave.current()) return;
       setOpenProject(null);
       editItem(article);
     }}
     close={() => setOpenProject(null)}
-    onNewArticle={(chapterId = "") => void newDraft(String(openProject.id), chapterId)}
-    onWrite={() => {
+    onNewArticle={async (chapterId = "") => {
+      if (projectNavigationSave.current && !await projectNavigationSave.current()) return;
+      await newDraft(String(openProject.id), chapterId);
+    }}
+    onWrite={async () => {
+      if (projectNavigationSave.current && !await projectNavigationSave.current()) return;
       const recent = articles.filter((item) => String(item.payload.projectId || item.payload.content?.projectId || "") === String(openProject.id))
         .sort((a, b) => Number(b.seq || 0) - Number(a.seq || 0))[0];
       if (recent) { setOpenProject(null); editItem(recent); return; }
