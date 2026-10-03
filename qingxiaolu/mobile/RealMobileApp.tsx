@@ -18,13 +18,14 @@ import WebsitePublish from "./WebsitePublish";
 import WritingPreview from "./WritingPreview";
 import { openTargetDraft } from "./nativeDraft";
 import { shareOrDownloadArticleImages } from "./longImage";
+import { writingDateInfo } from "./writingDate";
 
 type Tab = "项目" | "创作" | "稿件库" | "设置";
 
 function blogTime(item: any) {
-  const original = Date.parse(String(item.payload?.content?.publishedAt || ""));
-  return Number.isFinite(original) ? original : Number(item.seq) || Date.now();
+  return blogDate(item).time;
 }
+function blogDate(item: any) { return writingDateInfo(item.payload?.content?.publishedAt, Number(item.seq) || Date.now()); }
 
 function itemTitle(item: any, fallback = "未命名项目") {
   return String(
@@ -117,11 +118,11 @@ export default function RealMobileApp() {
   const blogArchive = useMemo(() => {
     const groups = new Map<string, { label: string; count: number }>();
     for (const item of blogItems) {
-      const date = new Date(blogTime(item));
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      const date = blogDate(item);
+      const key = date.groupKey;
       const current = groups.get(key);
       groups.set(key, {
-        label: `${date.getFullYear()}年${date.getMonth() + 1}月`,
+        label: date.groupLabel,
         count: (current?.count || 0) + 1,
       });
     }
@@ -635,8 +636,8 @@ export default function RealMobileApp() {
           <div className="blog-feed">
             {visibleBlogItems.length === 0 && <p className="empty">{blogItems.length ? "没有符合条件的内容。" : "还没有内容。"}</p>}
             {visibleBlogItems.map((item) => {
-              const itemDate = new Date(blogTime(item));
-              const monthKey = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, "0")}`;
+              const itemDate = blogDate(item);
+              const monthKey = itemDate.groupKey;
               return <article key={item.id} data-blog-month={monthKey}>
                 {batchSyncMode && <label className="item-sync-check">
                   <input type="checkbox" checked={selectedForSync.includes(item.id)}
@@ -652,7 +653,7 @@ export default function RealMobileApp() {
                   conflicts.some((entry) => entry.id === item.id) ? "版本冲突 · 两版已保留" :
                   item.syncState === "synced" ? "云端已保存 · 本机可离线查看" :
                   item.syncState === "pending" ? "等待同步" : "仅本机"}</small>
-                <small>{new Date(blogTime(item)).toLocaleString()} · {item.payload.content?.publicationState === "ready" ? "已定稿" : "待修改"}</small>
+                <small>{itemDate.label} · {item.payload.content?.publicationState === "ready" ? "已定稿" : "待修改"}</small>
                 {!!item.payload.content?.text && <details className="manuscript-excerpt"><summary>{String(item.payload.content.text).slice(0, 160)}{item.payload.content.text.length > 160 ? "…展开阅读全文" : ""}</summary><p>{item.payload.content.text}</p></details>}
                 {!!item.payload.content?.images?.length && <div className="blog-images">
                   {item.payload.content.images.slice(0, 9).map((image: string, index: number) =>

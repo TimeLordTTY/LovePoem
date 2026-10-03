@@ -5,6 +5,8 @@ import { candidate } from "../work/writing-tests/importers/types.mjs";
 import { commitImport } from "../work/writing-tests/importers/importCommit.mjs";
 import { pdfText, pdfPixels } from "../work/writing-tests/importers/pdfParsing.mjs";
 import { installPdfStreamIterator, installPdfBufferTransfer } from "../work/writing-tests/importers/pdfCompatibility.mjs";
+import { parseWritingDate, writingDateInfo } from "../work/writing-tests/writingDate.mjs";
+import { spawnSync } from "node:child_process";
 class MemoryStorage {
   data = new Map(); failKey = "";
   getItem(key) { return this.data.get(key) ?? null; }
@@ -14,6 +16,26 @@ class MemoryStorage {
 beforeEach(() => { globalThis.localStorage = new MemoryStorage(); });
 const read = key => JSON.parse(localStorage.getItem(key));
 const items = () => [candidate("txt", "TXT", "第一篇", "正文一"), candidate("txt", "TXT", "第二篇", "正文二")];
+test("日历日期在东西时区均保持原日和归档月，带时区时间仍按真实时刻显示", () => {
+  const moduleUrl = new URL("../work/writing-tests/writingDate.mjs", import.meta.url).href;
+  for (const timezone of ["America/Los_Angeles", "Asia/Hong_Kong"]) {
+    const result = spawnSync(process.execPath, ["--input-type=module", "-e",
+      `import{writingDateInfo}from ${JSON.stringify(moduleUrl)};console.log(JSON.stringify([writingDateInfo('2026-10-01',0),writingDateInfo('2026-10-01T00:00:00Z',0)]));`],
+      { env: { ...process.env, TZ: timezone }, encoding: "utf8" });
+    assert.equal(result.status,0,result.stderr);
+    const [day, instant]=JSON.parse(result.stdout);assert.equal(day.label,"2026年10月1日");assert.equal(day.groupKey,"2026-10");
+    assert.equal(instant.time,Date.parse("2026-10-01T00:00:00Z"));
+    assert.equal(instant.groupKey,timezone==="America/Los_Angeles"?"2026-09":"2026-10");
+  }
+});
+test("无效日历日期不滚到下个月，CSV 仍保留原字段并提示，闰年与中文日期可识别", () => {
+  assert.equal(parseWritingDate("2026-02-30"),null);assert.equal(parseWritingDate("2026-02-30T12:00:00Z"),null);
+  assert.equal(parseWritingDate("1900-02-29"),null);assert.ok(parseWritingDate("2000-02-29"));
+  assert.ok(parseWritingDate("2026年10月1日")?.dateOnly);assert.ok(parseWritingDate("2026/10/1")?.dateOnly);
+  const record=csvCandidates("标题,正文,日期\n无效日期,原文,2026-02-30","dates.csv")[0];
+  assert.equal(record.publishedAt,"2026-02-30");assert.ok(record.warnings.length);
+  const date=writingDateInfo(record.publishedAt,123);assert.equal(date.groupKey,"date-review");assert.ok(date.label.includes("2026-02-30"));
+});
 test("旧 WebView 的图片缓冲区转移保留像素、扩展补零、截断并分离原缓冲区", () => {
   const modern=ArrayBuffer.prototype.transferToFixedLength;installPdfBufferTransfer();assert.equal(ArrayBuffer.prototype.transferToFixedLength,modern);
   class OldBuffer extends ArrayBuffer {}

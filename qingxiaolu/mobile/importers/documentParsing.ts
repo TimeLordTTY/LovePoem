@@ -1,4 +1,5 @@
 import { candidate, type ImportCandidate } from "./types";
+import { parseWritingDate } from "../writingDate";
 
 export type OutlineEntry = { title: string; text: string; depth: number };
 
@@ -58,7 +59,7 @@ export function csvCandidates(text: string, fileName: string): ImportCandidate[]
     if (row.length !== headers.length) throw new Error(`CSV 第 ${at + 2} 行与表头列数不同，请核对逗号和引号。`);
     const warnings: string[] = [];
     const date = dateAt < 0 ? "" : row[dateAt];
-    if (date && !Number.isFinite(Date.parse(date))) warnings.push("发布时间无法识别，保留了原始日期，请在导入前核对。");
+    if (date && !parseWritingDate(date)) warnings.push("发布时间无法识别，保留了原始日期，请在导入前核对。");
     let imageValues: unknown[] = [];
     const value = imageAt < 0 ? "" : row[imageAt].trim();
     if (value) {
