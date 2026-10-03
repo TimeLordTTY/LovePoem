@@ -47,6 +47,7 @@ export default function RealMobileApp() {
   const editorSessionId = `${editorPageId}:${editorSession}`;
   const [changingDraft, setChangingDraft] = useState(false);
   const changingDraftRef = useRef(false);
+  const nativeBackAction = useRef<() => void>(() => {});
   const [items, setItems] = useState<any[]>(getLocalItems);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -216,15 +217,27 @@ export default function RealMobileApp() {
     return () => window.removeEventListener("beforeunload", leave);
   }, [title, body, images, creationType, activeProjectId, editingId, editingMetadata, tab]);
 
+  nativeBackAction.current = () => {
+    if (changingDraftRef.current) return;
+    if (showLogin) setShowLogin(false);
+    else if (showImport || showDocumentImport) window.dispatchEvent(new Event("qx-history-back"));
+    else if (openProject) window.dispatchEvent(new Event("qx-project-back"));
+    else if (websiteItem || showWebsiteSettings) { setWebsiteItem(null); setShowWebsiteSettings(false); }
+    else if (showTrash) setShowTrash(false);
+    else if (versionItem) setVersionItem(null);
+    else if (tab === "创作") window.dispatchEvent(new Event("qx-editor-back"));
+    else if (tab !== "项目") void goToMainTab("项目");
+    else if (pendingWritingTransactions()) setMessage("内容正在保存，请稍后再返回");
+    else void CapacitorApp.exitApp();
+  };
   useEffect(() => {
     let handle: { remove: () => Promise<void> } | undefined;
-    void CapacitorApp.addListener("backButton", () => {
-      if (showImport || showDocumentImport) window.dispatchEvent(new Event("qx-history-back"));
-      else if (tab !== "项目") setTab("项目");
-      else void CapacitorApp.exitApp();
-    }).then((listener) => { handle = listener; });
-    return () => { void handle?.remove(); };
-  }, [showImport, showDocumentImport, tab]);
+    let disposed = false;
+    void CapacitorApp.addListener("backButton", () => nativeBackAction.current()).then(listener => {
+      if (disposed) void listener.remove(); else handle = listener;
+    });
+    return () => { disposed = true; void handle?.remove(); };
+  }, []);
 
   useEffect(() => {
     if (!showImport && !showDocumentImport) return;
@@ -422,9 +435,14 @@ export default function RealMobileApp() {
     } catch (error) { setMessage((error as Error).message); }
   }
 
-  function goToMainTab(next: Tab) {
+  async function goToMainTab(next: Tab) {
     if (changingDraftRef.current) return;
-    if (tab === "创作") void saveLocalDraft().catch((error) => setMessage(error.message));
+    changingDraftRef.current = true; setChangingDraft(true);
+    try {
+    if (tab === "创作") {
+      await saveLocalDraft();
+      if (title.trim() || body.trim() || images.length) setMessage("已保存到本机");
+    }
     setShowImport(false);
     setShowDocumentImport(false);
     setOpenProject(null);
@@ -433,6 +451,8 @@ export default function RealMobileApp() {
     setShowTrash(false);
     setVersionItem(null);
     setTab(next);
+    } catch (error) { setAutoSavedAt(""); setMessage(error instanceof Error ? error.message : "尚未保存，请保留编辑页面"); }
+    finally { changingDraftRef.current = false; setChangingDraft(false); }
   }
 
   const fixedNavigation = <nav className="global-main-nav">
@@ -638,6 +658,7 @@ export default function RealMobileApp() {
                   {item.payload.content.images.slice(0, 9).map((image: string, index: number) =>
                     image && <img key={index} src={image} alt="" referrerPolicy="no-referrer" />)}
                 </div>}
+                {item.payload.content?.images?.length > 9 && <small>共 {item.payload.content.images.length} 张插图，继续编辑可查看全部</small>}
                 <div className="article-actions"><button onClick={() => editItem(item)}>继续编辑</button>
                   {item.payload.content?.importSource === "pdf" && typeof item.payload.content?.importRaw?.originalPdf === "string" &&
                     item.payload.content.importRaw.originalPdf.startsWith("data:application/pdf;base64,") &&
@@ -833,6 +854,16 @@ function ArticleEditor({
   const [imageMessage, setImageMessage] = useState("");
   const [readingImages, setReadingImages] = useState(false);
   const blocked = busy || readingImages;
+  const editorBackAction = useRef<() => void>(() => {});
+  editorBackAction.current = () => {
+    if (readingImages) { setImageMessage("图片正在读取，请完成后再返回"); return; }
+    if (!busy) onBack();
+  };
+  useEffect(() => {
+    const back = () => editorBackAction.current();
+    window.addEventListener("qx-editor-back", back);
+    return () => window.removeEventListener("qx-editor-back", back);
+  }, []);
   useEffect(() => {
     onMetadata({ ...initialMetadata, visibility, publicationState, tags: tags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean),
       projectId, chapterId: chapterId || undefined, syncToServer, shareTargets });
@@ -880,9 +911,11 @@ function ArticleEditor({
 
   async function addImages(files: File[]) {
     if (blocked) return;
+    const available = Math.max(0, 9 - images.length);
+    if (!available) { setImageMessage(`已达到新增图片上限，原有 ${images.length} 张图片均保留。`); return; }
     setReadingImages(true);
-    const accepted = files.filter((file) => file.type.startsWith("image/") && file.size <= 4 * 1024 * 1024);
-    const warning = files.length !== accepted.length || accepted.length + images.length > 9 ? "最多加入 9 张图片，每张不超过 4 MB；超出限制的图片没有加入。" : "";
+    const accepted = files.filter((file) => file.type.startsWith("image/") && file.size <= 4 * 1024 * 1024).slice(0, available);
+    const warning = files.length !== accepted.length ? "最多加入 9 张图片，每张不超过 4 MB；超出限制的图片没有加入。" : "";
     setImageMessage("正在读取图片…");
     try {
     const encoded = await Promise.all(accepted.map((file) => new Promise<string>((resolve, reject) => {
@@ -891,7 +924,7 @@ function ArticleEditor({
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     })));
-    onImages([...images, ...encoded].slice(0, 9));
+    onImages([...images, ...encoded]);
     setImageMessage(warning);
     } catch { setImageMessage("图片读取失败，请保留原文件后重新选择。"); }
     finally { setReadingImages(false); }
@@ -968,7 +1001,11 @@ function ArticleEditor({
             <button onClick={() => onImages(images.filter((_, at) => at !== index))}>×</button></figure>)}
         </div>}
         <input disabled={blocked} ref={imagePicker} hidden multiple type="file" accept="image/*"
-          onChange={(event) => void addImages(Array.from(event.target.files || [])).catch(() => setImageMessage("图片无法读取，请重新选择"))} />
+          onChange={(event) => {
+            const files = Array.from(event.currentTarget.files || []);
+            event.currentTarget.value = "";
+            void addImages(files).catch(() => setImageMessage("图片无法读取，请重新选择"));
+          }} />
         {imageMessage && <p role="status">{imageMessage}</p>}
       </section>
 

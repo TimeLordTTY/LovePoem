@@ -101,9 +101,9 @@ textarea {
   font: inherit;
 }
 .sync-login-card small { display: block; margin: 8px 0; color: #a33; }
-.sync-login-card > div { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
-.sync-login-card button { padding: 10px 16px; border: 0; border-radius: 12px; }
-.sync-login-card button.primary { color: white; background: #6f4bb8; }
+.sync-login-card > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.sync-login-card button { padding: 10px 16px; border: 0; border-radius: 12px; white-space: nowrap; flex-shrink: 0; }
+.sync-login-card button.primary { color: white; background: #6f4bb8; flex: 1; width: auto; min-width: max-content; }
 
 .real-app {
   min-height: 100dvh;
@@ -140,6 +140,8 @@ textarea {
 .real-content h1 { margin: 0 0 18px; font-size: 27px; }
 .real-content .subline { margin-top: -10px; color: #79727f; }
 .inline-create { display: flex; gap: 8px; }
+.inline-create input { flex: 1; min-width: 0; }
+.inline-create button { flex-shrink: 0; white-space: nowrap; }
 .inline-create input, .title-input {
   width: 100%;
   box-sizing: border-box;

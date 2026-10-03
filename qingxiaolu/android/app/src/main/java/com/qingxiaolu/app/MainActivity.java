@@ -11,5 +11,8 @@ public class MainActivity extends BridgeActivity {
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), true);
         getWindow().setNavigationBarColor(android.graphics.Color.parseColor("#fffdfa"));
         getWindow().setStatusBarColor(android.graphics.Color.parseColor("#fffdfa"));
+        // 浅色状态栏使用深色图标，避免时间、电量等信息呈白色而无法阅读。
+        new androidx.core.view.WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView())
+            .setAppearanceLightStatusBars(true);
     }
 }

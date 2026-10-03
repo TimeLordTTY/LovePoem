@@ -164,6 +164,9 @@ export default function ProjectWorkspace({
   const [syncProject, setSyncProject] = useState(false);
   const [message, setMessage] = useState("");
   const [backupBusy, setBackupBusy] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const projectBackAction = useRef<() => void>(() => {});
   const [includePrivateNotesForAi, setIncludePrivateNotesForAi] = useState(false);
   const [selectionBusy, setSelectionBusy] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -219,6 +222,19 @@ export default function ProjectWorkspace({
 
   const latest = useRef({ title, data });
   latest.current = { title, data };
+  async function closeWithSave() {
+    if (closingRef.current) return;
+    if (folderBusyRef.current) { setMessage("文件夹同步正在进行，请完成后再返回"); return; }
+    closingRef.current = true; setClosing(true);
+    try { if (await persist(false, latest.current)) close(); }
+    finally { closingRef.current = false; setClosing(false); }
+  }
+  projectBackAction.current = () => { void closeWithSave(); };
+  useEffect(() => {
+    const back = () => projectBackAction.current();
+    window.addEventListener("qx-project-back", back);
+    return () => window.removeEventListener("qx-project-back", back);
+  }, []);
   useEffect(() => {
     const timer = window.setTimeout(() => void persist(false), 800);
     return () => window.clearTimeout(timer);
@@ -532,11 +548,11 @@ export default function ProjectWorkspace({
     私密: ["privateNotes", "仅用于自己的创作备注……"],
   };
 
-  return <main className="project-workspace" onContextMenu={openSelectionMenu}
+  return <main className="project-workspace" inert={closing} aria-busy={closing} onContextMenu={openSelectionMenu}
     onClick={(event) => {
       if (selectionMenu && !(event.target as HTMLElement).closest(".selection-action-menu")) setSelectionMenu(null);
     }}>
-    <header><button onClick={close}>‹ 返回</button><div><b>{title}</b><span>{data.type}项目</span></div>
+    <header><button disabled={closing} onClick={() => void closeWithSave()}>‹ 返回</button><div><b>{title}</b><span>{data.type}项目</span></div>
       <button className="save-project" onClick={() => void persist()}>保存</button></header>
     {message && <div className="real-message">{message}</div>}
     <nav className="project-section-tabs">
