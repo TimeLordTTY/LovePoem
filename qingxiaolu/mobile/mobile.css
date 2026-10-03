@@ -466,6 +466,8 @@ textarea {
 .forward-targets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 16px 0; }
 .forward-targets button { padding: 13px 10px; border: 1px solid #d9cee5; border-radius: 11px; color: #654694; background: #faf7fd; }
 .forward-picker button.forward-cancel { width: 100%; color: #6f6873; background: #f1efec; }
+.forward-batches { display: flex; align-items: center; gap: 12px; color: #654694; }
+.forward-batches select { flex: 1; min-width: 0; padding: 10px; border: 1px solid #d9cee5; border-radius: 8px; background: #faf7fd; }
 .batch-sync-bar {
   display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px;
   margin: 14px 0; padding: 12px 14px; border-radius: 13px; background: #f1ebf8;

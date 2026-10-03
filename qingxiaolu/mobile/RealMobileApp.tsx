@@ -16,7 +16,8 @@ import HistoryImport from "./HistoryImport";
 import ProjectWorkspace from "./ProjectWorkspace";
 import WebsitePublish from "./WebsitePublish";
 import WritingPreview from "./WritingPreview";
-import { openTargetDraft } from "./nativeDraft";
+import { openTargetDraft, copyNativeDraftText } from "./nativeDraft";
+import { forwardResultMessage } from "./forwardResult";
 import { shareOrDownloadArticleImages } from "./longImage";
 import { writingDateInfo } from "./writingDate";
 
@@ -89,6 +90,10 @@ export default function RealMobileApp() {
   const [showAiProjectPicker, setShowAiProjectPicker] = useState(false);
   const [openProjectSection, setOpenProjectSection] = useState("项目");
   const [forwardItem, setForwardItem] = useState<any>(null);
+  const [forwardBusy, setForwardBusy] = useState(false);
+  const forwardBusyRef = useRef(false);
+  const [forwardMessage, setForwardMessage] = useState("");
+  const [forwardImagePage, setForwardImagePage] = useState(0);
   const isNativeApp = Capacitor.isNativePlatform();
 
   const projects = useMemo(() => items.filter((item) => item.payload.itemType === "project"), [items]);
@@ -221,6 +226,7 @@ export default function RealMobileApp() {
   nativeBackAction.current = () => {
     if (changingDraftRef.current) return;
     if (showLogin) setShowLogin(false);
+    else if (forwardItem) { if (!forwardBusyRef.current) setForwardItem(null); }
     else if (showImport || showDocumentImport) window.dispatchEvent(new Event("qx-history-back"));
     else if (openProject) window.dispatchEvent(new Event("qx-project-back"));
     else if (websiteItem || showWebsiteSettings) { setWebsiteItem(null); setShowWebsiteSettings(false); }
@@ -321,26 +327,44 @@ export default function RealMobileApp() {
     finally { if (backupInput.current) backupInput.current.value = ""; }
   }
 
-  async function forward(item: any, target?: string) {
-    const text = String(item.payload.content?.text || "");
+  async function copyArticle(item: any) {
     try {
-      await navigator.clipboard?.writeText(text);
-    } catch { /* 分享面板仍会携带正文 */ }
+      const text = String(item.payload.content?.text || "");
+      if (!text) { setMessage("这篇稿件没有可复制的正文；原稿和剪贴板保持不变。"); return; }
+      if (isNativeApp) {
+        if (!(await copyNativeDraftText(item.payload.title || "情晓录稿件", text)).copied) throw new Error("复制未确认");
+      } else {
+        if (!navigator.clipboard?.writeText) throw new Error("剪贴板不可用");
+        await navigator.clipboard.writeText(text);
+      }
+      setMessage("已复制完整正文，图片和原稿保持不变。");
+    } catch { setMessage("复制未成功，请打开稿件后手动选中正文复制。原稿仍保留。"); }
+  }
+
+  async function forward(item: any, target?: string) {
+    if (forwardBusyRef.current) return;
+    const originalImages: string[] = (Array.isArray(item.payload.content?.images) ? item.payload.content.images : []).filter(Boolean);
+    if (target && originalImages.length > 9 && forwardItem?.id !== item.id) {
+      setForwardItem(item); setForwardImagePage(0); setForwardMessage(`本稿有 ${originalImages.length} 张原图，请先选择图片批次，再点目标 App。`);
+      return;
+    }
+    forwardBusyRef.current = true; setForwardBusy(true); setForwardMessage("");
+    const tell = (message: string) => { setMessage(message); setForwardMessage(message); };
+    const text = String(item.payload.content?.text || "");
+    let copied = false;
+    try {
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); copied = true; }
+    } catch { /* 继续尝试原生复制或系统分享，结果分别核对。 */ }
     if (target) {
-      const imageUrls = (Array.isArray(item.payload.content?.images) ? item.payload.content.images : [])
-        .filter(Boolean).map((source: string) => {
+      const imagePage = forwardItem?.id === item.id ? forwardImagePage : 0;
+      const imageUrls = originalImages.slice(imagePage * 9, imagePage * 9 + 9).map((source: string) => {
           try { return new URL(source, window.location.origin).href; } catch { return source; }
         });
       const result = await openTargetDraft(target, item.payload.title || "情晓录稿件", text, imageUrls);
-      if (result.needsAccessibility) {
-        setMessage("请在无障碍设置中进入“已下载的应用/已安装的服务”→“情晓录历史采集”→开启“使用服务”，返回情晓录后再点一次QQ说说");
-        return;
-      }
-      if (result.opened) {
-        setMessage(`已打开${target}，正文已复制`);
-        return;
-      }
-      setMessage(`没有成功打开${target}，正文已复制`);
+      const notice = forwardResultMessage(target, result, copied);
+      tell(`${originalImages.length > 9 ? `本次第 ${imagePage * 9 + 1}–${Math.min(imagePage * 9 + 9, originalImages.length)} 张图片。` : ""}${notice.message}`);
+      if (notice.complete && imagePage * 9 + 9 >= originalImages.length) setForwardItem(null);
       return;
     }
     await Share.share({
@@ -348,6 +372,11 @@ export default function RealMobileApp() {
       text,
       dialogTitle: target ? `打开${target}并建立草稿` : "转发到其他 App",
     });
+    setForwardItem(null); tell("内容已交给系统分享，请在目标 App 核对。");
+    } catch (error) {
+      const cancelled = error instanceof Error && /AbortError|cancel/i.test(`${error.name} ${error.message}`);
+      tell(cancelled ? "已取消转发，原稿仍保留。" : `转发失败，原稿仍保留，可重试。${copied ? "正文已复制。" : "未确认正文复制成功，请手动复制。"}`);
+    } finally { forwardBusyRef.current = false; setForwardBusy(false); }
   }
 
   async function createLongImage(item: any) {
@@ -667,13 +696,14 @@ export default function RealMobileApp() {
                   {item.payload.content?.publicationState === "ready" &&
                     item.payload.content?.visibility === "public" &&
                     <button onClick={() => setWebsiteItem(item)}>上传网站</button>}
-                  {isNativeApp && <button onClick={() => setForwardItem(item)}>转发</button>}
+                  {isNativeApp && <button disabled={forwardBusy} onClick={() => { setForwardMessage(""); setForwardImagePage(0); setForwardItem(item); }}>转发</button>}
+                  <button disabled={forwardBusy} onClick={() => void copyArticle(item)}>复制正文</button>
                   <button onClick={() => void createLongImage(item)}>生成长图</button>
                   <button onClick={() => setVersionItem(item)}>版本</button>
                   <button className="delete-article" onClick={() => void removeItem(item)}>删除</button></div>
                 {isNativeApp && !!item.payload.content?.shareTargets?.length && <div className="draft-target-actions">
                   {item.payload.content.shareTargets.map((target: string) =>
-                    <button key={target} onClick={() => void forward(item, target)}>转到{target}</button>)}
+                    <button key={target} disabled={forwardBusy} onClick={() => void forward(item, target)}>转到{target}</button>)}
                 </div>}
               </article>;
             })}
@@ -730,14 +760,23 @@ export default function RealMobileApp() {
       </div></div>}
       {isNativeApp && forwardItem && <div className="sync-login-mask"><div className="sync-login-card forward-picker">
         <h2>转发到</h2>
-        <p>正文会复制到剪贴板，图片会交给目标 App 的分享页面。</p>
+        <p>尝试复制正文并打开目标 App。图片是否已交给分享页面，会在操作后说明；请核对后再发布。</p>
+        {forwardItem.payload.content?.images?.length > 9 && <>
+          <p>共 {forwardItem.payload.content.images.length} 张原图。每批最多 9 张，可依次转发；原稿不会改变。</p>
+          <label className="forward-batches">照片批次
+            <select aria-label="照片批次" disabled={forwardBusy} value={forwardImagePage}
+              onChange={event => { setForwardImagePage(Number(event.target.value)); setForwardMessage(""); }}>
+            {Array.from({ length: Math.ceil(forwardItem.payload.content.images.length / 9) }, (_, index) =>
+              <option key={index} value={index}>
+                第 {index * 9 + 1}–{Math.min(index * 9 + 9, forwardItem.payload.content.images.length)} 张
+              </option>)}
+            </select>
+          </label>
+        </>}
+        {(forwardBusy || forwardMessage) && <p role="status">{forwardBusy ? "正在准备转发内容…" : forwardMessage}</p>}
         <div className="forward-targets">{["QQ说说", "微信朋友圈", "一言", "微博"].map((target) =>
-          <button key={target} onClick={() => {
-            const item = forwardItem;
-            setForwardItem(null);
-            void forward(item, target);
-          }}>{target}</button>)}</div>
-        <button className="forward-cancel" onClick={() => setForwardItem(null)}>取消</button>
+          <button key={target} disabled={forwardBusy} onClick={() => void forward(forwardItem, target)}>{target}</button>)}</div>
+        <button disabled={forwardBusy} className="forward-cancel" onClick={() => setForwardItem(null)}>取消</button>
       </div></div>}
     </main>
   );

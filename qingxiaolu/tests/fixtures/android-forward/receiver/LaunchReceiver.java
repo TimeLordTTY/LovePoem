@@ -1,0 +1,1 @@
+package com.sina.weibo; public class LaunchReceiver extends ShareReceiver {}
