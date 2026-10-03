@@ -136,29 +136,38 @@ export function writingTransaction<T>(prepare: () => WritingTransaction<T>): Pro
     let sequence = 0;
     try {
       const store = transaction.objectStore("values");
-      const keysRequest = store.getAllKeys();
-      const recordsRequest = store.getAll();
       const metadata = transaction.objectStore("migration");
       const sequenceRequest = metadata.get("sequence");
-      let keys: IDBValidKey[] | undefined;
-      let records: any[] | undefined;
-      let sequenceRead = false;
-      const apply = () => {
-        if (!keys || !records || !sequenceRead) return;
+      const apply = (fresh: Map<string, string>) => {
         try {
           // 同一读写事务内读取最新内容；另一个标签页的保存也不会被旧缓存覆盖。
-          const fresh = rows(keys, records);
           cache.clear(); for (const [key, value] of fresh) cache.set(key, value);
           cacheSequence = sequence;
           change = prepare();
           for (const key of Object.keys(change.values)) if (!managed.has(key)) throw new Error(`不支持的创作数据项：${key}`);
-          for (const [key, value] of Object.entries(change.values)) { if (value === null) store.delete(key); else store.put(value, key); }
+          for (const [key, value] of Object.entries(change.values)) {
+            // 未改动的大图和版本不重复写盘；实际修改仍在同一个事务中提交。
+            if (value === null) { if (fresh.has(key)) store.delete(key); }
+            else if (value !== fresh.get(key)) store.put(value, key);
+          }
           metadata.put(sequence + 1, "sequence");
         } catch (error) { preparationError = error; transaction.abort(); }
       };
-      keysRequest.onsuccess = () => { keys = keysRequest.result; apply(); };
-      recordsRequest.onsuccess = () => { records = recordsRequest.result; apply(); };
-      sequenceRequest.onsuccess = () => { sequence = Number(sequenceRequest.result || 0); sequenceRead = true; apply(); };
+      sequenceRequest.onsuccess = () => {
+        sequence = Number(sequenceRequest.result || 0);
+        // 序号相同说明缓存仍对应磁盘版本，免去每次保存重读全部原图。
+        // 序号检查在读写事务里完成，其他页面不能在检查与写入之间插入修改。
+        if (sequence === cacheSequence) { apply(new Map(cache)); return; }
+        const keysRequest = store.getAllKeys(), recordsRequest = store.getAll();
+        let keys: IDBValidKey[] | undefined, records: any[] | undefined;
+        const loaded = () => {
+          if (!keys || !records) return;
+          try { apply(rows(keys, records)); }
+          catch (error) { preparationError = error; transaction.abort(); }
+        };
+        keysRequest.onsuccess = () => { keys = keysRequest.result; loaded(); };
+        recordsRequest.onsuccess = () => { records = recordsRequest.result; loaded(); };
+      };
       await completed;
     } catch (error) {
       try { transaction.abort(); } catch { /* 已中止或完成 */ }
