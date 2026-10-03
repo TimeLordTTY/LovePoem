@@ -1,11 +1,15 @@
 import mammoth from "mammoth";
-import * as pdfjs from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?worker&url";
+// Android 系统 WebView 可能晚于桌面浏览器更新，使用同版本自带的兼容构建。
+import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import workerUrl from "./pdfWorker.ts?worker&url";
 import JSZip from "jszip";
 import { candidate, type ImportAdapter, type ImportCandidate, type ImportContext, type ImportSource } from "./types";
 import { decodeDocument, csvCandidates, parseOutlineXml, parseXmindJson, outlineText, wordHtmlText, safeImageSource } from "./documentParsing";
 import { readPdfContent } from "./pdfParsing";
+import { installPdfStreamIterator, installPdfBufferTransfer } from "./pdfCompatibility";
 
+installPdfStreamIterator();
+installPdfBufferTransfer();
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
 
 function sourceFor(file: File): ImportSource {
@@ -24,7 +28,8 @@ async function readPdf(file: File) {
     const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(new Blob([file], { type: "application/pdf" }));
   });
-  const task = pdfjs.getDocument({ data: await file.arrayBuffer() });
+  // 导入需要保留像素，避免旧 WebView 的离屏 GPU 转换改变原图颜色。
+  const task = pdfjs.getDocument({ data: await file.arrayBuffer(), isOffscreenCanvasSupported: false });
   try {
     const document = await task.promise;
     const result = await readPdfContent(document, pdfjs.OPS);

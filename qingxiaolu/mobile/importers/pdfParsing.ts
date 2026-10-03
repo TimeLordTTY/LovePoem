@@ -46,7 +46,7 @@ async function imageSource(image: any) {
   const canvas = document.createElement("canvas");
   canvas.width = image.width; canvas.height = image.height;
   try {
-    const context = canvas.getContext("2d");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("图片画布不可用");
     if (image.bitmap) context.drawImage(image.bitmap, 0, 0);
     else context.putImageData(new ImageData(pdfPixels(image), image.width, image.height), 0, 0);

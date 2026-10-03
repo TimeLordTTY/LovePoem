@@ -4,6 +4,7 @@ import { csvCandidates, decodeDocument, parseCsv, parseXmindJson, outlineText } 
 import { candidate } from "../work/writing-tests/importers/types.mjs";
 import { commitImport } from "../work/writing-tests/importers/importCommit.mjs";
 import { pdfText, pdfPixels } from "../work/writing-tests/importers/pdfParsing.mjs";
+import { installPdfStreamIterator, installPdfBufferTransfer } from "../work/writing-tests/importers/pdfCompatibility.mjs";
 class MemoryStorage {
   data = new Map(); failKey = "";
   getItem(key) { return this.data.get(key) ?? null; }
@@ -13,6 +14,38 @@ class MemoryStorage {
 beforeEach(() => { globalThis.localStorage = new MemoryStorage(); });
 const read = key => JSON.parse(localStorage.getItem(key));
 const items = () => [candidate("txt", "TXT", "第一篇", "正文一"), candidate("txt", "TXT", "第二篇", "正文二")];
+test("旧 WebView 的图片缓冲区转移保留像素、扩展补零、截断并分离原缓冲区", () => {
+  const modern=ArrayBuffer.prototype.transferToFixedLength;installPdfBufferTransfer();assert.equal(ArrayBuffer.prototype.transferToFixedLength,modern);
+  class OldBuffer extends ArrayBuffer {}
+  Object.defineProperty(OldBuffer.prototype,"transferToFixedLength",{value:undefined,configurable:true});installPdfBufferTransfer(OldBuffer);
+  const source=new OldBuffer(3);new Uint8Array(source).set([17,23,99]);const result=source.transferToFixedLength();
+  assert.deepEqual([...new Uint8Array(result)],[17,23,99]);assert.equal(source.byteLength,0);
+  const extended=new OldBuffer(2);new Uint8Array(extended).set([4,5]);assert.deepEqual([...new Uint8Array(extended.transferToFixedLength(4))],[4,5,0,0]);
+  const shortened=new OldBuffer(3);new Uint8Array(shortened).set([6,7,8]);assert.deepEqual([...new Uint8Array(shortened.transferToFixedLength(1))],[6]);
+  const invalid=new OldBuffer(1);assert.throws(()=>invalid.transferToFixedLength(-1),RangeError);assert.throws(()=>invalid.transferToFixedLength(1n),TypeError);
+  assert.equal(invalid.byteLength,1);assert.throws(()=>source.transferToFixedLength(),TypeError);
+});
+test("旧 WebView 的流异步迭代完整读取，提前结束取消并释放锁，不替换现代实现", async () => {
+  const modern = ReadableStream.prototype[Symbol.asyncIterator]; installPdfStreamIterator();
+  assert.equal(ReadableStream.prototype[Symbol.asyncIterator], modern);
+  class OldStream extends ReadableStream {}
+  Object.defineProperty(OldStream.prototype, Symbol.asyncIterator, {value:undefined,configurable:true});
+  installPdfStreamIterator(OldStream);
+  const stream=new OldStream({start(controller){controller.enqueue("第一段");controller.enqueue("第二段");controller.close();}});
+  const values=[];for await(const value of stream)values.push(value);
+  assert.deepEqual(values,["第一段","第二段"]);assert.equal(stream.locked,false);
+  let cancelled=false;
+  const interrupted=new OldStream({start(controller){controller.enqueue("未读完");},cancel(){cancelled=true;}});
+  for await(const value of interrupted){assert.equal(value,"未读完");break;}
+  assert.equal(cancelled,true);assert.equal(interrupted.locked,false);
+});
+test("旧 WebView 流的读取错误正常传播，读取锁仍然释放", async () => {
+  class OldStream extends ReadableStream {}
+  Object.defineProperty(OldStream.prototype, Symbol.asyncIterator, {value:undefined,configurable:true});installPdfStreamIterator(OldStream);
+  const marker=new Error("原始读取错误");const stream=new OldStream({start(controller){controller.error(marker);}});
+  await assert.rejects(async()=>{for await(const value of stream){void value;}},error=>error===marker);
+  assert.equal(stream.locked,false);
+});
 test("PDF 保留换行、段落和中文相邻文字，不把一页合成长行", () => {
   const item=(str,x,y,hasEOL=false)=>({str,transform:[1,0,0,12,x,y],height:12,width:str.length*12,hasEOL});
   assert.equal(pdfText([item("海边",0,100),item("小城",24,100,true),item("另一行",0,81,true),item("新的段落",0,43)]),"海边小城\n另一行\n\n新的段落");
