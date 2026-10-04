@@ -47,7 +47,7 @@ try {
     name: ["image-0.png", "original.jpg", "original.svg"][index], mimeType: ["image/png", "image/jpeg", "image/svg+xml"][index], buffer,
   })));
   await page.locator(".compact img").nth(2).waitFor();
-  await click(page.getByRole("button", { name: "稿件库", exact: true }));
+  await click(page.getByRole("button", { name: "记录", exact: true }));
   const card = page.locator("article[data-blog-month]").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
   const picker = page.locator(".forward-picker");
   const openPicker = () => click(card.getByRole("button", { name: "转发", exact: true }));
@@ -67,7 +67,7 @@ try {
   await openPicker(); await hideKeyboard(); await device.shell("input keyevent 4");
   await picker.waitFor({ state: "hidden" });
   assert.equal((await device.shell("pidof com.qingxiaolu.app")).toString().trim(), initialPid);
-  assert.ok(await card.isVisible(), "关闭转发面板跳离了原来的稿件库");
+  assert.ok(await card.isVisible(), "关闭转发面板跳离了原来的记录");
   await page.evaluate(() => {
     window.qxForwardTest = { original: window.Capacitor.nativePromise, mode: "reject", calls: 0, unhandled: 0 };
     window.addEventListener("unhandledrejection", () => window.qxForwardTest.unhandled++);
@@ -134,7 +134,7 @@ try {
     let focused = false;
     for (let i = 0; i < 10; i++) if (/mCurrentFocus=.*com\.qingxiaolu\.app/.test((await device.shell("dumpsys window")).toString())) { focused = true; break; }
     assert.ok(focused, "作者界面未回到前台");
-    await page.getByRole("button", { name: "稿件库", exact: true }).waitFor();
+    await page.getByRole("button", { name: "记录", exact: true }).waitFor();
   };
   await openPicker(); await click(picker.getByRole("button", { name: "微博", exact: true }));
   const shared = await receipt("android.intent.action.SEND_MULTIPLE");
@@ -159,7 +159,7 @@ try {
   await click(page.getByRole("button", { name: "正式导入已选内容（1）", exact: true }));
   await page.getByText(/已正式导入 1 条内容/).waitFor();
   await page.getByRole("heading", { name: "创作项目", exact: true }).waitFor();
-  await click(page.getByRole("button", { name: "稿件库", exact: true }));
+  await click(page.getByRole("button", { name: "记录", exact: true }));
   const manyOriginal = await snapshot(manyTitle);
   const manyCard = page.locator("article[data-blog-month]").filter({ has: page.getByRole("heading", { name: manyTitle, exact: true }) });
   await click(manyCard.getByRole("button", { name: "转发", exact: true }));

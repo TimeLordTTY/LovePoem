@@ -52,10 +52,10 @@ const run=async page => {
   if(!own||own.local.content.description!=='设备乙仍基于第一版的修改'||JSON.parse(own.server.content_json).description!=='设备甲的第二版项目资料')throw new Error('真实冲突没有保留双方资料');
   const stored=(await snapshot()).get(first.id);if(stored?.payload.content.description!=='设备甲的第二版项目资料')throw new Error('旧设备覆盖了真实云端新资料');
   phase='设备乙选择云端项目版';
-  await other.getByRole('button',{name:'稿件库',exact:true}).click();
+  await other.getByRole('button',{name:'记录',exact:true}).click();
   other.once('dialog',dialog=>dialog.accept());
   await other.locator('.conflict-list article').getByRole('button',{name:'使用云端版',exact:true}).click();
-  await other.getByText('已处理冲突，保留的稿件可在稿件库查看',{exact:true}).waitFor();
+  await other.getByText('已处理冲突，保留的稿件可在记录查看',{exact:true}).waitFor();
   await other.getByRole('button',{name:'项目',exact:true}).click();await other.getByRole('heading',{name:title,exact:true}).click();
   if(await other.getByLabel('项目简介',{exact:true}).inputValue()!=='设备甲的第二版项目资料')throw new Error('选云端项目版后没有显示正确资料');
   await other.getByRole('button',{name:'项目版本',exact:true}).click();
@@ -67,12 +67,12 @@ const run=async page => {
   await page.getByPlaceholder('稿件标题（可选）').fill(articleTitle);await page.getByPlaceholder('这一刻，想写点什么……').fill(text);
   await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByText('已保存到本机，可以继续写作',{exact:true}).waitFor();
   const article=(await read(page,'qx_drafts')).find(item=>item.title===articleTitle);if(!article)throw new Error('独立验收稿件没有保存');allowed.add(article.id);
-  await page.getByRole('button',{name:'稿件库',exact:true}).click();
+  await page.getByRole('button',{name:'记录',exact:true}).click();
   await page.getByRole('button',{name:'批量同步',exact:true}).click();
   await page.locator('article[data-blog-month]').filter({has:page.getByRole('heading',{name:articleTitle,exact:true})}).getByRole('checkbox').check();
   await page.getByRole('button',{name:'同步已选',exact:true}).click();await page.getByText('已同步所选 1 篇稿件',{exact:true}).waitFor();
   phase='设备乙读取关联稿件';
-  await other.locator('.global-main-nav').getByRole('button',{name:'稿件库',exact:true}).click();await other.getByRole('button',{name:'同步',exact:true}).click();
+  await other.locator('.global-main-nav').getByRole('button',{name:'记录',exact:true}).click();await other.getByRole('button',{name:'同步',exact:true}).click();
   const otherCard=other.locator('article[data-blog-month]').filter({has:other.getByRole('heading',{name:articleTitle,exact:true})});
   await otherCard.getByRole('button',{name:'继续编辑',exact:true}).click();
   if(await other.getByPlaceholder('这一刻，想写点什么……').inputValue()!==text)throw new Error('真实稿件读取改变正文');

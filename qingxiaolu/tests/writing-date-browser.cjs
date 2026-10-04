@@ -15,7 +15,7 @@ async page => {
       await target.getByRole('note').getByText('发布时间无法识别，保留了原始日期，请在导入前核对。', { exact: true }).waitFor();
       await target.getByRole('button', { name: '正式导入已选内容（3）', exact: true }).click();
       await target.getByText('已正式导入 3 条内容', { exact: true }).waitFor();
-      await target.getByRole('button', { name: '稿件库', exact: true }).click();
+      await target.getByRole('button', { name: '记录', exact: true }).click();
       const day = target.getByRole('heading', { name: '月初日记', exact: true }).locator('..');
       await day.getByText('2026年10月1日 · 待修改', { exact: true }).waitFor();
       if (await day.getAttribute('data-blog-month') !== '2026-10') throw new Error('日历日期归档月偏移');

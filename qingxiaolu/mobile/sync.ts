@@ -453,7 +453,7 @@ async function pushPending(force: boolean, memo: ContentMemo) {
             conflictIds.has(item.id) ? { ...item, syncState: "conflict" } : item;
         }) }, result: remaining };
     });
-    if (conflictIds.size) throw new Error(`有 ${conflictIds.size} 篇稿件有版本冲突，请在稿件库选择保留方式，两版都已保留。`);
+    if (conflictIds.size) throw new Error(`有 ${conflictIds.size} 篇稿件有版本冲突，请在记录选择保留方式，两版都已保留。`);
     if (remaining.length && appliedIds.size) await pushPending(force, memo);
     else if (remaining.length) throw new Error("云端未确认保存，待同步内容仍保留在本机，请稍后重试。");
 }

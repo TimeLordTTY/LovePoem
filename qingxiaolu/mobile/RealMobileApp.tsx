@@ -18,11 +18,11 @@ import WebsitePublish from "./WebsitePublish";
 import WritingPreview from "./WritingPreview";
 import { openTargetDraft, copyNativeDraftText } from "./nativeDraft";
 import { forwardResultMessage } from "./forwardResult";
-import { shareOrDownloadArticleImages } from "./longImage";
+import ArticleImageShare from "./ArticleImageShare";
 import { writingDateInfo } from "./writingDate";
 import { searchExcerpt } from "./searchExcerpt";
 
-type Tab = "项目" | "创作" | "稿件库" | "设置";
+type Tab = "项目" | "创作" | "记录" | "设置";
 
 function blogTime(item: any) {
   return blogDate(item).time;
@@ -101,6 +101,7 @@ export default function RealMobileApp() {
   const [showArchivedProjects, setShowArchivedProjects] = useState(false);
   const [showAiProjectPicker, setShowAiProjectPicker] = useState(false);
   const [openProjectSection, setOpenProjectSection] = useState("项目");
+  const [imageShareItem, setImageShareItem] = useState<any>(null);
   const [forwardItem, setForwardItem] = useState<any>(null);
   const [forwardBusy, setForwardBusy] = useState(false);
   const forwardBusyRef = useRef(false);
@@ -238,6 +239,7 @@ export default function RealMobileApp() {
   nativeBackAction.current = () => {
     if (changingDraftRef.current) return;
     if (showLogin) setShowLogin(false);
+    else if (imageShareItem) setImageShareItem(null);
     else if (forwardItem) { if (!forwardBusyRef.current) setForwardItem(null); }
     else if (showImport || showDocumentImport) window.dispatchEvent(new Event("qx-history-back"));
     else if (openProject) window.dispatchEvent(new Event("qx-project-back"));
@@ -401,20 +403,6 @@ export default function RealMobileApp() {
     } finally { forwardBusyRef.current = false; setForwardBusy(false); }
   }
 
-  async function createLongImage(item: any) {
-    setMessage("正在生成手机长图…");
-    try {
-      const result = await shareOrDownloadArticleImages(
-        String(item.payload.title || "情晓录稿件"),
-        String(item.payload.content?.text || ""),
-        Array.isArray(item.payload.content?.images) ? item.payload.content.images : [],
-      );
-      setMessage(result === "shared" ? "长图已交给系统分享" : result === "cancelled" ? "已取消长图分享，原稿仍保留" : "长图已下载");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "长图生成失败");
-    }
-  }
-
   async function syncSelected() {
     if (!selectedForSync.length) return setMessage("请先勾选要同步的稿件");
     const count = selectedForSync.length;
@@ -468,7 +456,7 @@ export default function RealMobileApp() {
         setEditingMetadata({ ...updated.payload.content, projectId: updated.payload.projectId, _baseRevision: updated.revision || 0, syncToServer: false });
         setEditorSession((value) => value + 1);
       }
-      setMessage(choice === "local" ? "已保留本机版，请点击同步上传" : "已处理冲突，保留的稿件可在稿件库查看");
+      setMessage(choice === "local" ? "已保留本机版，请点击同步上传" : "已处理冲突，保留的稿件可在记录查看");
     }
     catch (error) { setMessage((error as Error).message); }
   }
@@ -503,13 +491,14 @@ export default function RealMobileApp() {
     setShowWebsiteSettings(false);
     setShowTrash(false);
     setVersionItem(null);
+    setImageShareItem(null);
     setTab(next);
     } catch (error) { setAutoSavedAt(""); setMessage(error instanceof Error ? error.message : "尚未保存，请保留编辑页面"); }
     finally { changingDraftRef.current = false; setChangingDraft(false); }
   }
 
   const fixedNavigation = <nav className="global-main-nav">
-    {(["项目", "创作", "稿件库", "设置"] as Tab[]).map((name) =>
+    {(["项目", "创作", "记录", "设置"] as Tab[]).map((name) =>
       <button className={tab === name ? "active" : ""} key={name} onClick={() => goToMainTab(name)}>{name}</button>)}
   </nav>;
   const loginPanel = showLogin && <div className="sync-login-mask"><div className="sync-login-card">
@@ -523,6 +512,12 @@ export default function RealMobileApp() {
   </div></div>;
   const pageWithNavigation = (page: ReactNode) =>
     <div className="global-page-shell">{page}{fixedNavigation}</div>;
+
+  if (imageShareItem) return pageWithNavigation(<ArticleImageShare
+    title={itemTitle(imageShareItem, "未命名记录")}
+    text={String(imageShareItem.payload.content?.text || "")}
+    images={Array.isArray(imageShareItem.payload.content?.images) ? imageShareItem.payload.content.images : []}
+    close={() => setImageShareItem(null)} />);
 
   if (showImport) return pageWithNavigation(<HistoryImport kind="history" close={() => { setShowImport(false); void refresh(false); }} />);
   if (showDocumentImport) return pageWithNavigation(<HistoryImport kind="documents" projects={projects}
@@ -648,8 +643,8 @@ export default function RealMobileApp() {
           </div>
         </>}
 
-        {tab === "稿件库" && <>
-          <h1>稿件库</h1>
+        {tab === "记录" && <>
+          <h1>记录</h1>
           {!!conflicts.length && <section className="conflict-list"><h2>待处理的版本冲突</h2><p>两版都保留着。可以对照后选择，或保留双方。</p>
             {conflicts.map((conflict) => <article key={conflict.id}><h3>{conflict.local?.title || conflict.server?.title || "稿件"}</h3>
               <div className="conflict-columns"><div><b>本机版</b><pre>{conflict.local?.content?.text || JSON.stringify(conflict.local?.content, null, 2)}</pre></div>
@@ -730,7 +725,7 @@ export default function RealMobileApp() {
                     <button onClick={() => setWebsiteItem(item)}>上传网站</button>}
                   {isNativeApp && <button disabled={forwardBusy} onClick={() => { setForwardMessage(""); setForwardImagePage(0); setForwardItem(item); }}>转发</button>}
                   <button disabled={forwardBusy} onClick={() => void copyArticle(item)}>复制正文</button>
-                  <button onClick={() => void createLongImage(item)}>生成长图</button>
+                  <button onClick={() => setImageShareItem(item)}>分享成图片</button>
                   <button onClick={() => setVersionItem(item)}>版本</button>
                   <button className="delete-article" onClick={() => void removeItem(item)}>删除</button></div>
                 {isNativeApp && !!item.payload.content?.shareTargets?.length && <div className="draft-target-actions">
@@ -779,7 +774,7 @@ export default function RealMobileApp() {
         </>}
       </section>
 
-      <nav>{(["项目", "创作", "稿件库", "设置"] as Tab[]).map((name) =>
+      <nav>{(["项目", "创作", "记录", "设置"] as Tab[]).map((name) =>
         <button className={tab === name ? "active" : ""} key={name} onClick={() => goToMainTab(name)}>{name}</button>)}</nav>
 
       {loginPanel}
@@ -1135,7 +1130,7 @@ function ArticleEditor({
           hour: "2-digit", minute: "2-digit",
         })}` : syncToServer ? "此稿件将同步" : "仅保存到本地"}</span></div>
       <nav className="editor-main-nav">
-        {(["项目", "创作", "稿件库", "设置"] as Tab[]).map((name) =>
+        {(["项目", "创作", "记录", "设置"] as Tab[]).map((name) =>
           <button className={name === "创作" ? "active" : ""} key={name} onClick={() => onNavigate(name)}>{name}</button>)}
       </nav>
     </main>

@@ -8,7 +8,7 @@ async page => {
   await page.getByRole('button', { name: '创作', exact: true }).click();
   await page.getByPlaceholder('稿件标题（可选）').fill(title);
   await page.getByPlaceholder('这一刻，想写点什么……').fill(body);
-  await page.getByRole('button', { name: '稿件库', exact: true }).click();
+  await page.getByRole('button', { name: '记录', exact: true }).click();
   const card = page.locator('article[data-blog-month]').filter({ has: page.getByRole('heading', { name: title, exact: true }) });
   const copy = card.getByRole('button', { name: '复制正文', exact: true });
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined }));
@@ -29,7 +29,7 @@ async page => {
   await page.getByRole('button', { name: '新稿件', exact: true }).click();
   const emptyTitle = `${title}-无正文`;
   await page.getByPlaceholder('稿件标题（可选）').fill(emptyTitle);
-  await page.getByRole('button', { name: '稿件库', exact: true }).click();
+  await page.getByRole('button', { name: '记录', exact: true }).click();
   const empty = page.locator('article[data-blog-month]').filter({ has: page.getByRole('heading', { name: emptyTitle, exact: true }) });
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.qxCopied = text; } } }));
   await empty.getByRole('button', { name: '复制正文', exact: true }).click();

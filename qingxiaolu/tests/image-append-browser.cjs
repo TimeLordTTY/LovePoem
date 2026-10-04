@@ -13,7 +13,7 @@ async page => {
   await page.getByRole('heading', { name: '临时预览', exact: true }).waitFor();
   await page.getByRole('button', { name: '正式导入已选内容（1）', exact: true }).click();
   await page.getByText('已正式导入 1 条内容', { exact: true }).waitFor();
-  await page.getByRole('button', { name: '稿件库', exact: true }).click();
+  await page.getByRole('button', { name: '记录', exact: true }).click();
   await page.getByText('共 10 张插图，继续编辑可查看全部', { exact: true }).waitFor();
   await page.getByRole('button', { name: '继续编辑', exact: true }).click();
   await page.getByText(/已自动保存/).waitFor();

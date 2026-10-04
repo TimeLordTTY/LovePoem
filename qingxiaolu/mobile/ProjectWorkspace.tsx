@@ -874,7 +874,7 @@ export default function ProjectWorkspace({
           <button disabled={index === 0} onClick={() => { const next = [...data.chapters]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; patch({ chapters: next }); }}>上移</button>
           <button disabled={index === data.chapters.length - 1} onClick={() => { const next = [...data.chapters]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; patch({ chapters: next }); }}>下移</button>
           <button className="remove-structured" onClick={() => {
-            if (window.confirm("删除该章节大纲？关联正文仍保留在稿件库。")) patch({ chapters: data.chapters.filter((item) => item.id !== chapter.id) });
+            if (window.confirm("删除该章节大纲？关联正文仍保留在记录。")) patch({ chapters: data.chapters.filter((item) => item.id !== chapter.id) });
           }}>删除章节</button></div>
         </article>)}
       </StructuredEditor>}

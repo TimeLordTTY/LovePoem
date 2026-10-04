@@ -32,7 +32,7 @@ async page => {
  if(final!=='另一页的新资料')throw new Error('旧页面覆盖了另一页');
  await page.getByText(/项目资料已在其他页面或设备更新/).waitFor();
  if(await page.getByLabel('项目简介',{exact:true}).inputValue()!=='旧页继续写的资料')throw new Error('冲突丢失本页修改');
- await page.locator('.global-main-nav').getByRole('button',{name:'稿件库',exact:true}).click();
+ await page.locator('.global-main-nav').getByRole('button',{name:'记录',exact:true}).click();
  if(!await page.getByLabel('项目简介',{exact:true}).isVisible())throw new Error('冲突时底部导航仍离开项目');
  const unloadGuard=await page.evaluate(()=>{const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);return event.defaultPrevented;});
  if(!unloadGuard)throw new Error('未保存的项目资料没有刷新保护');
@@ -49,12 +49,12 @@ async page => {
  await child.close();
  await page.evaluate(()=>{window.qxProjectPut=IDBObjectStore.prototype.put;IDBObjectStore.prototype.put=function(value,key){if(key==='qx_drafts')throw new DOMException('test-only','QuotaExceededError');return window.qxProjectPut.call(this,value,key);};});
  await page.getByLabel('项目简介',{exact:true}).fill('导航失败时保留的项目简介');
- await page.locator('.global-main-nav').getByRole('button',{name:'稿件库',exact:true}).click();
+ await page.locator('.global-main-nav').getByRole('button',{name:'记录',exact:true}).click();
  await page.getByText(/本机存储不足或不可写/).waitFor();
  if(await page.getByLabel('项目简介',{exact:true}).inputValue()!=='导航失败时保留的项目简介')throw new Error('导航失败丢失资料');
  await page.evaluate(()=>IDBObjectStore.prototype.put=window.qxProjectPut);
- await page.locator('.global-main-nav').getByRole('button',{name:'稿件库',exact:true}).click();
- await page.getByRole('heading',{name:'稿件库',exact:true}).waitFor();
+ await page.locator('.global-main-nav').getByRole('button',{name:'记录',exact:true}).click();
+ await page.getByRole('heading',{name:'记录',exact:true}).waitFor();
  await page.getByRole('button',{name:'项目',exact:true}).click();
  await page.getByRole('heading',{name:title,exact:true}).click();
  if(await page.getByLabel('项目简介',{exact:true}).inputValue()!=='导航失败时保留的项目简介')throw new Error('重试导航未保存');

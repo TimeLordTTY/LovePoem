@@ -1,3 +1,5 @@
+import JSZip from "jszip";
+
 function wrap(ctx: CanvasRenderingContext2D, text: string, width: number) {
   const lines: string[] = [];
   for (const paragraph of text.split("\n")) {
@@ -92,19 +94,29 @@ export async function createArticleImages(title: string, text: string, images: s
   return pages.map((blob, index) => new File([blob], `${name}-${index + 1}.png`, { type: "image/png" }));
 }
 
+export function downloadArticleImage(file: File) {
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.name;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+export async function createArticleImageArchive(files: File[]) {
+  const zip = new JSZip();
+  for (const file of files) zip.file(file.name, await file.arrayBuffer());
+  const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
+  const name = files[0]?.name.replace(/-\d+\.png$/, "") || "情晓录";
+  return new File([blob], `${name}-分享图片.zip`, { type: "application/zip" });
+}
+
 export async function shareOrDownloadArticleImages(title: string, text: string, images: string[]) {
   const files = await createArticleImages(title, text, images);
   if (window.matchMedia("(pointer: coarse)").matches && navigator.share && navigator.canShare?.({ files })) {
     try { await navigator.share({ title: `${title} · 手机长图`, files }); return "shared"; }
     catch (error: any) { if (error?.name === "AbortError") return "cancelled"; }
   }
-  for (const file of files) {
-    const url = URL.createObjectURL(file);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.name;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-  }
+  files.forEach(downloadArticleImage);
   return "downloaded";
 }

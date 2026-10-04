@@ -911,3 +911,12 @@ textarea {
   .project-section-tabs button.active { color: #67499a; background: #eae1f3; }
   .project-workspace-body { width: 100%; box-sizing: border-box; margin: 0; padding: 34px 38px 110px; }
 }
+
+.image-share-page { padding-bottom: 100px; }
+.image-share-page header { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.image-share-page h2 { overflow-wrap: anywhere; }
+.image-share-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.image-share-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 24px; }
+.image-share-preview figure { margin: 0; min-width: 0; }
+.image-share-preview img { width: 100%; height: auto; display: block; border: 1px solid #e5dfed; border-radius: 12px; }
+.image-share-preview figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; }

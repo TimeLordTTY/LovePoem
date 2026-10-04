@@ -12,6 +12,6 @@ try {
  assert.ok((await card('前缀').locator('textarea').inputValue()).includes('前缀子节点'));
  for(const name of ['目录','人物','前缀'])await card(name).getByRole('button',{name:'按导图节点拆分',exact:true}).click();
  assert.equal(await page.locator('.candidate-list article').count(),4);await page.getByText('预览已保存在本机，刷新可恢复',{exact:true}).waitFor();await page.reload();await page.locator('.candidate-list article').first().waitFor();assert.equal(await page.locator('.candidate-list article').count(),4);
- await page.getByRole('button',{name:'正式导入已选内容（4）',exact:true}).click();await page.getByText('已正式导入 4 条内容',{exact:true}).waitFor();await page.getByRole('button',{name:'稿件库',exact:true}).click();await page.locator('article[data-blog-month]').first().waitFor();assert.equal(await page.locator('article[data-blog-month]').count(),4);
+ await page.getByRole('button',{name:'正式导入已选内容（4）',exact:true}).click();await page.getByText('已正式导入 4 条内容',{exact:true}).waitFor();await page.getByRole('button',{name:'记录',exact:true}).click();await page.locator('article[data-blog-month]').first().waitFor();assert.equal(await page.locator('article[data-blog-month]').count(),4);
  console.log(JSON.stringify({opmlNotes:true,freeMindRichTitle:true,freeMindParagraphNotes:true,prefixedXmlNodes:true,splitAndReload:true,formalImport:true}));
 }finally{await browser.close();}
