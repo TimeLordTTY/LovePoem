@@ -37,6 +37,13 @@ export function commitImport(items: ImportCandidate[], options: {
     const materialKey = JSON.stringify([category, key]);
     if (options.skipDuplicates !== false && (material ? materialKnown.has(materialKey) : known.has(key))) { skipped++; continue; }
     if (material) {
+      const original = (item.raw as any)?.originalXmind;
+      if (typeof original === "string" && original.startsWith("data:application/x-xmind;base64,")) {
+        const documents = workspace.importDocuments || [];
+        if (!documents.some((document: any) => document.dataUrl === original)) workspace.importDocuments = [
+          ...documents, { fileName: (item.raw as any)?.fileName || `${item.title}.xmind`, dataUrl: original },
+        ];
+      }
       if (category === "人物") workspace.characterCards = [...(workspace.characterCards || []), { id: item.id, name: title, role: "导入资料", description: item.text, importSource: content }];
       else if (category === "大纲") workspace.chapters = [...(workspace.chapters || []), { id: item.id, title, summary: item.text, status: "待修改", importSource: content }];
       else if (category === "时间轴") workspace.timelineEvents = [...(workspace.timelineEvents || []), { id: item.id, time: item.publishedAt || "", title, detail: item.text, importSource: content }];

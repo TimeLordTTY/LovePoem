@@ -45,14 +45,21 @@ async function readFile(file: File): Promise<{ text: string; images?: string[]; 
   if (ext === "xmind") {
     const zip = await JSZip.loadAsync(await file.arrayBuffer());
     const jsonEntry = zip.file("content.json");
+    let entries;
     if (jsonEntry) {
       const sheets = JSON.parse(await jsonEntry.async("text"));
-      const entries = parseXmindJson(sheets);
-      return { text: outlineText(entries), raw: { outlineEntries: entries } };
+      entries = parseXmindJson(sheets);
+    } else {
+      const xmlEntry = zip.file("content.xml");
+      if (!xmlEntry) throw new Error(`${file.name} 中没有可识别的思维导图内容`);
+      entries = parseOutlineXml(await xmlEntry.async("text"));
     }
-    const xmlEntry = zip.file("content.xml");
-    if (xmlEntry) { const entries = parseOutlineXml(await xmlEntry.async("text")); return { text: outlineText(entries), raw: { outlineEntries: entries } }; }
-    throw new Error(`${file.name} 中没有可识别的思维导图内容`);
+    const originalXmind = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(new Blob([file], { type: "application/x-xmind" }));
+    });
+    return { text: outlineText(entries), raw: { outlineEntries: entries, originalXmind },
+      warnings: ["已读取节点和文字备注；图片、布局和关系线请对照原始 XMind。原文件随导入保留。"] };
   }
   if (ext === "mm" || ext === "opml") {
     const decoded = decodeDocument(await file.arrayBuffer());

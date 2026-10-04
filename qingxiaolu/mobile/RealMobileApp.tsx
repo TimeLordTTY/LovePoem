@@ -701,6 +701,8 @@ export default function RealMobileApp() {
                   {item.payload.content?.importSource === "pdf" && typeof item.payload.content?.importRaw?.originalPdf === "string" &&
                     item.payload.content.importRaw.originalPdf.startsWith("data:application/pdf;base64,") &&
                     <a href={item.payload.content.importRaw.originalPdf} download={item.payload.content.importRaw.fileName || "原始文档.pdf"}>下载原始 PDF</a>}
+                  {typeof item.payload.content?.importRaw?.originalXmind === "string" && item.payload.content.importRaw.originalXmind.startsWith("data:application/x-xmind;base64,") &&
+                    <a href={item.payload.content.importRaw.originalXmind} download={item.payload.content.importRaw.fileName || "原始导图.xmind"}>下载原始 XMind</a>}
                   {item.payload.content?.publicationState === "ready" &&
                     item.payload.content?.visibility === "public" &&
                     <button onClick={() => setWebsiteItem(item)}>上传网站</button>}

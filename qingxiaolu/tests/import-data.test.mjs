@@ -96,6 +96,40 @@ test("旧中文编码和 UTF16 文档可读，XMind 备注和层级保留", () =
   assert.deepEqual(entries[1], {title:"第一章",text:"回到海边",depth:1});
   assert.match(outlineText(entries), /回到海边/);
 });
+
+test("XMind 富文本备注保留段落和嵌套链接，不把对象变成正文", () => {
+  const entries = parseXmindJson([{ rootTopic: { title: "小说", notes: { plain: { content: "" }, html: { content: { paragraphs: [
+    { spans: [{ text: "第一段" }, { href: "https://example.com/source", spans: [{ text: "资料来源" }] }] },
+    { spans: [{ text: "第二段📝" }] },
+  ] } } } } }]);
+  assert.equal(entries[0].text, "第一段资料来源（https://example.com/source）\n第二段📝");
+  assert.equal(parseXmindJson([{rootTopic:{title:"空备注",notes:{plain:{content:""}}}}])[0].text, "");
+});
+
+test("XMind 普通、游离、概要和标注节点全部保留，普通分支顺序保持", () => {
+  const entries = parseXmindJson([{ rootTopic: { title: "小说", children: {
+    attached: [{ title: "第一章" }], detached: [{ title: "游离灵感" }],
+    summary: [{ title: "阶段概要", notes: { plain: { content: "概要正文" } } }],
+    callout: [{ title: "人物标注", notes: { plain: { content: "不要忘记的伏笔" } } }],
+  } } }]);
+  assert.deepEqual(entries.map(v => v.title), ["小说", "第一章", "游离灵感", "阶段概要", "人物标注"]);
+  assert.equal(entries.at(-1).text, "不要忘记的伏笔");
+  assert.ok(entries.slice(1).every(v => v.depth === 1));
+});
+
+test("XMind 导入背景等项目资料时保留一次原文件，重复节点不重复附加", () => {
+  localStorage.setItem("qx_drafts", JSON.stringify([{id:"p",itemType:"project",title:"小说",content:{}}]));
+  const originalXmind = "data:application/x-xmind;base64,UEs=";
+  const nodes = [candidate("other","XMIND","背景一","正文一",{raw:{fileName:"小说.xmind",originalXmind}}),
+    candidate("other","XMIND","背景二","正文二",{raw:{fileName:"小说.xmind",originalXmind}})];
+  commitImport(nodes,{projectId:"p",category:"背景"});
+  const workspace = read("qx_project_workspaces").p;
+  assert.equal(workspace.importDocuments.length,1);
+  assert.equal(workspace.importDocuments[0].dataUrl,originalXmind);
+  assert.match(workspace.world,/正文二/);
+  assert.deepEqual(commitImport(nodes,{projectId:"p",category:"背景"}),{added:0,skipped:2});
+  assert.equal(read("qx_project_workspaces").p.importDocuments.length,1);
+});
 test("批量导入遇到容量错误整批回滚，重试不会留下半批或重复内容", () => {
   const selected = items(); localStorage.setItem("qx_drafts", JSON.stringify([{id:"old", itemType:"article"}]));
   const before = new Map(localStorage.data); localStorage.failKey = "qx_drafts";

@@ -21,6 +21,7 @@ export type ProjectWorkspaceData = {
   characterCards: Array<{ id: string; name: string; role: string; description: string }>;
   chapters: Array<{ id: string; title: string; summary: string; status: string }>;
   timelineEvents: Array<{ id: string; time: string; title: string; detail: string }>;
+  importDocuments?: Array<{ fileName: string; dataUrl: string }>;
   archived: boolean;
   aiEndpoint: string;
   aiModel: string;
@@ -935,6 +936,10 @@ export default function ProjectWorkspace({
         <h1>项目备份与导出</h1>
         <button disabled={backupBusy} onClick={() => void exportProjectBackup()}>{backupBusy ? "正在整理图片…" : "下载完整项目备份（含图片和版本）"}</button>
         <p>完整备份可在“设置 → 从完整备份恢复”中恢复。文字导出适合阅读和排版，不能替代完整备份。</p>
+        {!!data.importDocuments?.length && <details><summary>导入原文件（{data.importDocuments.length}）</summary>
+          {data.importDocuments.filter(document => document.dataUrl.startsWith("data:application/x-xmind;base64,")).map((document, index) =>
+            <p key={index}><a href={document.dataUrl} download={document.fileName}>下载原始 XMind：{document.fileName}</a></p>)}
+        </details>}
         <p>阅读时选中文字，电脑右键或手机长按即可复制、导出或发送；这里用于导出整个项目。</p>
         <div className="local-word-sync">
           <div><b>情晓录总文件夹</b><small>{projectDirectoryName

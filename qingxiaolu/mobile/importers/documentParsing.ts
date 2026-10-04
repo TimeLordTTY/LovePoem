@@ -112,14 +112,34 @@ export function parseOutlineXml(xml: string): OutlineEntry[] {
 export function parseXmindJson(sheets: any[]): OutlineEntry[] {
   if (!Array.isArray(sheets)) throw new Error("XMind 内容格式无法识别。");
   const entries: OutlineEntry[] = [];
+  function spanText(spans: any[]): string {
+    return spans.map(span => {
+      const text = typeof span.text === "string" ? span.text : Array.isArray(span.spans) ? spanText(span.spans) : "";
+      return typeof span.href === "string" && span.href ? `${text}（${span.href}）` : text;
+    }).join("");
+  }
+  function noteText(notes: any): string {
+    const plain = typeof notes?.plain === "string" ? notes.plain : notes?.plain?.content;
+    if (typeof plain === "string" && plain) return plain;
+    const html = notes?.html?.content;
+    if (typeof html === "string") return html;
+    if (Array.isArray(html?.paragraphs)) return html.paragraphs.map((paragraph: any) =>
+      Array.isArray(paragraph.spans) ? spanText(paragraph.spans) : "").join("\n");
+    return "";
+  }
   function walk(node: any, depth = 0) {
     if (!node) return;
     const title = String(node.title || "");
-    const note = String(node.notes?.plain?.content || node.notes?.plain || node.notes?.html?.content || "");
+    const note = noteText(node.notes);
     if (title || note) entries.push({ title, text: note, depth });
-    for (const child of [...(node.children?.attached || []), ...(node.children?.detached || [])]) walk(child, depth + 1);
+    for (const kind of ["attached", "detached", "summary", "callout"]) {
+      const children = node.children?.[kind];
+      if (children !== undefined && !Array.isArray(children)) throw new Error("XMind 节点分支格式不正确，尚未导入任何内容。");
+      for (const child of children || []) walk(child, depth + 1);
+    }
   }
   for (const sheet of sheets) walk(sheet.rootTopic);
+  if (!entries.length) throw new Error("思维导图中没有可识别的节点。");
   return entries;
 }
 
