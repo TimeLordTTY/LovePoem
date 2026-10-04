@@ -123,7 +123,7 @@ export default function RealMobileApp() {
   }), [blogItems, blogSearch, blogType, projectFilter, statusFilter]);
   const blogArchive = useMemo(() => {
     const groups = new Map<string, { label: string; count: number }>();
-    for (const item of blogItems) {
+    for (const item of visibleBlogItems) {
       const date = blogDate(item);
       const key = date.groupKey;
       const current = groups.get(key);
@@ -133,7 +133,7 @@ export default function RealMobileApp() {
       });
     }
     return [...groups.entries()].map(([key, value]) => ({ key, ...value }));
-  }, [blogItems]);
+  }, [visibleBlogItems]);
 
   async function refresh(uploadPending = true) {
     setItems(getLocalItems());
