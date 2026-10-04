@@ -1,5 +1,30 @@
 import { readJson, changeJson } from "../storage";
 import type { ImportCandidate } from "./types";
+import { readItemSnapshot } from "../itemSnapshot";
+
+const titleFor = (item: ImportCandidate) => item.source === "qqzone" ? "" : ["weibo", "wechat", "yiyan"].includes(item.source) ? item.title : item.title || item.text.slice(0, 20);
+const signature = (title: string, content: any) => JSON.stringify([
+  title, content.text, content.importSource, content.publishedAt || "", content.originalUrl || "", content.images || [],
+]);
+function currentImportRecords() {
+  const drafts = readItemSnapshot("qx_drafts"), cache = readItemSnapshot("qx_server_cache");
+  const deleted = new Set(readJson<string[]>("qx_deleted_ids", []));
+  return [...drafts, ...cache.filter(entry => !drafts.some(draft => draft.id === entry.id)).map(entry => ({ ...entry.payload, baseRevision: Number(entry.revision || entry.payload?.baseRevision || 0) }))]
+    .filter(entry => !deleted.has(entry.id));
+}
+export function filterPreviouslyImported(items: ImportCandidate[], projectId?: string, category = "正文") {
+  const material = Boolean(projectId && category !== "正文");
+  const current = currentImportRecords();
+  const workspace = { ...current.find(entry => entry.id === projectId)?.content,
+    ...readJson<Record<string, any>>("qx_project_workspaces", {})[projectId || ""] };
+  const known = new Set<string>(material ? workspace?.importSignatures || [] : current
+    .filter(entry => entry.itemType === "article" && entry.projectId === (projectId || undefined) && entry.content?.imported)
+    .map(entry => signature(entry.title, entry.content)));
+  return items.filter(item => {
+    const key = signature(titleFor(item), { text: item.text, importSource: item.source, publishedAt: item.publishedAt, originalUrl: item.originalUrl, images: item.images });
+    return !known.has(material ? JSON.stringify([category, key]) : key);
+  });
+}
 
 // 先准备整个批次再统一保存；存储失败时不会留下半批稿件。
 export function commitImport(items: ImportCandidate[], options: {
@@ -10,14 +35,7 @@ export function commitImport(items: ImportCandidate[], options: {
   const category = options.category || "正文";
   const material = Boolean(projectId && category !== "正文");
   const drafts = readJson<any[]>("qx_drafts", []);
-  const cache = readJson<any[]>("qx_server_cache", []);
-  const deleted = new Set(readJson<string[]>("qx_deleted_ids", []));
-  const current = [...drafts, ...cache.filter(entry => !drafts.some(draft => draft.id === entry.id)).map(entry => ({ ...entry.payload, baseRevision: Number(entry.revision || entry.payload?.baseRevision || 0) }))]
-    .filter(entry => !deleted.has(entry.id));
-  const titleFor = (item: ImportCandidate) => item.source === "qqzone" ? "" : item.title || item.text.slice(0, 20);
-  const signature = (title: string, content: any) => JSON.stringify([
-    title, content.text, content.importSource, content.publishedAt || "", content.originalUrl || "", content.images || [],
-  ]);
+  const current = currentImportRecords();
   const known = new Set(current.filter(entry => entry.itemType === "article" && entry.projectId === projectId && entry.content?.imported)
     .map(entry => signature(entry.title, entry.content)));
   const workspaces = readJson<Record<string, any>>("qx_project_workspaces", {});

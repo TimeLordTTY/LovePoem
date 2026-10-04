@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { importAdapters, type ImportCandidate, type ImportMode } from "./importers";
 import { candidate } from "./importers/types";
-import { commitImport } from "./importers/importCommit";
+import { commitImport, filterPreviouslyImported } from "./importers/importCommit";
 import { nativeCaptureAvailable, openNativeCaptureSettings } from "./nativeHistory";
 import { loadImportPreview, saveImportPreview, removeImportPreview, listImportPreviews, claimImportPreview,
   discardImportPreview, type ImportPreview, type ImportPreviewSummary } from "./importPreviewStore";
@@ -18,10 +18,14 @@ export default function HistoryImport({
   close,
   kind = "history",
   projects = [],
+  initialProjectId = "",
+  initialFiles = [],
 }: {
   close: () => void;
   kind?: "history" | "documents";
   projects?: any[];
+  initialProjectId?: string;
+  initialFiles?: File[];
 }) {
   const previewKey = `qx_import_preview_${kind}`;
   const [initialStoreKey] = useState(() => {
@@ -44,7 +48,8 @@ export default function HistoryImport({
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [previewStatus, setPreviewStatus] = useState("正在恢复临时预览…");
   const fileInput = useRef<HTMLInputElement>(null);
-  const [targetProjectId, setTargetProjectId] = useState(initialPreview?.targetProjectId || "");
+  const [targetProjectId, setTargetProjectId] = useState(initialPreview?.targetProjectId || initialProjectId);
+  const initialFilesRead = useRef(false);
   const [targetCategory, setTargetCategory] = useState(initialPreview?.targetCategory || "正文");
   const [pastedResult, setPastedResult] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,6 +57,16 @@ export default function HistoryImport({
   const [skipDuplicates, setSkipDuplicates] = useState(initialPreview?.skipDuplicates !== false);
   const previewRef = useRef<ImportPreview>(null);
   const previewDone = useRef(false);
+  const closeTimer = useRef<number | undefined>(undefined);
+  const [recordsChanged, setRecordsChanged] = useState(0);
+  useEffect(() => {
+    const changed = () => setRecordsChanged(value => value + 1);
+    window.addEventListener("qx-writing-change", changed);
+    return () => { clearTimeout(closeTimer.current); window.removeEventListener("qx-writing-change", changed); };
+  }, []);
+  const pendingCandidates = useMemo(() => skipDuplicates
+    ? filterPreviouslyImported(candidates, targetProjectId || undefined, kind === "documents" ? targetCategory : "正文") : candidates,
+  [candidates, skipDuplicates, targetProjectId, targetCategory, kind, recordsChanged]);
   const persistedPreview = useRef<ImportPreview | null>(null);
   const preview = useMemo(() => ({ candidates, targetProjectId, targetCategory, skipDuplicates }),
     [candidates, targetProjectId, targetCategory, skipDuplicates]);
@@ -162,6 +177,7 @@ export default function HistoryImport({
   });
 
   async function importFiles(files: File[]) {
+    if (!previewLoaded) return setMessage("临时预览正在读取，请等待后再选择文件。");
     if (busyRef.current || !files.length) return;
     busyRef.current = true; setBusy(true);
     previewDone.current = false;
@@ -177,6 +193,14 @@ export default function HistoryImport({
     } finally { busyRef.current = false; setBusy(false); if (fileInput.current) fileInput.current.value = ""; }
   }
 
+  useEffect(() => {
+    if (previewLoaded && initialFiles.length && !initialFilesRead.current) {
+      initialFilesRead.current = true;
+      if (step === "preview") setMessage("上次预览已恢复，请先完成或重新选择，再拖入新文件。");
+      else void importFiles(initialFiles);
+    }
+  }, [previewLoaded, initialFiles, step]);
+
   async function importPastedResult() {
     if (!pastedResult.trim()) return setMessage("请先粘贴采集结果");
     await importFiles([new File([pastedResult], "QQ空间采集结果.json", { type: "application/json" })]);
@@ -184,6 +208,11 @@ export default function HistoryImport({
 
   async function startPlatform(adapterId: string, label: string, mode: ImportMode) {
     const adapter = importAdapters.find((item) => item.id === adapterId);
+    if (mode === "browser") {
+      window.open("https://poem.timelordtty.cn/qingxiaolu/tools/desktop/guide.html#history", "_blank", "noopener,noreferrer");
+      setMessage(`电脑助手内有${label}采集工具。请登录自己的历史页面后采集，再导入生成的 JSON 文件；原页面展开与缺失内容需自行核对。`);
+      return;
+    }
     if (mode === "accessibility" && adapter && nativeCaptureAvailable()) {
       const captured = await adapter.collect({ mode });
       if (captured.length) {
@@ -206,7 +235,7 @@ export default function HistoryImport({
 
   async function commit() {
     if (busyRef.current) return;
-    const selected = candidates.filter((item) => item.selected);
+    const selected = pendingCandidates.filter((item) => item.selected);
     if (!selected.length) return setMessage("请至少选择一条内容");
     setMessage(`正在导入 ${selected.length} 条…`);
     busyRef.current = true; setBusy(true);
@@ -215,7 +244,7 @@ export default function HistoryImport({
       try { await clearPreview(); }
       catch { setMessage(`已正式导入 ${result.added} 条内容，但临时预览清理失败。稿件已保存，重新导入会按原去重设置处理。`); busyRef.current = false; setBusy(false); return; }
       setMessage(`已正式导入 ${result.added} 条内容${result.skipped ? `，跳过 ${result.skipped} 条相同内容` : ""}`);
-      window.setTimeout(close, 800);
+      closeTimer.current = window.setTimeout(close, 800);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "导入失败，预览内容已保留，请重试。");
       busyRef.current = false; setBusy(false);
@@ -231,7 +260,14 @@ export default function HistoryImport({
   }
 
   return (
-    <div className="history-import">
+    <div className="history-import" onDragOver={event => { if (kind === "documents" && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+      onDrop={event => {
+        if (kind !== "documents" || !event.dataTransfer.files.length) return;
+        event.preventDefault();
+        if (!previewLoaded) return setMessage("临时预览正在读取，请等待后再拖入文件。");
+        if (step === "preview") return setMessage("请先完成当前预览，或点击“重新选择”后再拖入文件。");
+        void importFiles(Array.from(event.dataTransfer.files));
+      }}>
       <header><button disabled={busy} onClick={() => void goBack()}>‹ 返回</button><div>
         <b>{kind === "documents" ? "导入本地文档" : "历史导入"}</b>
         <span>{kind === "documents" ? "解析后先预览，再保存到项目" : "一次性导入，不会实时同步"}</span>
@@ -270,6 +306,7 @@ export default function HistoryImport({
             </article>)}
           {kind === "documents" && <article>
             <h2>文件导入</h2><p>Word、TXT、Markdown、PDF、XMind、FreeMind、OPML、CSV 和 JSON</p>
+            <p>也可以把文件拖到此页面，识别后先预览。</p>
             <button className="primary" onClick={() => fileInput.current?.click()}>选择文件</button>
           </article>}
         </div>
@@ -294,8 +331,9 @@ export default function HistoryImport({
           </select></label>
         </div>}
         <label><input type="checkbox" checked={skipDuplicates} onChange={event => setSkipDuplicates(event.target.checked)} /> 跳过已导入的相同内容</label>
+        {candidates.length > pendingCandidates.length && <p role="status">已隐藏 {candidates.length - pendingCandidates.length} 条已导入的相同内容，无需重复导入。</p>}
         <div className="candidate-list">
-          {candidates.map((item) => <article key={item.id}>
+          {pendingCandidates.map((item) => <article key={item.id}>
             <label><input type="checkbox" checked={item.selected}
               onChange={(event) => update(item.id, { selected: event.target.checked })} /> 导入</label>
             <button className="remove" onClick={() => setCandidates((items) => items.filter((entry) => entry.id !== item.id))}>删除</button>
@@ -317,8 +355,8 @@ export default function HistoryImport({
             </div>}
           </article>)}
         </div>
-        <button className="commit-import" onClick={() => void commit()}>
-          正式导入已选内容（{candidates.filter((item) => item.selected).length}）
+        <button className="commit-import" disabled={!pendingCandidates.some(item => item.selected)} onClick={() => void commit()}>
+          正式导入已选内容（{pendingCandidates.filter((item) => item.selected).length}）
         </button></fieldset>
       </section>}
     </div>

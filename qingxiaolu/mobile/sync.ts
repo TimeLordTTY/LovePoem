@@ -6,7 +6,8 @@ import { prepareSyncBatch, type ContentMemo } from "./sync-content";
 import { withSyncTimeout } from "./sync-request";
 import { readItemSnapshot } from "./itemSnapshot";
 
-const API = "https://poem.timelordtty.cn/qingxiaolu-api";
+const API = typeof window !== "undefined" && (window as any).__QX_DESKTOP__
+  ? `${window.location.origin}/qingxiaolu-api` : "https://poem.timelordtty.cn/qingxiaolu-api";
 const TOKEN_KEY = "qx_sync_token";
 export const SYNC_API = API;
 export function getSyncToken() { return readStored(TOKEN_KEY) || ""; }

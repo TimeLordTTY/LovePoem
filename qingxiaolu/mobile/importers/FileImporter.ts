@@ -121,12 +121,13 @@ async function readExport(file: File): Promise<ImportCandidate[] | null> {
     return candidate(
     item.source || "other",
     item.sourceLabel || "导入文件",
-    item.source === "qqzone" ? "" : (item.title || String(item.text || "").slice(0, 40)),
+    item.source === "qqzone" ? "" : ["weibo", "wechat", "yiyan"].includes(item.source) ? item.title || "" : (item.title || String(item.text || "").slice(0, 40)),
     String(item.text || ""),
     {
       publishedAt: item.publishedAt,
       images,
-      warnings: images.length !== originalImages.length ? ["部分图片链接无法识别，请核对预览；原始来源记录会随导入保留。"] : [],
+      warnings: [...(Array.isArray(item.warnings) ? item.warnings.filter((warning: unknown) => typeof warning === "string") : []),
+        ...(images.length !== originalImages.length ? ["部分图片链接无法识别，请核对预览；原始来源记录会随导入保留。"] : [])],
       originalUrl: item.originalUrl,
       raw: item,
     },

@@ -1,15 +1,19 @@
 import {chromium} from 'playwright-core';
 if(!process.argv.includes('--live-author-acceptance') || !process.env.QX_LIVE_SSH_KEY) { console.error('真实云端验收需显式 --live-author-acceptance 与 QX_LIVE_SSH_KEY，仅生成并清理临时作品。'); process.exit(2); }
 let secret='', phase='会话准备';
+const desktopTest=process.argv.includes('--desktop-local');
+const pageUrl=desktopTest ? process.env.QX_LIVE_PAGE_URL || '' : 'https://poem.timelordtty.cn/qingxiaolu/';
+if(desktopTest && !/^http:\/\/127\.0\.0\.1:\d+\/qingxiaolu\/$/.test(pageUrl)) throw new Error('电脑助手验收只能使用明确启动的回环工作台');
 const browser=await chromium.launch({channel:'msedge',headless:true});
-const context=await browser.newContext();const page=await context.newPage();await page.goto('https://poem.timelordtty.cn/qingxiaolu/');
+const context=await browser.newContext();const page=await context.newPage();await page.goto(pageUrl);
 const run=async page => {
  const {execFileSync}=await import('node:child_process'); const {randomUUID,createHash}=await import('node:crypto');
  let token;
+ if(desktopTest && !await page.evaluate(()=>Boolean(window.__QX_DESKTOP__))) throw new Error('本机页面不是情晓录电脑助手，未取得云端验收会话');
  try {token=execFileSync('ssh',['-i',process.env.QX_LIVE_SSH_KEY,'-o','BatchMode=yes','root@124.220.229.91','/usr/local/bin/qingxiaolu-node --env-file=/etc/qingxiaolu-sync/qingxiaolu-sync.env -e "process.stdout.write(process.env.SYNC_TOKEN || \'\')"'],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();}
  catch {throw new Error('无法取得验收会话，未执行云端写入');}
  if(!token)throw new Error('验收会话不可用'); secret=token;
- const base='https://poem.timelordtty.cn/qingxiaolu-api', allowed=new Set(),title='【验收临时】云端项目-'+randomUUID(),headers={authorization:'Bearer '+token};
+ const base=desktopTest ? new URL(pageUrl).origin+'/qingxiaolu-api' : 'https://poem.timelordtty.cn/qingxiaolu-api', allowed=new Set(),title='【验收临时】云端项目-'+randomUUID(),headers={authorization:'Bearer '+token};
  const snapshot=async()=>{let cursor=0,watermark=0;const records=new Map();for(let n=0;n<100;n++){const r=await page.request.get(base+`/v1/sync/pull?cursor=${cursor}&limit=500&snapshot=1${watermark?'&watermark='+watermark:''}`,{headers});if(!r.ok())throw new Error('真实云端读取失败 '+r.status());const data=await r.json();watermark=data.watermark;for(const item of data.changes)records.set(item.id,item);if(!data.hasMore)return records;if(data.nextCursor<=cursor)throw new Error('真实游标没有前进');cursor=data.nextCursor;}throw new Error('真实快照超过验收分页限制');};
  const before=await snapshot(), originalHash=records=>createHash('sha256').update(JSON.stringify([...records.values()].filter(item=>!allowed.has(item.id)).sort((a,b)=>a.id.localeCompare(b.id)))).digest('hex');
  const beforeHash=originalHash(before);let otherContext;
@@ -77,12 +81,19 @@ const run=async page => {
   await otherCard.getByRole('button',{name:'继续编辑',exact:true}).click();
   if(await other.getByPlaceholder('这一刻，想写点什么……').inputValue()!==text)throw new Error('真实稿件读取改变正文');
   phase='设备乙离线刷新';
+  if(desktopTest) {
+    await other.context().route('**/qingxiaolu-api/**',route=>route.abort());
+    await other.reload();await other.getByPlaceholder('这一刻，想写点什么……').waitFor();
+    if(await other.getByPlaceholder('这一刻，想写点什么……').inputValue()!==text)throw new Error('本机工作台在云端不可用时刷新丢失稿件');
+  } else {
   await other.waitForFunction(async()=>{if(!navigator.serviceWorker.controller)return false;for(const name of await caches.keys()){if(name.startsWith('qingxiaolu-page-') && await (await caches.open(name)).match(new URL('__offline_ready__',location.href).href))return true;}return false;},{},{timeout:60000});
   await other.context().setOffline(true);await other.reload();await other.getByPlaceholder('这一刻，想写点什么……').waitFor();
   if(await other.getByPlaceholder('这一刻，想写点什么……').inputValue()!==text)throw new Error('离线刷新丢失真实同步稿件');
   await other.context().setOffline(false);
+  }
   return {realHttpsApi:true,independentBrowserDatabases:true,firstProjectRead:true,secondRevision:stored.revision,trueConflictRetainsBoth:true,
-    projectCloudChoiceCorrect:true,localProjectVersionRetained:true,articleExactText:true,offlineRefresh:true,originalRecordsUnchanged:true,passwordLoginTested:false};
+    projectCloudChoiceCorrect:true,localProjectVersionRetained:true,articleExactText:true,offlineRefresh:!desktopTest,
+    desktopRealProxy:desktopTest,desktopReloadWithoutCloud:desktopTest,originalRecordsUnchanged:true,passwordLoginTested:false};
  }finally{
   if(otherContext){await otherContext.unrouteAll({behavior:"wait"});await otherContext.close();}
   const current=await snapshot();

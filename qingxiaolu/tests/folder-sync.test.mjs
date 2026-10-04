@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {writeProjectFolder,uniqueFolderFiles,filterRetiredFiles,acknowledgeFolderChanges} from "../work/writing-tests/folderSync.mjs";
+import {writeProjectFolder,planProjectFolder,projectFolder,uniqueFolderFiles,filterRetiredFiles,acknowledgeFolderChanges} from "../work/writing-tests/folderSync.mjs";
 class Directory {
   kind="directory"; children=new Map(); root;
   constructor(root){this.root=root||this;}
-  async getDirectoryHandle(name,{create=false}={}) {if(!this.children.has(name)&&create)this.children.set(name,new Directory(this.root));const value=this.children.get(name);if(!value)throw new DOMException("missing","NotFoundError");return value;}
+  async getDirectoryHandle(name,{create=false}={}) {if(!this.children.has(name)&&create){const child=new Directory(this.root);child.name=name;this.children.set(name,child);}const value=this.children.get(name);if(!value)throw new DOMException("missing","NotFoundError");return value;}
   async getFileHandle(name,{create=false}={}) {
     if(!this.children.has(name)&&create) {
       const root=this.root;
@@ -62,4 +62,29 @@ test("相同 ID 的不同版本在写入前报错；完全相同文件去重，�
   assert.throws(()=>uniqueFolderFiles([{name:"旧.md",text:"章节ID：a\n旧"},{name:"新.md",text:"章节ID：a\n新"}],"章节"),/尚未导入/);
   const result=uniqueFolderFiles([{name:"001.md",text:"章节ID：a\n顺序：2"},{name:"003.md",text:"章节ID：a\n顺序：2"},{name:"002.md",text:"章节ID：b\n顺序：1"}],"章节");
   assert.equal(result.length,2);assert.equal(result[0].name,"002.md");
+});
+
+test("同步预览不写文件，确认前磁盘变化拒绝全部写入，首次关联也不覆盖外部文件", async () => {
+  const root = new Directory(); const files = [entry('a.md')];
+  const plan = await planProjectFolder(root, 'p', files); assert.equal(root.children.size, 0); assert.equal(plan.rows[0].status, '新增');
+  await writeProjectFolder(root, 'p', files, plan);
+  const change = [{ ...entry('a.md'), text: 'App 修改' }], preview = await planProjectFolder(root, 'p', change);
+  assert.equal(preview.rows[0].status, '修改');
+  const dir = await root.getDirectoryHandle('大纲'); dir.children.get('a.md').text = '电脑同时修改';
+  await assert.rejects(writeProjectFolder(root, 'p', change, preview), /预览后/);
+  assert.equal(dir.children.get('a.md').text, '电脑同时修改');
+  const empty = new Directory(), outside = await empty.getFileHandle('外部笔记.md', { create: true }); outside.text = '作者原件';
+  const conflict = await planProjectFolder(empty, 'p', [{ directory: '', name: '外部笔记.md', text: '替换' }]);
+  assert.equal(conflict.rows[0].status, '冲突'); await assert.rejects(writeProjectFolder(empty, 'p', conflict.files), /已有外部文件/);
+  assert.equal(outside.text, '作者原件');
+});
+
+test("总文件夹隔离同名项目、项目改名复用原目录，重复项目副本不自动选择", async () => {
+  const root = new Directory(), first = await projectFolder(root, 'a', '同名项目');
+  await writeProjectFolder(first, 'a', [entry('a.md')]);
+  const second = await projectFolder(root, 'b', '同名项目'); assert.notEqual(first.name, second.name);
+  assert.equal(await projectFolder(root, 'a', '新的名称'), first);
+  const duplicate = await root.getDirectoryHandle('复制项目', { create: true });
+  await writeProjectFolder(duplicate, 'a', []);
+  await assert.rejects(projectFolder(root, 'a', '新名'), /多个副本/);
 });

@@ -920,3 +920,23 @@ textarea {
 .image-share-preview figure { margin: 0; min-width: 0; }
 .image-share-preview img { width: 100%; height: auto; display: block; border: 1px solid #e5dfed; border-radius: 12px; }
 .image-share-preview figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 12px 0; }
+
+.folder-sync-preview { grid-column: 1 / -1; margin: 24px auto 100px; width: min(1100px, calc(100% - 36px)); box-sizing: border-box; padding: 24px; background: #fffdf9; border: 1px solid #e3dce9; border-radius: 16px; }
+.folder-sync-preview header { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.folder-sync-preview h2 { margin: 8px 0; }
+.folder-preview-list { margin: 20px 0; max-height: 60vh; overflow: auto; }
+.folder-preview-list details { padding: 14px 0; border-bottom: 1px solid #e9e2ec; }
+.folder-preview-list summary { cursor: pointer; overflow-wrap: anywhere; }
+.folder-preview-list summary b { margin-right: 12px; color: #7351aa; }
+.folder-preview-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; margin: 18px 0; }
+.folder-preview-compare pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; padding: 16px; background: #f7f3ee; font: inherit; }
+.desktop-writing { padding: 22px 0; border-bottom: 1px solid #e5dfed; }
+.desktop-writing > b, .desktop-writing > span { display: block; margin-bottom: 10px; }
+.desktop-writing > div, .writing-selection-tools { display: flex; flex-wrap: wrap; gap: 12px; }
+.desktop-writing .wps-read-preview { display: block; }
+.load-more-records { width: 100%; margin: 22px 0; }
+.writing-footnotes { border-top: 1px solid #e4dce9; margin-top: 32px; font-size: 0.9em; }
+.writing-footnotes p { scroll-margin-top: 110px; }
+.writing-selection-tools { max-width: 960px; margin: 15px auto; padding: 0 18px; align-items: center; }
+.global-page-shell .commit-import { bottom: calc(90px + env(safe-area-inset-bottom)); }
+@media (max-width: 700px) { .folder-preview-compare { grid-template-columns: 1fr; } .folder-sync-preview { padding: 16px; } .folder-sync-preview header { align-items: start; flex-direction: column; } }

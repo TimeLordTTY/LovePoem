@@ -19,6 +19,7 @@ import WritingPreview from "./WritingPreview";
 import { openTargetDraft, copyNativeDraftText } from "./nativeDraft";
 import { forwardResultMessage } from "./forwardResult";
 import ArticleImageShare from "./ArticleImageShare";
+import DesktopWriting from "./DesktopWriting";
 import { writingDateInfo } from "./writingDate";
 import { searchExcerpt } from "./searchExcerpt";
 
@@ -76,6 +77,8 @@ export default function RealMobileApp() {
   const [projectTitle, setProjectTitle] = useState("");
   const [showImport, setShowImport] = useState(() => sessionStorage.getItem("qx_import_active") === "history");
   const [showDocumentImport, setShowDocumentImport] = useState(() => sessionStorage.getItem("qx_import_active") === "documents");
+  const [documentImportProjectId, setDocumentImportProjectId] = useState("");
+  const [droppedDocuments, setDroppedDocuments] = useState<File[]>([]);
   const [creationType, setCreationType] = useState<"article" | "idea">(
     initialEditorDraft.creationType === "idea" ? "idea" : "article",
   );
@@ -94,6 +97,8 @@ export default function RealMobileApp() {
   const [blogType, setBlogType] = useState("全部");
   const [projectFilter, setProjectFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [blogLimit, setBlogLimit] = useState(60);
+  useEffect(() => setBlogLimit(60), [blogSearch, blogType, projectFilter, statusFilter]);
   const [conflicts, setConflicts] = useState<any[]>(getSyncConflicts);
   const [backupBusy, setBackupBusy] = useState(false);
   const backupInput = useRef<HTMLInputElement>(null);
@@ -195,12 +200,26 @@ export default function RealMobileApp() {
     delete content._baseRevision;
     delete content.syncToServer;
     setEditingId(id);
-    await queueItem(creationType, title.trim() || body.trim().slice(0, 20) || "图片稿件", content,
+    await queueItem(creationType, title.trim(), content,
       projectId || undefined, false, id, Number(editingMetadata._baseRevision || 0), false,
       { qx_editor_autosave: { title, body, images, creationType, projectId, editingId: id, sessionId: editorSessionId,
         savedAt, metadata: editingMetadata, position: editorPosition.current } });
     setAutoSavedAt(savedAt);
     setItems(getLocalItems());
+    return id;
+  }
+
+  async function applyWordDraft(text: string, importedImages: string[]) {
+    if (!editingId) throw new Error("请先保存当前记录再读回 Word");
+    const savedAt = new Date().toISOString();
+    const projectId = editingMetadata.projectId ?? activeProjectId;
+    const content: Record<string, any> = { ...editingMetadata, text, images: importedImages, status: "draft" };
+    delete content._baseRevision; delete content.syncToServer;
+    await queueItem(creationType, title.trim(), content,
+      projectId || undefined, false, editingId, Number(editingMetadata._baseRevision || 0), true,
+      { qx_editor_autosave: { title, body: text, images: importedImages, creationType, projectId, editingId,
+        sessionId: editorSessionId, savedAt, metadata: editingMetadata, position: editorPosition.current } }, editorSessionId);
+    setBody(text); setImages(importedImages); setAutoSavedAt(savedAt); setItems(getLocalItems());
   }
 
   useEffect(() => {
@@ -293,7 +312,7 @@ export default function RealMobileApp() {
   async function save(type: "article" | "idea", metadata: Record<string, any> = {}) {
     if (!title.trim() && !body.trim() && !images.length) return setMessage("请先写一点内容");
     try {
-    const savedTitle = title.trim() || body.trim().slice(0, 20) || "图片稿件";
+    const savedTitle = title.trim();
     const { _baseRevision, syncToServer, ...cleanMetadata } = { ...editingMetadata, ...metadata };
     const savedContent = {
       ...cleanMetadata, text: body, status: "draft", images,
@@ -331,7 +350,7 @@ export default function RealMobileApp() {
     setMessage("正在生成完整备份并读取图片…");
     try {
       const draft = title || body || images.length ? { id: editingId || crypto.randomUUID(), revision: editingMetadata._baseRevision || 0, position: editorPosition.current,
-        payload: { id: editingId, itemType: creationType, title: title || body.slice(0, 20), projectId: editingMetadata.projectId ?? activeProjectId,
+        payload: { id: editingId, itemType: creationType, title: title.trim(), projectId: editingMetadata.projectId ?? activeProjectId,
           content: { ...editingMetadata, text: body, images } } } : undefined;
       downloadBackup(await createBackup(undefined, draft), "情晓录"); setMessage("完整备份已生成，包含稿件、资料、图片和版本记录。");
     }
@@ -521,6 +540,7 @@ export default function RealMobileApp() {
 
   if (showImport) return pageWithNavigation(<HistoryImport kind="history" close={() => { setShowImport(false); void refresh(false); }} />);
   if (showDocumentImport) return pageWithNavigation(<HistoryImport kind="documents" projects={projects}
+    initialProjectId={documentImportProjectId} initialFiles={droppedDocuments}
     close={() => { setShowDocumentImport(false); void refresh(false); }} />);
   if (openProject) return pageWithNavigation(<ProjectWorkspace project={openProject}
     navigationSaveRef={projectNavigationSave}
@@ -534,6 +554,10 @@ export default function RealMobileApp() {
       if (projectNavigationSave.current && !await projectNavigationSave.current()) return;
       setOpenProject(null);
       editItem(article);
+    }}
+    onImport={async (files = []) => {
+      if (projectNavigationSave.current && !await projectNavigationSave.current()) return;
+      setDocumentImportProjectId(String(openProject.id)); setDroppedDocuments(files); setOpenProject(null); setShowDocumentImport(true);
     }}
     close={() => setOpenProject(null)}
     onNewArticle={async (chapterId = "") => {
@@ -602,6 +626,10 @@ export default function RealMobileApp() {
     onNewDraft={() => void newDraft(editingMetadata.projectId ?? activeProjectId)}
     onNewIdea={() => void newDraft(editingMetadata.projectId ?? activeProjectId, "", "idea")}
     onBackup={() => void exportAll()}
+    desktopControls={<DesktopWriting snapshot={{ id: editingId, title, text: body, images,
+      projectId: editingMetadata.projectId ?? activeProjectId,
+      projectTitle: projects.find(project => project.id === (editingMetadata.projectId ?? activeProjectId))?.payload.title || "" }}
+      saveLocal={saveLocalDraft} apply={applyWordDraft} />}
     onSave={(metadata) => void save(creationType, metadata)}
   />{loginPanel}</>;
 
@@ -621,7 +649,7 @@ export default function RealMobileApp() {
             <input value={projectTitle} onChange={(e) => setProjectTitle(e.target.value)} placeholder="新项目名称" />
             <button onClick={() => void addProject()}>新建</button>
           </div>
-          <button className="project-import-entry" onClick={() => setShowDocumentImport(true)}>
+          <button className="project-import-entry" onClick={() => { setDocumentImportProjectId(""); setDroppedDocuments([]); setShowDocumentImport(true); }}>
             <span><b>导入本地文档</b><small>DOCX、PDF、XMind、OPML、Markdown、CSV、JSON</small></span><i>›</i>
           </button>
           <div className="project-view-switch">
@@ -689,7 +717,7 @@ export default function RealMobileApp() {
           <div className="blog-layout">
           <div className="blog-feed">
             {visibleBlogItems.length === 0 && <p className="empty">{blogItems.length ? "没有符合条件的内容。" : "还没有内容。"}</p>}
-            {visibleBlogItems.map((item) => {
+            {visibleBlogItems.slice(0, blogLimit).map((item) => {
               const itemDate = blogDate(item);
               const monthKey = itemDate.groupKey;
               return <article key={item.id} data-blog-month={monthKey}>
@@ -713,7 +741,10 @@ export default function RealMobileApp() {
                   {item.payload.content.images.slice(0, 9).map((image: string, index: number) =>
                     image && <img key={index} src={image} alt="" referrerPolicy="no-referrer" />)}
                 </div>}
-                {item.payload.content?.images?.length > 9 && <small>共 {item.payload.content.images.length} 张插图，继续编辑可查看全部</small>}
+                {item.payload.content?.images?.length > 9 && <><small>共 {item.payload.content.images.length} 张插图，继续编辑可查看全部</small>
+                  <details className="record-more-images"><summary>展开其余 {item.payload.content.images.length - 9} 张图片</summary>
+                    <div className="blog-images">{item.payload.content.images.slice(9).map((image: string, index: number) =>
+                      image && <img key={index} src={image} alt={`插图 ${index + 10}`} loading="lazy" referrerPolicy="no-referrer" />)}</div></details></>}
                 <div className="article-actions"><button onClick={() => editItem(item)}>继续编辑</button>
                   {item.payload.content?.importSource === "pdf" && typeof item.payload.content?.importRaw?.originalPdf === "string" &&
                     item.payload.content.importRaw.originalPdf.startsWith("data:application/pdf;base64,") &&
@@ -734,13 +765,17 @@ export default function RealMobileApp() {
                 </div>}
               </article>;
             })}
+            {visibleBlogItems.length > blogLimit && <button className="load-more-records" onClick={() => setBlogLimit(value => value + 60)}>
+              继续加载记录（剩余 {visibleBlogItems.length - blogLimit} 条）</button>}
           </div>
           {!!blogArchive.length && <aside className="blog-date-archive">
             <h2>日期</h2>
             <div>{blogArchive.map((month) =>
               <button key={month.key} onClick={() => {
-                document.querySelector(`[data-blog-month="${month.key}"]`)
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                const index = visibleBlogItems.findIndex(item => blogDate(item).groupKey === month.key);
+                setBlogLimit(value => Math.max(value, index + 60));
+                requestAnimationFrame(() => requestAnimationFrame(() =>
+                  document.querySelector(`[data-blog-month="${month.key}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" })));
               }}><span>{month.label}</span><small>{month.count}</small></button>)}
             </div>
           </aside>}
@@ -749,6 +784,8 @@ export default function RealMobileApp() {
 
         {tab === "设置" && <>
           <h1>设置</h1>
+          <a className="tool-entry" href="https://poem.timelordtty.cn/qingxiaolu/tools/desktop/guide.html" target="_blank" rel="noopener noreferrer">
+            <span><b>电脑助手与 WPS 编辑</b><small>选择总文件夹，预览同步，手动读回 Word 修改</small></span><i>›</i></a>
           <h2 className="setting-title">创作备份</h2>
           <p>完整备份包含本机稿件、图片、项目资料和版本记录。恢复后先保存在本机。</p>
           <button className="tool-entry" disabled={backupBusy} onClick={() => void exportAll()}><span><b>{backupBusy ? "正在整理图片…" : "下载完整备份"}</b><small>备份文件不含账号令牌和 AI 密钥</small></span></button>
@@ -871,7 +908,7 @@ function ArticleEditor({
   initialProjectId,
   initialMetadata,
   autoSavedAt,
-  message, onMetadata, position, onPosition, onNewDraft, onNewIdea, onBackup, busy = false,
+  message, onMetadata, position, onPosition, onNewDraft, onNewIdea, onBackup, desktopControls, busy = false,
 }: {
   title: string;
   body: string;
@@ -895,6 +932,7 @@ function ArticleEditor({
   onNewDraft: () => void;
   onNewIdea: () => void;
   onBackup: () => void;
+  desktopControls?: ReactNode;
   busy?: boolean;
 }) {
   const editor = useRef<HTMLTextAreaElement>(null);
@@ -920,6 +958,8 @@ function ArticleEditor({
   const [focused, setFocused] = useState(false);
   const [preview, setPreview] = useState(false);
   const [showReference, setShowReference] = useState(false);
+  const [selectedWriting, setSelectedWriting] = useState("");
+  const [selectionMessage, setSelectionMessage] = useState("");
   const [findText, setFindText] = useState("");
   const [imageMessage, setImageMessage] = useState("");
   const [readingImages, setReadingImages] = useState(false);
@@ -979,6 +1019,24 @@ function ArticleEditor({
     });
   }
 
+  function insertFootnote() {
+    const field = editor.current;
+    if (!field) return;
+    let number = 1;
+    while (body.includes(`[^注释${number}]`)) number++;
+    const marker = `[^注释${number}]`, start = field.selectionEnd;
+    onBody(body.slice(0, start) + marker + body.slice(start) + `\n\n${marker}: `);
+    requestAnimationFrame(() => { field.focus(); const at = field.value.length; field.setSelectionRange(at, at); });
+  }
+  async function copySelection(openDiscussion = false) {
+    if (!selectedWriting) return;
+    try {
+      const copying = navigator.clipboard?.writeText(selectedWriting);
+      if (openDiscussion) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
+      if (!copying) throw new Error(); await copying; setSelectionMessage(openDiscussion ? "选段已复制，已请求打开 ChatGPT，请自行粘贴。" : "选段已复制"); }
+    catch { setSelectionMessage("选段未能复制，请允许剪贴板访问，或下载选段后手动粘贴。"); }
+  }
+
   async function addImages(files: File[]) {
     if (blocked) return;
     const available = Math.max(0, 9 - images.length);
@@ -1018,6 +1076,14 @@ function ArticleEditor({
           })}>保存</button>
       </header>
       {message && <div className="real-message" role="status">{message}</div>}
+      {!!selectedWriting && <div className="writing-selection-tools"><span>已选 {selectedWriting.length} 字</span>
+        <button onClick={() => void copySelection()}>复制选段</button>
+        <button onClick={() => {
+          const url = URL.createObjectURL(new Blob([selectedWriting], { type: "text/plain;charset=utf-8" }));
+          const link = document.createElement("a"); link.href = url; link.download = "情晓录-选段.txt"; link.click();
+          setTimeout(() => URL.revokeObjectURL(url), 1500);
+        }}>导出选段</button><button onClick={() => void copySelection(true)}>复制并打开 ChatGPT</button></div>}
+      {selectionMessage && <p role="status">{selectionMessage}</p>}
       <div className="writing-tools">
         <button disabled={blocked} onClick={onNewDraft}>新稿件</button>
         <button disabled={blocked} onClick={onNewIdea}>新灵感</button>
@@ -1058,12 +1124,12 @@ function ArticleEditor({
             <button onClick={() => insert("<u>", "</u>")}><u>U</u></button>
             <button onClick={() => insert("> ")}>引用</button>
             <button onClick={() => insert("- ")}>列表</button>
-            <button onClick={() => insert("[^注释]", "\n\n[^注释]: ")}>注释</button>
+            <button onClick={insertFootnote}>注释</button>
             <button onClick={() => insert("\n---\n")}>分隔线</button>
           </div>
         </>}
         {preview ? <WritingPreview text={body} /> : <textarea disabled={blocked} ref={editor} value={body} onChange={(event) => onBody(event.target.value)}
-          onSelect={(event) => { const field = event.currentTarget; onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
+          onSelect={(event) => { const field = event.currentTarget; setSelectedWriting(field.value.slice(field.selectionStart, field.selectionEnd)); onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
           onScroll={(event) => { const field = event.currentTarget; onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
           placeholder={documentMode ? "开始编辑文档正文……" : "这一刻，想写点什么……"} autoFocus />}
         {!!images.length && <div className="qzone-images compact">{images.map((image, index) =>
@@ -1080,6 +1146,7 @@ function ArticleEditor({
       </section>
 
       <section className="publish-options">
+        {desktopControls}
         <button onClick={() => imagePicker.current?.click()}><span>加入照片</span>
           <em>{images.length ? `已选 ${images.length} 张　›` : "选择照片　›"}</em></button>
         <label><span>归入项目</span><select value={projectId} onChange={(event) => {

@@ -16,7 +16,10 @@ async function write(root: any, file: FolderFile) {
   try { await writable.write(new Blob([file.text], {type:file.type || "text/markdown;charset=utf-8"})); await writable.close(); }
   catch(error) { await writable.abort?.().catch(()=>undefined); throw error; }
 }
-export async function writeProjectFolder(root: any, projectId: string, files: FolderFile[]) {
+export type FolderChange = { directory: string; name: string; status: "新增" | "修改" | "不变" | "冲突"; localText: string | null; appText: string; reason?: string };
+export type FolderPlan = { files: FolderFile[]; rows: FolderChange[]; raw: string | null; previous: Manifest | null; signature: string };
+
+export async function planProjectFolder(root: any, projectId: string, files: FolderFile[]): Promise<FolderPlan> {
   const manifestName = { directory:"",name:"文件清单.json" };
   const raw = await read(root,manifestName);
   let previous: Manifest | null = null;
@@ -59,14 +62,36 @@ export async function writeProjectFolder(root: any, projectId: string, files: Fo
     if(paths.has(path)) throw new Error(`存在重名文件“${path}”，未写入文件夹。`);
     paths.add(path);
   }
-  // 已在电脑修改的文件必须先读回 App；不能用新的导出静默覆盖。
+  const rows: FolderChange[] = [];
+  const modified = new Set<string>();
+  // 预览也列出本地修改，不能等确认后才告诉作者冲突。
   for(const old of [...(previous?.files || []), ...(previous?.retired || [])]) {
     const text=await read(root,old);
-    if(text!==null && await digest(text)!==old.hash) throw new Error(`“${old.directory ? old.directory+"/" : ""}${old.name}”有本地修改。请先从本地同步到 App；本次未覆盖文件。`);
+    if(text!==null && await digest(text)!==old.hash) {
+      modified.add(`${old.directory}/${old.name}`);
+      if (!planned.some(file => file.directory === old.directory && file.name === old.name))
+        rows.push({ ...old, status: "冲突", localText: text, appText: "", reason: "已移出 App 的文件有本地修改，文件仍保留，请先读回或另存。" });
+    }
   }
-  // 新文件不能覆盖未列入清单的外部文件。旧版本首次关联沿用原有覆盖确认。
-  if(previous) for(const file of planned) if(!previous.files.some(old=>old.directory===file.directory&&old.name===file.name)&&await read(root,file)!==null)
-    throw new Error(`“${file.directory}/${file.name}”已有外部文件，请保留该文件或更换目录。未覆盖文件。`);
+  for (const file of planned) {
+    const localText = await read(root, file);
+    const tracked = previous?.files.some(old => old.directory === file.directory && old.name === file.name);
+    const conflict = modified.has(`${file.directory}/${file.name}`) || (localText !== null && !tracked && localText !== file.text);
+    rows.push({ directory: file.directory, name: file.name, localText, appText: file.text,
+      status: conflict ? "冲突" : localText === null ? "新增" : localText === file.text ? "不变" : "修改",
+      reason: conflict ? tracked ? "有本地修改。请先从本地同步到 App，未覆盖文件。" : "已有外部文件，未覆盖文件。" : undefined });
+  }
+  return { files: planned, rows, raw, previous, signature: await digest(JSON.stringify({ raw, rows, planned })) };
+}
+
+export async function writeProjectFolder(root: any, projectId: string, files: FolderFile[], expected?: FolderPlan) {
+  const manifestName = { directory: "", name: "文件清单.json" };
+  const plan = await planProjectFolder(root, projectId, files);
+  if (expected && expected.signature !== plan.signature) throw new Error("预览后文件夹或内容发生变化，未写入任何文件，请重新预览。");
+  const conflict = plan.rows.find(row => row.status === "冲突");
+  if (conflict) throw new Error(`“${conflict.directory}/${conflict.name}”${conflict.reason}`);
+  const { files: planned, previous, raw } = plan;
+  const paths = new Set(planned.map(file => `${file.directory}/${file.name}`));
   const before = new Map<string, string | null>();
   for(const file of planned) before.set(`${file.directory}/${file.name}`,await read(root,file));
   const retired = [...(previous?.retired || []), ...(previous?.files || []).filter(old=>!paths.has(`${old.directory}/${old.name}`))]
@@ -88,6 +113,42 @@ export async function writeProjectFolder(root: any, projectId: string, files: Fo
     throw new Error(failures.length ? `文件夹写入失败，部分文件无法回滚（${failures.join("、")}）。完整本机稿件仍保留，请检查文件夹权限后重新同步。` : "文件夹写入失败，本次文件变更已撤销；本机稿件仍保留。");
   }
   return manifest;
+}
+
+// 项目改名沿用已有目录；同名项目按 ID 隔离，不能混在同一个目录中。
+export async function projectFolder(root: any, projectId: string, title: string) {
+  const matches: any[] = [];
+  const safe = (value: string) => value.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/[. ]+$/, "");
+  for await (const [name, handle] of root.entries()) {
+    if (handle.kind !== "directory") continue;
+    const manifest = await read(handle, { directory: "", name: "文件清单.json" });
+    if (manifest) {
+      try { if (JSON.parse(manifest).projectId === projectId) matches.push(handle); } catch { /* 其他目录不作为当前项目。 */ }
+    } else {
+      const backup = await read(handle, { directory: "", name: "完整备份.json" });
+      if (backup) { try { if (JSON.parse(backup).items?.some((item: any) => item.id === projectId && item.payload?.itemType === "project")) matches.push(handle); } catch { /* 旧目录需作者自行核对。 */ } }
+      else if (name.endsWith(`--${safe(projectId)}`)) matches.push(handle);
+    }
+  }
+  if (matches.length > 1) throw new Error("总文件夹中有当前项目的多个副本，请先保留需要使用的副本，未选择或覆盖任何目录。");
+  if (matches.length) return matches[0];
+  return root.getDirectoryHandle(`${safe(title || "未命名项目").slice(0, 70)}--${safe(projectId)}`, { create: true });
+}
+
+export async function folderTextSnapshot(root: any) {
+  const values: Array<{ directory: string; name: string; text: string }> = [];
+  for (const name of ["世界观.md", "情节.md", "私密备注.md", "项目信息.md", "完整备份.json", "文件清单.json"]) {
+    const text = await read(root, { directory: "", name });
+    if (text !== null) values.push({ directory: "", name, text });
+  }
+  for (const name of ["人物", "大纲", "时间轴", "正文", "AI讨论"]) {
+    try {
+      const dir = await root.getDirectoryHandle(name);
+      for await (const [fileName, handle] of dir.entries()) if (handle.kind === "file" && fileName.toLowerCase().endsWith(".md"))
+        values.push({ directory: name, name: fileName, text: await (await handle.getFile()).text() });
+    } catch (error: any) { if (error?.name !== "NotFoundError") throw error; }
+  }
+  return JSON.stringify(values.sort((a, b) => `${a.directory}/${a.name}`.localeCompare(`${b.directory}/${b.name}`)));
 }
 
 export async function filterRetiredFiles(root:any, projectId:string, directoryName:string, files:FolderInputFile[]):Promise<FolderInputFile[]> {

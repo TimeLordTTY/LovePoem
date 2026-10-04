@@ -3,7 +3,7 @@ import { Capacitor } from "@capacitor/core";
 declare const __QX_BUILD_VERSION__: string;
 
 export default function OfflinePageStatus() {
-  const enabled = import.meta.env.PROD && !Capacitor.isNativePlatform() && location.pathname.startsWith("/qingxiaolu/");
+  const enabled = import.meta.env.PROD && !Capacitor.isNativePlatform() && !(window as any).__QX_DESKTOP__ && location.pathname.startsWith("/qingxiaolu/");
   const [state, setState] = useState<"preparing" | "ready" | "failed">("preparing");
   const [online, setOnline] = useState(navigator.onLine);
   const [attempt, setAttempt] = useState(0);

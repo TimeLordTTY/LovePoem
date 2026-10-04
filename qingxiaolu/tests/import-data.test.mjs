@@ -2,7 +2,7 @@ import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { csvCandidates, decodeDocument, parseCsv, parseXmindJson, outlineText } from "../work/writing-tests/importers/documentParsing.mjs";
 import { candidate } from "../work/writing-tests/importers/types.mjs";
-import { commitImport } from "../work/writing-tests/importers/importCommit.mjs";
+import { commitImport, filterPreviouslyImported } from "../work/writing-tests/importers/importCommit.mjs";
 import { pdfText, pdfPixels } from "../work/writing-tests/importers/pdfParsing.mjs";
 import { installPdfStreamIterator, installPdfBufferTransfer } from "../work/writing-tests/importers/pdfCompatibility.mjs";
 import { parseWritingDate, writingDateInfo } from "../work/writing-tests/writingDate.mjs";
@@ -163,6 +163,20 @@ test("来源日期、图片、原始记录保留且不自动上传", () => {
   assert.equal(saved.title, ""); assert.equal(saved.content.publishedAt,"2020-01-02");
   assert.deepEqual(saved.content.images,item.images); assert.deepEqual(saved.content.importRaw,item.raw);
   assert.equal(localStorage.getItem("qx_web_outbox"),null);
+});
+
+test("导入预览排除已有内容，删除后可再导入，资料按项目类型区分且识别云端导入标记", () => {
+  const item = candidate("weibo", "微博", "", "随笔正文", { publishedAt: "2020-01-02" });
+  assert.equal(filterPreviouslyImported([item]).length, 1); commitImport([item]);
+  assert.equal(read("qx_drafts")[0].title, ""); assert.equal(filterPreviouslyImported([item]).length, 0);
+  localStorage.setItem("qx_deleted_ids", JSON.stringify([item.id])); assert.equal(filterPreviouslyImported([item]).length, 1);
+  localStorage.setItem("qx_drafts", JSON.stringify([{ id: "p", itemType: "project", title: "项目", content: {} }]));
+  const material = candidate("other", "TXT", "人物", "人物资料");
+  commitImport([material], { projectId: "p", category: "人物" });
+  assert.equal(filterPreviouslyImported([material], "p", "人物").length, 0);
+  assert.equal(filterPreviouslyImported([material], "p", "大纲").length, 1);
+  localStorage.removeItem("qx_project_workspaces");
+  assert.equal(filterPreviouslyImported([material], "p", "人物").length, 0);
 });
 test("人物导入同时更新项目资料和稿件版本；末步失败全部回滚", () => {
   const project = {id:"p",itemType:"project",title:"小说",baseRevision:4,content:{world:"原世界",characterCards:[]}};

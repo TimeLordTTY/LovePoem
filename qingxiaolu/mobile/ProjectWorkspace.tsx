@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Share } from "@capacitor/share";
 import { queueItem, queueLocalBatch, getLocalItems, getItemVersions } from "./sync";
-import { writeProjectFolder, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile } from "./folderSync";
+import { writeProjectFolder, planProjectFolder, projectFolder, folderTextSnapshot, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile, type FolderChange } from "./folderSync";
+import FolderSyncPreview, { type FolderPreview } from "./FolderSyncPreview";
+import { desktopRootDirectory } from "./desktopClient";
 import { storeJson, readStored, changeJson } from "./storage";
 import { PROJECT_SESSION_FIELD, projectDataWithoutSession, projectSessionRevision, projectSnapshotSignature, projectPayloadFingerprint, bindProjectSession } from "./projectSession";
 import { createBackup, downloadBackup, parseBackup } from "./backup";
@@ -149,6 +151,7 @@ export default function ProjectWorkspace({
   onWrite,
   onNewArticle,
   onUpdated,
+  onImport,
   navigationSaveRef,
 }: {
   project: any;
@@ -160,6 +163,7 @@ export default function ProjectWorkspace({
   onWrite: () => void;
   onNewArticle?: (chapterId?: string) => void;
   onUpdated?: (title: string, content: Record<string, unknown>) => void;
+  onImport?: (files?: File[]) => void;
   navigationSaveRef?: { current: (() => Promise<boolean>) | null };
 }) {
   const projectId = String(project.id);
@@ -209,6 +213,7 @@ export default function ProjectWorkspace({
   const [rootDirectoryName, setRootDirectoryName] = useState("");
   const [folderBusy, setFolderBusy] = useState(false);
   const folderBusyRef = useRef(false);
+  const [folderPreview, setFolderPreview] = useState<FolderPreview | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
 
   const markdown = useMemo(() => packageText(title, data), [title, data]);
@@ -281,7 +286,7 @@ export default function ProjectWorkspace({
   latest.current = { title, data };
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (pendingWritingTransactions() || projectSnapshotSignature(latest.current.title, latest.current.data) !== savedViewSignature.current) {
+      if (pendingWritingTransactions() || folderBusyRef.current || projectSnapshotSignature(latest.current.title, latest.current.data) !== savedViewSignature.current) {
         event.preventDefault(); event.returnValue = "";
       }
     };
@@ -305,7 +310,7 @@ export default function ProjectWorkspace({
     try { if (await saveBeforeNavigation()) close(); }
     finally { closingRef.current = false; setClosing(false); }
   }
-  projectBackAction.current = () => { if (versionPanel) setVersionPanel(false); else void closeWithSave(); };
+  projectBackAction.current = () => { if (folderPreview && !folderBusyRef.current) setFolderPreview(null); else if (versionPanel) setVersionPanel(false); else void closeWithSave(); };
   useEffect(() => {
     const back = () => projectBackAction.current();
     window.addEventListener("qx-project-back", back);
@@ -367,6 +372,7 @@ export default function ProjectWorkspace({
   }
 
   async function rememberDirectory(handle: any) {
+    if (handle.desktopParts) return;
     const request = indexedDB.open("qingxiaolu-folders", 1);
     request.onupgradeneeded = () => request.result.createObjectStore("projects");
     await new Promise<void>((resolve, reject) => {
@@ -381,35 +387,37 @@ export default function ProjectWorkspace({
   }
 
   useEffect(() => {
+    let disposed = false;
+    const attach = async (root: any) => {
+      try {
+        if (root && await root.queryPermission?.({ mode: "readwrite" }) === "granted") {
+          const folder = await projectFolder(root, projectId, title);
+          if (!disposed) { setProjectDirectory(folder); setRootDirectoryName(root.name || "情晓录"); setProjectDirectoryName(folder.name); }
+        }
+      } catch (error) { if (!disposed) setMessage(error instanceof Error ? error.message : "无法读取项目目录"); }
+    };
+    const desktopRoot = desktopRootDirectory();
+    if (desktopRoot) { void attach(desktopRoot); return () => { disposed = true; }; }
     const request = indexedDB.open("qingxiaolu-folders", 1);
     request.onupgradeneeded = () => request.result.createObjectStore("projects");
     request.onsuccess = () => {
       const get = request.result.transaction("projects").objectStore("projects").get("qingxiaolu-root");
-      get.onsuccess = async () => {
-        const root = get.result;
-        if (root && await root.queryPermission?.({ mode: "readwrite" }) === "granted") {
-          const projectFolderName = safeFileName(title, "未命名项目");
-          const projectFolder = await root.getDirectoryHandle(projectFolderName, { create: true });
-          setProjectDirectory(projectFolder);
-          setRootDirectoryName(root.name || "情晓录");
-          setProjectDirectoryName(projectFolderName);
-        }
-      };
+      get.onsuccess = () => { void attach(get.result); request.result.close(); };
     };
+    return () => { disposed = true; };
   }, [projectId, title]);
 
   async function chooseProjectDirectory() {
     const picker = (window as any).showDirectoryPicker;
-    if (!picker) {
+    if (!picker && !desktopRootDirectory()) {
       return setMessage("当前环境不支持本地文件夹同步，请在电脑 Edge 或 Chrome 中使用");
     }
     try {
-      const root = await picker({ mode: "readwrite" });
-      const projectFolderName = safeFileName(title, "未命名项目");
-      const projectFolder = await root.getDirectoryHandle(projectFolderName, { create: true });
-      setProjectDirectory(projectFolder);
+      const root = desktopRootDirectory() || await picker({ mode: "readwrite" });
+      const folder = await projectFolder(root, projectId, title);
+      setProjectDirectory(folder);
       setRootDirectoryName(root.name || "情晓录");
-      setProjectDirectoryName(projectFolderName);
+      setProjectDirectoryName(folder.name);
       await rememberDirectory(root);
       setMessage(`已关联情晓录总文件夹“${root.name}”`);
     } catch (error: any) {
@@ -428,7 +436,6 @@ export default function ProjectWorkspace({
     if (folderBusyRef.current) return;
     if (!projectDirectory) return void chooseProjectDirectory();
     if (!await ensureDirectoryPermission()) return setMessage("未获得文件夹读写权限");
-    if (!window.confirm(`将 ${articles.length} 篇稿件及项目资料写入所选文件夹。同名文件将更新，完整备份会包含图片。继续吗？`)) return;
     if (!await persist(false)) return;
     folderBusyRef.current = true; setFolderBusy(true);
     try {
@@ -453,12 +460,24 @@ export default function ProjectWorkspace({
       `# ${event.title}\n\n事件ID：${event.id}\n顺序：${index + 1}\n时间：${event.time}\n\n${event.detail}`, event.id);
     for (const article of articles) add("正文",
       `${article.id}--${safeFileName(article.payload?.title, "未命名稿件")}.md`,
-      `# ${article.payload?.title || "未命名稿件"}\n\n稿件ID：${article.id}\n章节ID：${article.payload?.content?.chapterId || ""}\n\n${article.payload?.content?.text || ""}`, String(article.id));
+      `# ${article.payload?.title || "未命名稿件"}\n\n稿件ID：${article.id}\n章节ID：${article.payload?.content?.chapterId || ""}\n${article.payload?.title ? "" : "标题为空：是\n"}\n${article.payload?.content?.text || ""}`, String(article.id));
     for (const discussion of discussions) add("AI讨论",
       `${discussion.id}--${safeFileName(discussion.payload?.title, "未命名讨论")}.md`,
       `# ${discussion.payload?.title || "未命名讨论"}\n\n讨论ID：${discussion.id}\n来源链接：${discussion.payload?.content?.sourceUrl || ""}\n\n${discussion.payload?.content?.text || ""}`, String(discussion.id));
-    await writeProjectFolder(projectDirectory, projectId, files);
-    setMessage(`已从 App 同步到“${rootDirectoryName}\\${projectDirectoryName}”`);
+    const plan = await planProjectFolder(projectDirectory, projectId, files);
+    const view = projectSnapshotSignature(title, data);
+    const recordSnapshot = (records: any[]) => JSON.stringify(records.map(item => ({ id: item.id,
+      title: item.payload.title, itemType: item.payload.itemType, projectId: item.payload.projectId,
+      content: item.payload.content })).sort((a, b) => String(a.id).localeCompare(String(b.id))));
+    const records = recordSnapshot([...articles, ...discussions]);
+    setFolderPreview({ direction: "写入本地", rows: plan.rows, apply: async () => {
+      if (projectSnapshotSignature(latest.current.title, latest.current.data) !== view) throw new Error("预览后项目资料发生变化，请重新预览。");
+      assertUnchanged();
+      if (recordSnapshot(getLocalItems().filter(item => item.payload.itemType === "article" && String(item.payload.projectId || item.payload.content?.projectId || "") === projectId)) !== records)
+        throw new Error("预览后项目正文发生变化，未写入文件，请重新预览。");
+      await writeProjectFolder(projectDirectory, projectId, files, plan);
+      setMessage(`已从 App 同步到“${rootDirectoryName}\\${projectDirectoryName}”`);
+    } });
     } finally { folderBusyRef.current = false; setFolderBusy(false); }
   }
 
@@ -484,8 +503,10 @@ export default function ProjectWorkspace({
     if (folderBusyRef.current) return;
     if (!projectDirectory) return void chooseProjectDirectory();
     if (!await ensureDirectoryPermission()) return setMessage("未获得文件夹读写权限");
+    if (!await persist(false)) return;
     folderBusyRef.current = true; setFolderBusy(true);
     try {
+    const diskSnapshot = await folderTextSnapshot(projectDirectory);
     const world = await readTextFile(projectDirectory, "世界观.md");
     const plot = await readTextFile(projectDirectory, "情节.md");
     const characterFiles = uniqueFolderFiles(await markdownFiles("人物"), "人物");
@@ -500,7 +521,7 @@ export default function ProjectWorkspace({
     const folderProject = folderProjectItem?.payload.content || {};
     const privateNotes = await readTextFile(projectDirectory, "私密备注.md");
     const projectInfo = await readTextFile(projectDirectory, "项目信息.md");
-    if (!window.confirm(`将读取 ${articleFiles.length} 篇正文、${chapterFiles.length} 个章节、${characterFiles.length} 个人物。现有同名稿件将更新并保留版本记录，不上传服务器。继续吗？`)) return;
+    const incomingTitle = projectInfo?.match(/^# (.*)$/m)?.[1]?.trim() || folderProjectItem?.payload.title || title;
     const stripHeading = (text: string) => text.replace(/^# .*\r?\n+/, "");
     const field = (text: string | null, label: string) => {
       const match = (text || "").match(new RegExp(`${label}：([^\\n\\r]*)`));
@@ -549,16 +570,16 @@ export default function ProjectWorkspace({
       }; }) : data.timelineEvents,
     };
     const { aiKey, ...syncData } = next;
-    const folderFingerprint = await projectPayloadFingerprint(title, syncData);
+    const folderFingerprint = await projectPayloadFingerprint(incomingTitle, syncData);
     const folderParent = await parentFingerprint.current;
-    const changes: any[] = [{ id: projectId, itemType: "project", title, content: syncData }];
+    const changes: any[] = [{ id: projectId, itemType: "project", title: incomingTitle, content: syncData }];
     for (const file of articleFiles) {
       const articleId = identity(file,"正文","稿件",file.name.includes("--") ? file.name.split("--")[0] : articles.find(article=>article.payload.title===file.text.match(/^# (.*)$/m)?.[1]?.trim())?.id);
-      const articleTitle = file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/\.md$/i, "");
+      const articleTitle = field(file.text, "标题为空") === "是" ? "" : file.text.match(/^# (.*)$/m)?.[1]?.trim() || file.name.replace(/\.md$/i, "");
       const original = articles.find((article) => article.id === articleId) || folderBackup?.items.find((item) => item.id === articleId);
       changes.push({ id: articleId, itemType: "article", title: articleTitle, projectId, content: {
         ...original?.payload?.content,
-        text: stripHeading(file.text).replace(/^(?:稿件ID|章节ID)：[^\n\r]*\r?\n*/gm, "").trim(),
+        text: stripHeading(file.text).replace(/^(?:稿件ID|章节ID|标题为空)：[^\n\r]*\r?\n*/gm, "").trim(),
         projectId, chapterId: field(file.text, "章节ID") || undefined,
         visibility: "qingxiaolu", publicationState: "editing",
       } });
@@ -579,6 +600,40 @@ export default function ProjectWorkspace({
       if(original && change.id!==projectId && (original.payload.itemType!=="article" || String(original.payload.projectId||original.payload.content?.projectId||"")!==projectId))
         throw new Error("文件中的稿件 ID 属于其他项目，尚未导入任何内容。请复制为新稿件后再导入。");
     }
+    const currentItems = () => JSON.stringify(getLocalItems().filter(item => changes.some(change => change.id === item.id)).map(item => item.payload));
+    const originalItems = currentItems();
+    const projectRows: FolderChange[] = [];
+    const addRow = (directory: string, name: string, appText: string, localText: string, baseline?: string, exists = true) => {
+      const status = !exists ? "新增" : appText === localText ? "不变" : baseline !== undefined && appText !== baseline && localText !== baseline ? "冲突" : "修改";
+      projectRows.push({ directory, name, appText, localText, status, reason: status === "冲突" ? "两边都有修改，确认读回会保留当前情晓录版本。" : undefined });
+    };
+    addRow("", "项目信息.md", `${title}\n${data.type}\n${data.tags}\n${data.description}`,
+      `${incomingTitle}\n${next.type}\n${next.tags}\n${next.description}`, folderProjectItem ? `${folderProjectItem.payload.title}\n${folderProject.type}\n${folderProject.tags}\n${folderProject.description}` : undefined);
+    for (const [key, name] of [["world", "世界观.md"], ["plot", "情节.md"], ["privateNotes", "私密备注.md"], ["characters", "人物概述"], ["outline", "大纲概述"], ["timeline", "时间轴概述"]] as const)
+      addRow("", name, String(data[key] || ""), String(next[key] || ""), folderProjectItem ? String(folderProject[key] || "") : undefined);
+    for (const [key, directory] of [["characterCards", "人物"], ["chapters", "大纲"], ["timelineEvents", "时间轴"]] as const) {
+      for (const entry of next[key]) {
+        const prior = data[key].find((item: any) => item.id === entry.id), base = folderProject[key]?.find((item: any) => item.id === entry.id);
+        const display = (item: any) => item ? [item.name || item.title, item.role || item.status || item.time || "", item.description || item.summary || item.detail || ""].join("\n") : "";
+        addRow(directory, (entry as any).name || (entry as any).title || "未命名资料", display(prior), display(entry), base ? display(base) : undefined, Boolean(prior));
+      }
+    }
+    const rows = [...projectRows, ...changes.filter(change => change.id !== projectId).map(change => {
+      const original = existing.find(item => item.id === change.id);
+      const before = original?.payload?.content || {};
+      const same = change.id === projectId ? JSON.stringify(projectDataWithoutSession(before)) === JSON.stringify(syncData) :
+        original?.payload.title === change.title && before.text === change.content.text && before.chapterId === change.content.chapterId;
+      const baseline = folderBackup?.items.find(item => item.id === change.id)?.payload?.content;
+      const conflict = !same && baseline && before.text !== baseline.text && change.content.text !== baseline.text;
+      return { directory: change.id === projectId ? "" : change.content.sourceLabel === "ChatGPT" ? "AI讨论" : "正文",
+        name: change.title || "未命名记录", status: !original ? "新增" as const : same ? "不变" as const : conflict ? "冲突" as const : "修改" as const,
+        appText: change.id === projectId ? JSON.stringify(projectDataWithoutSession(before), null, 2) : String(before.text || ""),
+        localText: change.id === projectId ? JSON.stringify(syncData, null, 2) : String(change.content.text || ""),
+        reason: conflict ? "情晓录与文件都已修改。确认读回会保留当前情晓录版本，不上传云端。" : undefined };
+    })];
+    setFolderPreview({ direction: "读回情晓录", rows, apply: async () => {
+    if (currentItems() !== originalItems || await folderTextSnapshot(projectDirectory) !== diskSnapshot)
+      throw new Error("预览后情晓录或文件夹内容发生变化，尚未导入，请重新预览。");
     await queueLocalBatch(() => {
       assertUnchanged();
       return changes.map(change => change.id === projectId ? { ...change, baseRevision: projectSessionRevision(projectId, editingSession, baseline.current), editorSessionId: editingSession } : change);
@@ -587,13 +642,23 @@ export default function ProjectWorkspace({
         projectSessionRevision(projectId, editingSession, baseline.current), folderFingerprint, folderParent),
     } } }));
     acceptSaved(folderFingerprint);
-    savedViewSignature.current = projectSnapshotSignature(title, next);
+    savedViewSignature.current = projectSnapshotSignature(incomingTitle, next);
+    setTitle(incomingTitle);
     setData(next);
-    onUpdated?.(title, syncData);
+    onUpdated?.(incomingTitle, syncData);
     try { await acknowledgeFolderChanges(projectDirectory, projectId, associations); }
     catch { setMessage("稿件和资料已保存到 App，但文件夹清单更新失败。请恢复文件夹读写权限后，再次从本地同步到 App。未上传服务器。"); return; }
     setMessage(`已从“${rootDirectoryName}\\${projectDirectoryName}”同步到 App，未上传服务器`);
+    } });
     } finally { folderBusyRef.current = false; setFolderBusy(false); }
+  }
+
+  async function confirmFolderSync() {
+    if (!folderPreview || folderBusyRef.current) return;
+    folderBusyRef.current = true; setFolderBusy(true);
+    try { await folderPreview.apply(); setFolderPreview(null); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "文件同步失败，原内容仍保留"); }
+    finally { folderBusyRef.current = false; setFolderBusy(false); }
   }
 
   async function setCover(file?: File) {
@@ -671,7 +736,14 @@ export default function ProjectWorkspace({
     私密: ["privateNotes", "仅用于自己的创作备注……"],
   };
 
+  if (folderPreview) return <main className="project-workspace">
+    {message && <div className="real-message" role="status">{message}</div>}
+    <FolderSyncPreview preview={folderPreview} busy={folderBusy} close={() => setFolderPreview(null)} confirm={() => void confirmFolderSync()} />
+  </main>;
+
   return <main className="project-workspace" inert={closing} aria-busy={closing} onContextMenu={openSelectionMenu}
+    onDragOver={event => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
+    onDrop={event => { if (event.dataTransfer.files.length) { event.preventDefault(); onImport?.(Array.from(event.dataTransfer.files)); } }}
     onClick={(event) => {
       if (selectionMenu && !(event.target as HTMLElement).closest(".selection-action-menu")) setSelectionMenu(null);
     }}>
@@ -697,6 +769,7 @@ export default function ProjectWorkspace({
           <article><b>{data.timelineEvents.length}</b><span>时间轴事件</span></article>
         </div>
         <div className="project-quick-actions">
+          <button onClick={() => onImport?.()}>导入文件到此项目</button>
           <button onClick={() => { setProjectVersions(getItemVersions(projectId)); setVersionPanel(true); }}>项目版本</button>
           <button onClick={onWrite}>继续写作</button>
           <button onClick={() => setSection("正文")}>查看正文</button>
@@ -955,8 +1028,8 @@ export default function ProjectWorkspace({
           <div><b>情晓录总文件夹</b><small>{projectDirectoryName
             ? `当前位置：${rootDirectoryName}\\${projectDirectoryName}`
             : "只需选择一次总文件夹，各项目自动建立独立子文件夹"}</small></div>
-          <button onClick={() => void chooseProjectDirectory()}>
-            {projectDirectoryName ? "更换总文件夹" : "关联总文件夹"}
+          <button disabled={Boolean(desktopRootDirectory())} onClick={() => void chooseProjectDirectory()}>
+            {desktopRootDirectory() ? "本机助手已关联目录" : projectDirectoryName ? "更换总文件夹" : "关联总文件夹"}
           </button>
           <button disabled={!projectDirectory || folderBusy} onClick={() => void syncAppToLocal().catch((error) => setMessage(error.message))}>从 App 同步到本地</button>
           <button disabled={!projectDirectory || folderBusy} onClick={() => void syncLocalToApp().catch((error) => setMessage(error.message))}>从本地同步到 App</button>
