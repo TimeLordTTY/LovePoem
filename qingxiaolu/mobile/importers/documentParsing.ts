@@ -86,12 +86,41 @@ export function parseOutlineXml(xml: string): OutlineEntry[] {
   if (doc.querySelector("parsererror")) throw new Error("导图 XML 格式不正确，尚未导入任何内容。");
   const entries: OutlineEntry[] = [];
   const children = (node: Element, name: string) => Array.from(node.children).filter(child => child.localName.toLowerCase() === name);
+  const xhtml = "http://www.w3.org/1999/xhtml";
+  function blockText(node: Node): string {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const value = node.textContent || "";
+      return !value.trim() && ["html", "body", "notes", "richcontent"].includes(node.parentElement?.localName.toLowerCase() || "") ? "" : value;
+    }
+    if (!(node instanceof Element)) return "";
+    const tag = node.localName.toLowerCase();
+    if (["script", "style", "img"].includes(tag)) return "";
+    if (tag === "br") return "\n";
+    const value = Array.from(node.childNodes).map(blockText).join("");
+    if (tag === "p" || tag === "div") return `${value}\n\n`;
+    if (tag === "li") return `- ${value.trim()}\n`;
+    const href = node.getAttribute("href") || node.getAttributeNS(xhtml, "href");
+    return tag === "a" && href ? `${value}（${href}）` : value;
+  }
+  function noteText(note: Element) {
+    const plain = children(note, "plain").map(child => child.textContent?.trim() || "").filter(Boolean).join("\n");
+    if (plain) return plain;
+    return blockText(note).replace(/\n{3,}/g, "\n\n").trim();
+  }
   function walk(node: Element, depth = 0) {
-    const title = node.getAttribute("TEXT") || node.getAttribute("text") || children(node, "title")[0]?.textContent || "";
-    const richNote = children(node, "richcontent").filter(child => child.getAttribute("TYPE")?.toUpperCase() === "NOTE").map(child => child.textContent?.trim() || "").join("\n");
-    const notes = children(node, "notes").map(note => note.textContent?.trim() || "").join("\n");
+    const rich = children(node, "richcontent");
+    const richTitle = rich.filter(child => child.getAttribute("TYPE")?.toUpperCase() === "NODE").map(child => blockText(child).trim()).join("\n");
+    const title = node.getAttribute("TEXT") || node.getAttribute("text") || children(node, "title")[0]?.textContent || richTitle;
+    const richNote = rich.filter(child => child.getAttribute("TYPE")?.toUpperCase() === "NOTE").map(noteText).join("\n");
+    const noteNodes = children(node, "notes");
+    const notes = noteNodes.map(noteText).join("\n");
     const text = node.getAttribute("_note") || node.getAttribute("note") || richNote || notes;
-    if (title.trim() || text.trim()) entries.push({ title: title.trim(), text: text.trim(), depth });
+    // 只收集当前节点及其备注里的图片，子节点的图片留给自己的节点。
+    const imageNodes = [...children(node, "img"), ...[...rich, ...noteNodes].flatMap(container =>
+      Array.from(container.getElementsByTagNameNS("*", "img")))];
+    const imageSources = [...new Set(imageNodes.map(image => image.getAttribute("src") || image.getAttributeNS(xhtml, "src") || "").filter(Boolean))];
+    if (title.trim() || text.trim() || imageSources.length) entries.push({ title: title.trim(), text: text.trim(), depth,
+      ...(imageSources.length ? { imageSources } : {}) });
     for (const child of Array.from(node.children)) {
       if (["node", "outline", "topic"].includes(child.localName.toLowerCase())) walk(child, depth + 1);
       else if (["children", "topics"].includes(child.localName.toLowerCase())) walkContainer(child, depth + 1);
@@ -103,7 +132,8 @@ export function parseOutlineXml(xml: string): OutlineEntry[] {
       else if (["children", "topics"].includes(child.localName.toLowerCase())) walkContainer(child, depth);
     }
   }
-  const roots = Array.from(doc.querySelectorAll("map > node, body > outline, sheet > topic"));
+  const roots = Array.from(doc.getElementsByTagName("*")).filter(node =>
+    ["map/node", "body/outline", "sheet/topic"].includes(`${node.parentElement?.localName.toLowerCase()}/${node.localName.toLowerCase()}`));
   roots.forEach(root => walk(root));
   if (!entries.length) throw new Error("思维导图中没有可识别的节点。");
   return entries;

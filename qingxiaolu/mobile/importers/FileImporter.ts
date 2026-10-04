@@ -64,10 +64,23 @@ async function readFile(file: File): Promise<{ text: string; images?: string[]; 
       if (!asset) return null;
       const bytes = await asset.async("uint8array"), mime = xmindImageMime(bytes);
       if (!mime) return null;
-      return new Promise<string>((resolve, reject) => {
+      const source = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(new Blob([bytes as BlobPart], { type: mime }));
       });
+      // 识别出文件头仍可能是损坏文件；确认能显示，原字节不做转换。
+      await new Promise<void>((resolve, reject) => {
+        const image = new Image();
+        const finish = (error?: Error) => {
+          clearTimeout(timer); image.onload = null; image.onerror = null; image.removeAttribute("src");
+          if (error) reject(error); else resolve();
+        };
+        const timer = setTimeout(() => finish(new Error("Image decoding timed out")), 15000);
+        image.onload = () => finish(image.naturalWidth && image.naturalHeight ? undefined : new Error("Image has no pixels"));
+        image.onerror = () => finish(new Error("Image cannot be decoded"));
+        image.src = source;
+      });
+      return source;
     });
     return { text: outlineText(prepared.entries), images: prepared.images, raw: { outlineEntries: prepared.entries, originalXmind },
       warnings: [...prepared.warnings,"已读取节点、文字备注和可识别图片；布局和关系线请对照原始 XMind。原文件随导入保留。"] };
