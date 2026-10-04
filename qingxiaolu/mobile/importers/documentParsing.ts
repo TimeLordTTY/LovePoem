@@ -1,7 +1,7 @@
 import { candidate, type ImportCandidate } from "./types";
 import { parseWritingDate } from "../writingDate";
 
-export type OutlineEntry = { title: string; text: string; depth: number };
+export type OutlineEntry = { title: string; text: string; depth: number; imageSources?: string[]; images?: string[] };
 
 export function decodeDocument(buffer: ArrayBuffer) {
   const bytes = new Uint8Array(buffer);
@@ -131,7 +131,17 @@ export function parseXmindJson(sheets: any[]): OutlineEntry[] {
     if (!node) return;
     const title = String(node.title || "");
     const note = noteText(node.notes);
-    if (title || note) entries.push({ title, text: note, depth });
+    const imageSources: string[] = [];
+    if (typeof node.image?.src === "string") imageSources.push(node.image.src);
+    function noteImages(spans: any[]) {
+      for (const span of spans) {
+        if (typeof span.image === "string") imageSources.push(span.image);
+        if (Array.isArray(span.spans)) noteImages(span.spans);
+      }
+    }
+    for (const paragraph of node.notes?.html?.content?.paragraphs || []) if (Array.isArray(paragraph.spans)) noteImages(paragraph.spans);
+    if (title || note || imageSources.length) entries.push({ title, text: note, depth,
+      ...(imageSources.length ? { imageSources: [...new Set(imageSources)] } : {}) });
     for (const kind of ["attached", "detached", "summary", "callout"]) {
       const children = node.children?.[kind];
       if (children !== undefined && !Array.isArray(children)) throw new Error("XMind 节点分支格式不正确，尚未导入任何内容。");

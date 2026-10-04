@@ -7,6 +7,7 @@ import { candidate, type ImportAdapter, type ImportCandidate, type ImportContext
 import { decodeDocument, csvCandidates, parseOutlineXml, parseXmindJson, outlineText, wordHtmlText, safeImageSource } from "./documentParsing";
 import { readPdfContent } from "./pdfParsing";
 import { installPdfStreamIterator, installPdfBufferTransfer } from "./pdfCompatibility";
+import { loadXmindImages, xmindImageMime } from "./xmindImages";
 
 installPdfStreamIterator();
 installPdfBufferTransfer();
@@ -58,8 +59,18 @@ async function readFile(file: File): Promise<{ text: string; images?: string[]; 
       const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(new Blob([file], { type: "application/x-xmind" }));
     });
-    return { text: outlineText(entries), raw: { outlineEntries: entries, originalXmind },
-      warnings: ["已读取节点和文字备注；图片、布局和关系线请对照原始 XMind。原文件随导入保留。"] };
+    const prepared = await loadXmindImages(entries, async path => {
+      const asset = zip.file(path);
+      if (!asset) return null;
+      const bytes = await asset.async("uint8array"), mime = xmindImageMime(bytes);
+      if (!mime) return null;
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(new Blob([bytes as BlobPart], { type: mime }));
+      });
+    });
+    return { text: outlineText(prepared.entries), images: prepared.images, raw: { outlineEntries: prepared.entries, originalXmind },
+      warnings: [...prepared.warnings,"已读取节点、文字备注和可识别图片；布局和关系线请对照原始 XMind。原文件随导入保留。"] };
   }
   if (ext === "mm" || ext === "opml") {
     const decoded = decodeDocument(await file.arrayBuffer());

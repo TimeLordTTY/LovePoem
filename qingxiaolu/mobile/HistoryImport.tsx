@@ -225,9 +225,9 @@ export default function HistoryImport({
   function splitOutline(item: ImportCandidate) {
     const entries = (item.raw as any)?.outlineEntries;
     if (!Array.isArray(entries)) return;
-    const nodes = entries.filter((entry: any, index: number) => entry.text || !entries[index + 1] || entries[index + 1].depth <= entry.depth);
+    const nodes = entries.filter((entry: any, index: number) => entry.text || entry.images?.length || !entries[index + 1] || entries[index + 1].depth <= entry.depth);
     setCandidates(items => items.flatMap(entry => entry.id !== item.id ? [entry] : nodes.map((node: any) =>
-      candidate(item.source, item.sourceLabel, node.title, node.text || node.title, { raw: { ...(item.raw as any), outlineEntries: undefined, outlineDepth: node.depth }, warnings: item.warnings }))));
+      candidate(item.source, item.sourceLabel, node.title, node.text || node.title, { images: node.images || [], raw: { ...(item.raw as any), outlineEntries: undefined, outlineDepth: node.depth }, warnings: item.warnings }))));
   }
 
   return (

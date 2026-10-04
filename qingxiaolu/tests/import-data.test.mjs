@@ -6,6 +6,7 @@ import { commitImport } from "../work/writing-tests/importers/importCommit.mjs";
 import { pdfText, pdfPixels } from "../work/writing-tests/importers/pdfParsing.mjs";
 import { installPdfStreamIterator, installPdfBufferTransfer } from "../work/writing-tests/importers/pdfCompatibility.mjs";
 import { parseWritingDate, writingDateInfo } from "../work/writing-tests/writingDate.mjs";
+import { loadXmindImages, xmindResourcePath, xmindImageMime } from "../work/writing-tests/importers/xmindImages.mjs";
 import { spawnSync } from "node:child_process";
 class MemoryStorage {
   data = new Map(); failKey = "";
@@ -16,6 +17,24 @@ class MemoryStorage {
 beforeEach(() => { globalThis.localStorage = new MemoryStorage(); });
 const read = key => JSON.parse(localStorage.getItem(key));
 const items = () => [candidate("txt", "TXT", "第一篇", "正文一"), candidate("txt", "TXT", "第二篇", "正文二")];
+
+test("XMind 节点和备注图片归属保持，重复资源只读取一次，失败明确保留提示", async () => {
+  const entries=parseXmindJson([{rootTopic:{title:"根",notes:{html:{content:{paragraphs:[{spans:[{image:"xap:resources/a.png"}]}]}}},children:{attached:[
+    {title:"章节",image:{src:"xap:resources/b.jpg"}}, {title:"复用",image:{src:"resources/a.png"}},
+    {title:"缺失",image:{src:"xap:resources/missing.png"}},
+  ]}}}]);
+  const calls=[];const result=await loadXmindImages(entries,async path=>{calls.push(path);return path.includes("missing")?null:"data:image/png;base64,"+path;});
+  assert.deepEqual(result.entries[0].images,["data:image/png;base64,resources/a.png"]);
+  assert.deepEqual(result.entries[1].images,["data:image/png;base64,resources/b.jpg"]);
+  assert.equal(calls.filter(v=>v==="resources/a.png").length,1);
+  assert.equal(result.images.length,2);assert.match(result.warnings[0],/1 处/);
+  assert.equal(xmindResourcePath("https://example.com/image.png"),null);
+  assert.equal(xmindResourcePath("xap:resources/%2e%2e/private"),null);
+  assert.equal(xmindImageMime(Uint8Array.from([137,80,78,71,13,10,26,10])),"image/png");
+  assert.equal(xmindImageMime(Uint8Array.from([255,216,255])),"image/jpeg");
+  assert.equal(xmindImageMime(new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')),"image/svg+xml");
+  assert.equal(xmindImageMime(new TextEncoder().encode('not an image')),null);
+});
 test("日历日期在东西时区均保持原日和归档月，带时区时间仍按真实时刻显示", () => {
   const moduleUrl = new URL("../work/writing-tests/writingDate.mjs", import.meta.url).href;
   for (const timezone of ["America/Los_Angeles", "Asia/Hong_Kong"]) {

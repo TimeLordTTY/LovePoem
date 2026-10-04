@@ -19,7 +19,7 @@ export type ProjectWorkspaceData = {
   timeline: string;
   privateNotes: string;
   characterCards: Array<{ id: string; name: string; role: string; description: string }>;
-  chapters: Array<{ id: string; title: string; summary: string; status: string }>;
+  chapters: Array<{ id: string; title: string; summary: string; status: string; importSource?: { images?: string[] } }>;
   timelineEvents: Array<{ id: string; time: string; title: string; detail: string }>;
   importDocuments?: Array<{ fileName: string; dataUrl: string }>;
   archived: boolean;
@@ -51,6 +51,13 @@ const emptyData: ProjectWorkspaceData = {
 function load(projectId: string, fallback: Partial<ProjectWorkspaceData> = {}): ProjectWorkspaceData {
   const all = JSON.parse(readStored("qx_project_workspaces") || "{}");
   return { ...emptyData, ...projectDataWithoutSession(fallback), ...projectDataWithoutSession(all[projectId] || {}) };
+}
+
+function ReaderImages({ images }: { images?: string[] }) {
+  if (!Array.isArray(images) || !images.length) return null;
+  return <div className="reader-images">{images.filter(image => typeof image === "string" && image).map((image, index) =>
+    <img key={index} src={image} alt={`第 ${index + 1} 张插图`} loading="lazy" referrerPolicy="no-referrer"
+      style={{ display: "block", maxWidth: "100%", height: "auto", margin: "16px 0" }} />)}</div>;
 }
 
 function save(projectId: string, data: ProjectWorkspaceData) {
@@ -814,10 +821,12 @@ export default function ProjectWorkspace({
                 <h2>{article.payload.title}</h2>
                 {String(article.payload.content?.text || "").split(/\n{2,}/).map((paragraph, index) =>
                   <p key={index}>{paragraph}</p>)}
+                <ReaderImages images={article.payload.content?.images} />
               </section>) : <div className="reader-outline-fallback">
                 <small>本章尚未关联正文，当前显示大纲摘要</small>
                 {data.chapters[readerChapter]?.summary.split(/\n{2,}/).map((paragraph, index) =>
                   <p key={index}>{paragraph}</p>)}
+                <ReaderImages images={data.chapters[readerChapter]?.importSource?.images} />
               </div>}
           </article> : <article className="book-reader-page"><p className="reader-empty">还没有章节大纲。</p></article>}
           <div className="book-page-turn">
