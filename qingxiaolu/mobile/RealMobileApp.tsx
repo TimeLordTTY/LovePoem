@@ -20,6 +20,7 @@ import { openTargetDraft, copyNativeDraftText } from "./nativeDraft";
 import { forwardResultMessage } from "./forwardResult";
 import { shareOrDownloadArticleImages } from "./longImage";
 import { writingDateInfo } from "./writingDate";
+import { searchExcerpt } from "./searchExcerpt";
 
 type Tab = "项目" | "创作" | "稿件库" | "设置";
 
@@ -27,6 +28,13 @@ function blogTime(item: any) {
   return blogDate(item).time;
 }
 function blogDate(item: any) { return writingDateInfo(item.payload?.content?.publishedAt, Number(item.seq) || Date.now()); }
+
+function ManuscriptExcerpt({ text, query }: { text: string; query: string }) {
+  const excerpt = searchExcerpt(text, query);
+  return <details className="manuscript-excerpt"><summary>{excerpt.leading && "…"}{excerpt.before}
+    {excerpt.match && <mark>{excerpt.match}</mark>}{excerpt.after}{excerpt.expandable && "…展开阅读全文"}
+  </summary><p>{text}</p></details>;
+}
 
 function itemTitle(item: any, fallback = "未命名项目") {
   return String(
@@ -705,7 +713,7 @@ export default function RealMobileApp() {
                   item.syncState === "synced" ? "云端已保存 · 本机可离线查看" :
                   item.syncState === "pending" ? "等待同步" : "仅本机"}</small>
                 <small>{itemDate.label} · {item.payload.content?.publicationState === "ready" ? "已定稿" : "待修改"}</small>
-                {!!item.payload.content?.text && <details className="manuscript-excerpt"><summary>{String(item.payload.content.text).slice(0, 160)}{item.payload.content.text.length > 160 ? "…展开阅读全文" : ""}</summary><p>{item.payload.content.text}</p></details>}
+                {!!item.payload.content?.text && <ManuscriptExcerpt text={String(item.payload.content.text)} query={blogSearch} />}
                 {!!item.payload.content?.images?.length && <div className="blog-images">
                   {item.payload.content.images.slice(0, 9).map((image: string, index: number) =>
                     image && <img key={index} src={image} alt="" referrerPolicy="no-referrer" />)}

@@ -26,8 +26,17 @@ try {
   const body=Array.from({length:2000},(_,i)=>`第${i+1}段：作者长稿，中文、标点和📝。`).join('\n');
   await page.getByRole('button',{name:'创作',exact:true}).click();await page.getByPlaceholder('稿件标题（可选）').fill('长正文验收');await page.getByPlaceholder('这一刻，想写点什么……').fill(body);await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByText('已保存到本机，可以继续写作',{exact:true}).waitFor();
   await page.reload();assert.equal(await page.getByPlaceholder('这一刻，想写点什么……').inputValue(),body);
-  await page.getByRole('button',{name:'稿件库',exact:true}).click();await page.getByLabel('搜索历史内容').fill('第2000段');const card=page.locator('article[data-blog-month]');assert.equal(await card.count(),1);await card.locator('summary').click();assert.equal(await card.locator('.manuscript-excerpt p').textContent(),body);
+  await page.getByRole('button',{name:'稿件库',exact:true}).click();await page.getByLabel('搜索历史内容').fill('第2000段');const card=page.locator('article[data-blog-month]');assert.equal(await card.count(),1);
+  if(process.argv.includes('--observe-snippet'))console.log(JSON.stringify({matchingCardFound:true,excerptShowsMatch:(await card.locator('summary').textContent()).includes('第2000段')}));
+  else {assert.ok((await card.locator('summary').textContent()).includes('第2000段'));assert.equal(await card.locator('summary mark').textContent(),'第2000段');}
+  await card.locator('summary').click();assert.equal(await card.locator('.manuscript-excerpt p').textContent(),body);
+  if(!process.argv.includes('--observe-snippet')) {
+    await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+    await page.getByLabel('搜索历史内容').fill('长正文验收');assert.equal(await card.locator('summary mark').count(),0);assert.ok((await card.locator('summary').textContent()).startsWith('第1段'));
+    await page.getByLabel('搜索历史内容').fill('第2000段');assert.equal(await card.locator('summary mark').textContent(),'第2000段');
+    if(process.env.QX_SEARCH_SCREENSHOT){if(await card.locator('details').getAttribute('open')!==null)await card.locator('summary').click();await card.screenshot({path:process.env.QX_SEARCH_SCREENSHOT});}
+  }
   await card.getByRole('button',{name:'继续编辑',exact:true}).click();assert.equal(await page.getByPlaceholder('这一刻，想写点什么……').inputValue(),body);
-  console.log(JSON.stringify({filteredDatesAndCounts:true,noDeadDateNavigation:true,clearRestoresAll:true,batchOnlyCurrentResult:true,longTextReload:true,searchEndOfLongText:true,expandedFullText:true,editPreservesText:true}));
+  console.log(JSON.stringify({filteredDatesAndCounts:true,noDeadDateNavigation:true,clearRestoresAll:true,batchOnlyCurrentResult:true,longTextReload:true,searchEndOfLongText:true,searchContextAndHighlight:!process.argv.includes('--observe-snippet'),titleSearchKeepsDefaultExcerpt:!process.argv.includes('--observe-snippet'),narrowViewport:!process.argv.includes('--observe-snippet'),expandedFullText:true,editPreservesText:true}));
  }
 }finally{await browser.close();}

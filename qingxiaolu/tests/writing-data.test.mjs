@@ -5,6 +5,7 @@ import { queueItem, getLocalItems, fetchServerItems, syncNow, getSyncConflicts, 
 import { createBackup, createSnapshotBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
 import { withSyncTimeout } from "../work/writing-tests/sync-request.mjs";
 import { readItemSnapshot } from "../work/writing-tests/itemSnapshot.mjs";
+import { searchExcerpt } from "../work/writing-tests/searchExcerpt.mjs";
 import { createServer } from "node:http";
 const nativeFetch = globalThis.fetch;
 
@@ -20,6 +21,22 @@ const read = (key) => JSON.parse(localStorage.getItem(key) || "[]");
 const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, projectId: "project", content: { text, chapterId: "chapter-stable", images: ["data:image/png;base64,AA=="] } });
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
+
+test("长稿搜索摘要显示末尾匹配及上下文，字面标点按原文保留", () => {
+  const text="开头".repeat(1000)+"前文📝 [A+B] 后文";
+  const result=searchExcerpt(text," [a+b] ");
+  assert.equal(result.match,"[A+B]");assert.ok(result.before.endsWith("前文📝 "));
+  assert.ok(result.after.includes(" 后文"));assert.equal(result.leading,true);assert.equal(result.expandable,true);
+  assert.equal(searchExcerpt("<em>标签正文</em>","<em>").match,"<em>");
+});
+
+test("摘要保留完整 emoji、长关键词和转小写后位置变化的字符", () => {
+  assert.ok(searchExcerpt("a".repeat(159)+"📝后文","").before.endsWith("📝"));
+  const term="长关键词".repeat(50);assert.equal(searchExcerpt("前文"+term+"后文",term).match,term);
+  const text="İ"+"前文".repeat(100)+"目标📝后文";
+  const result=searchExcerpt(text,"目标📝");assert.equal(result.match,"目标📝");assert.ok(result.after.startsWith("后文"));
+  assert.equal(searchExcerpt("İSTANBUL","istan").match,"");
+});
 
 test("重复稿件读取只解析一次，返回对象相互独立，写入变化立即可见", () => {
   const raw=JSON.stringify([{id:"snapshot-test",content:{text:"原文",images:["data:image/png;base64,AA=="],nested:{notes:["旧资料"]}}}]);

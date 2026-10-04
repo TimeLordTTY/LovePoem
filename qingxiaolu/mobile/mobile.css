@@ -19,6 +19,7 @@
 .writing-focused .qzone-compose { min-height: 66vh; }
 .writing-focused .qzone-compose > textarea { min-height: 60vh; }
 .manuscript-excerpt summary { cursor: pointer; white-space: pre-wrap; line-height: 1.7; color: #625a69; }
+.manuscript-excerpt mark { color: inherit; background: #eee7f5; padding: 0 .1em; border-radius: 2px; }
 .sync-state { display: block; margin: 12px 0 5px; color: #766880; }
 .sync-state.synced { color: #477357; }
 .conflict-list { padding: 20px; margin-bottom: 20px; border: 1px solid #dfbb9d; border-radius: 12px; background: #fffbf3; }
