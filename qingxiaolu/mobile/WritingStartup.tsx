@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import RealMobileApp from "./RealMobileApp";
+import OfflinePageStatus from "./OfflinePageStatus";
 import { initializeWritingDatabase, legacyWritingSnapshot } from "./storageDatabase";
 import { createBackup, createSnapshotBackup, downloadBackup } from "./backup";
 
@@ -32,7 +33,7 @@ export default function WritingStartup() {
     {error && <div><button onClick={() => setAttempt(value => value + 1)}>重试</button>
       <button disabled={busy} onClick={() => void exportOriginal()}>下载原资料备份</button></div>}
   </section></main>;
-  return <>{recovery && <aside className="real-message" role="status">
+  return <><OfflinePageStatus />{recovery && <aside className="real-message" role="status">
     旧页面遗留的修改已保留在本机备份中。
     <button disabled={busy} onClick={() => void exportOriginal(true)}>下载旧页面备份</button>
   </aside>}{error && <p className="real-message" role="status">{error}</p>}<RealMobileApp /></>;
