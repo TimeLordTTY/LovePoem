@@ -4,6 +4,7 @@ import { queueItem, getLocalItems, fetchServerItems, syncNow, getSyncConflicts, 
   deleteLocalItem, restoreLocalTrashItem, queueLocalBatch, loginSync } from "../work/writing-tests/sync.mjs";
 import { createBackup, createSnapshotBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
 import { withSyncTimeout } from "../work/writing-tests/sync-request.mjs";
+import { readItemSnapshot } from "../work/writing-tests/itemSnapshot.mjs";
 import { createServer } from "node:http";
 const nativeFetch = globalThis.fetch;
 
@@ -19,6 +20,19 @@ const read = (key) => JSON.parse(localStorage.getItem(key) || "[]");
 const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, projectId: "project", content: { text, chapterId: "chapter-stable", images: ["data:image/png;base64,AA=="] } });
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
+
+test("重复稿件读取只解析一次，返回对象相互独立，写入变化立即可见", () => {
+  const raw=JSON.stringify([{id:"snapshot-test",content:{text:"原文",images:["data:image/png;base64,AA=="],nested:{notes:["旧资料"]}}}]);
+  localStorage.setItem("qx_drafts",raw);const parse=JSON.parse;let calls=0;
+  JSON.parse=function(value,...rest){if(value===raw)calls++;return parse.call(this,value,...rest);};
+  try {
+    const first=readItemSnapshot("qx_drafts"),second=readItemSnapshot("qx_drafts");assert.equal(calls,1);
+    first[0].content.text="未保存改动";first[0].content.images.push("another");first[0].content.nested.notes[0]="新资料";
+    assert.equal(second[0].content.text,"原文");assert.equal(readItemSnapshot("qx_drafts")[0].content.nested.notes[0],"旧资料");
+    localStorage.setItem("qx_drafts",JSON.stringify([{id:"replacement",content:{text:"已提交修改"}}]));
+    assert.equal(readItemSnapshot("qx_drafts")[0].content.text,"已提交修改");
+  } finally {JSON.parse=parse;}
+});
 
 test("请求超时会结束等待并取消连接，忽略超时后才完成的结果", async () => {
   let complete, signal;

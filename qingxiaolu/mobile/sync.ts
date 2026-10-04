@@ -4,6 +4,7 @@ import { readStored, changeJson } from "./storage";
 import { confirmProjectSessions, projectSessionRevision, projectPayloadFingerprint, projectSessionEntries, PROJECT_SESSION_FIELD, projectDataWithoutSession, projectSnapshotSignature } from "./projectSession";
 import { prepareSyncBatch, type ContentMemo } from "./sync-content";
 import { withSyncTimeout } from "./sync-request";
+import { readItemSnapshot } from "./itemSnapshot";
 
 const API = "https://poem.timelordtty.cn/qingxiaolu-api";
 const TOKEN_KEY = "qx_sync_token";
@@ -61,7 +62,7 @@ export function queueLocalBatch(input: any[] | (() => any[]), extra: Record<stri
   return changeJson(() => {
   const changes = typeof input === "function" ? input() : input;
   if (new Set(changes.map(change => change.id)).size !== changes.length) throw new Error("导入内容含重复的稿件 ID，尚未导入任何内容。请核对文件。");
-  const local = JSON.parse(readStored("qx_drafts") || "[]");
+  const local = readItemSnapshot("qx_drafts");
   const current = getLocalItems();
   const versions = JSON.parse(readStored("qx_item_versions") || "{}");
   const savedAt = new Date().toISOString();
@@ -100,7 +101,7 @@ export async function queueItem(
     if (!localWriterSessions.has(id)) localWriterSessions.set(id, crypto.randomUUID());
     editingSession = localWriterSessions.get(id);
   }
-  const local = JSON.parse(readStored("qx_drafts") || "[]");
+  const local = readItemSnapshot("qx_drafts");
   const revision = editor?.sessionId ? getEditorBaseRevision(id, editor.sessionId, baseRevision)
     : projectSession ? projectSessionRevision(id, projectSession, baseRevision)
     : Math.max(baseRevision, Number(local.find((item: any) => item.id === id && item.editorSessionId === editingSession)?.baseRevision || 0));
@@ -150,7 +151,7 @@ export async function queueItem(
 export async function selectItemsForSync(ids: string[]) {
   return changeJson(() => {
   const wanted = new Set(ids);
-  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  const drafts = readItemSnapshot("qx_drafts");
   const changes = drafts.filter((item: any) => wanted.has(item.id)).map((item: any) => ({
     id: item.id,
     itemType: item.itemType,
@@ -169,7 +170,7 @@ export async function selectItemsForSync(ids: string[]) {
 export function deleteLocalItem(item: any) {
   return changeJson(() => {
   const id = String(item.id);
-  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  const drafts = readItemSnapshot("qx_drafts");
   const trash = JSON.parse(readStored("qx_local_trash") || "[]");
   const deleted = JSON.parse(readStored("qx_deleted_ids") || "[]");
   return { values: { qx_drafts: drafts.filter((entry: any) => entry.id !== id), qx_local_trash: [
@@ -196,7 +197,7 @@ export function restoreLocalTrashItem(id: string) {
   const deleted = JSON.parse(readStored("qx_deleted_ids") || "[]");
   if (item) {
     const payload = item.payload || item;
-    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+    const drafts = readItemSnapshot("qx_drafts");
     return { values: { qx_drafts: [{ ...payload, baseRevision: Number(item.revision ?? payload.baseRevision ?? 0), syncState: "local", savedAt: new Date().toISOString() }, ...drafts.filter((entry: any) => entry.id !== id)],
       qx_local_trash: trash.filter((entry: any) => entry.id !== id), qx_deleted_ids: deleted.filter((entry: string) => entry !== id) }, result: item };
   }
@@ -252,10 +253,10 @@ export async function fetchServerItems() {
     .filter((change) => change.operation !== "delete")
     .sort((a, b) => Number(b.seq) - Number(a.seq));
   await changeJson(() => {
-    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+    const drafts = readItemSnapshot("qx_drafts");
     const workspaces = JSON.parse(readStored("qx_project_workspaces") || "{}");
     const versions = JSON.parse(readStored("qx_item_versions") || "{}");
-    const oldCache = JSON.parse(readStored("qx_server_cache") || "[]");
+    const oldCache = readItemSnapshot("qx_server_cache");
     const dirty = new Set(drafts.filter((item: any) => item.syncState !== "synced").map((item: any) => item.id));
     let projectChanged = false, versionsChanged = false;
     for (const incoming of result.filter(item => item.payload?.itemType === "project" && !dirty.has(item.id))) {
@@ -285,7 +286,7 @@ export function disconnectSync() {
 }
 
 export function getLocalItems() {
-  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  const drafts = readItemSnapshot("qx_drafts");
   const local = drafts.map((item: any, index: number) => ({
     id: item.id,
     seq: Date.parse(item.savedAt || "") || Date.now() - index,
@@ -301,14 +302,14 @@ export function getLocalItems() {
 }
 
 export function getCachedServerItems(): any[] {
-  return JSON.parse(readStored("qx_server_cache") || "[]").map((item: any) => ({ ...item,
+  return readItemSnapshot("qx_server_cache").map((item: any) => ({ ...item,
     cursorSeq: item.cursorSeq || item.seq,
     seq: Date.parse(String(item.changedAt || item.payload?.savedAt || "")) || item.seq,
     revision: item.revision || item.payload?.revision, syncState: "synced" }));
 }
 
 export function getSyncConflicts(): any[] {
-  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  const drafts = readItemSnapshot("qx_drafts");
   return JSON.parse(readStored("qx_sync_conflicts") || "[]").map((item: any) => ({
     ...item, local: drafts.find((draft: any) => draft.id === item.id) || item.local,
   }));
@@ -325,7 +326,7 @@ export async function resolveSyncConflict(id: string, choice: "cloud" | "local" 
     baseRevision: Number(server.revision),
   } };
   const values: Record<string, unknown> = {};
-  const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+  const drafts = readItemSnapshot("qx_drafts");
   const outbox = JSON.parse(readStored("qx_web_outbox") || "[]").filter((item: any) => item.id !== id);
   let restored: any = cloud.payload;
   if (choice === "local") {
@@ -378,7 +379,7 @@ async function pushPending(force: boolean, memo: ContentMemo) {
   const token = readStored(TOKEN_KEY);
   if (!token) return;
     const pending = JSON.parse(readStored("qx_web_outbox") || "[]");
-    const origins = new Map<string, string | null | undefined>(JSON.parse(readStored("qx_drafts") || "[]").map((item: any) => {
+    const origins = new Map<string, string | null | undefined>(readItemSnapshot("qx_drafts").map((item: any) => {
       const submitted = pending.find((entry: any) => entry.id === item.id);
       const matches = submitted && item.title === submitted.title && item.itemType === submitted.itemType &&
         item.projectId === submitted.projectId && Number(item.baseRevision || 0) === Number(submitted.baseRevision || 0) &&
@@ -420,7 +421,7 @@ async function pushPending(force: boolean, memo: ContentMemo) {
     const conflicts = [...getSyncConflicts().filter((item: any) => !conflictIds.has(item.id)),
       ...(result.conflicts || []).map((item: any) => ({ ...item, local: changes.find((change: any) => change.id === item.id) }))];
     const submitted = new Map(changes.map((item: any) => [item.id, JSON.stringify(item)]));
-    const drafts = JSON.parse(readStored("qx_drafts") || "[]");
+    const drafts = readItemSnapshot("qx_drafts");
     const workspaces = JSON.parse(readStored("qx_project_workspaces") || "{}");
     const projectConfirmed = confirmProjectSessions(workspaces, result.applied || [], origins, changes, projectFingerprints);
     const sameSession = (id: string) => {
