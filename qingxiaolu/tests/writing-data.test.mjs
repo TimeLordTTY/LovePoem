@@ -17,6 +17,30 @@ const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, 
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
 
+test("旧备份的删除标记不能隐藏当前已经恢复或修改的稿件", async () => {
+  await queueItem("article", "旧稿", { text: "旧正文" }, "project", false, "kept");
+  await deleteLocalItem(getLocalItems()[0]);
+  const backup = await createBackup();
+  await restoreLocalTrashItem("kept");
+  await queueItem("article", "现在的稿件", { text: "恢复后继续写的新正文" }, "project", false, "kept");
+  restoreBackup(backup);
+  const kept = getLocalItems().find(item => item.id === "kept");
+  assert.equal(kept?.payload.content.text, "恢复后继续写的新正文");
+  assert.equal(read("qx_deleted_ids").includes("kept"), false);
+  assert.equal(read("qx_local_trash").some(item => item.id === "kept"), false);
+});
+
+test("跳过已有项目时不导入旧工作区遮住当前项目资料", async () => {
+  await queueItem("project", "当前小说", { description: "本机新资料" }, undefined, false, "project");
+  const backup = await createBackup();
+  backup.workspaces.project = { description: "旧备份资料" };
+  backup.items[0].payload.content.description = "旧备份资料";
+  const result = restoreBackup(backup);
+  assert.equal(result.skipped, 1);
+  assert.equal(getLocalItems()[0].payload.content.description, "本机新资料");
+  assert.equal(read("qx_project_workspaces").project, undefined);
+});
+
 test("云端稿件从回收站恢复沿用删除时已读取的版本，不冒领后续云端版本", async () => {
   localStorage.setItem("qx_server_cache", JSON.stringify([cloud("restored-cloud", "删除前原稿", 6)]));
   await deleteLocalItem(getLocalItems()[0]);

@@ -120,7 +120,7 @@ export function restoreBackup(data: WritingBackup) {
   const values: Record<string, unknown> = {
     qx_drafts: [...incoming.map((item) => ({ ...item.payload, id: item.id, baseRevision: item.revision || item.payload.baseRevision || 0, syncState: "local", savedAt: new Date().toISOString() })),
       ...readJson<any[]>("qx_drafts", []).filter((item) => !incoming.some((entry) => entry.id === item.id))],
-    qx_project_workspaces: { ...data.workspaces, ...readJson("qx_project_workspaces", {}) },
+    qx_project_workspaces: { ...Object.fromEntries(Object.entries(data.workspaces).filter(([id]) => !ids.has(id))), ...readJson("qx_project_workspaces", {}) },
     qx_item_versions: { ...data.versions, ...readJson("qx_item_versions", {}) },
   };
     const trash = readJson<any[]>("qx_local_trash", []);
@@ -128,7 +128,7 @@ export function restoreBackup(data: WritingBackup) {
     values.qx_local_trash = [...trash, ...data.trash.filter((item) => !trashIds.has(item.id) && !ids.has(item.id))];
     if (!readStored("qx_editor_autosave") && data.editor) values.qx_editor_autosave = data.editor;
     values.qx_deleted_ids = [...new Set([...readJson<string[]>("qx_deleted_ids", []), ...(data.deletedIds || [])])]
-      .filter((id) => !incoming.some((item) => item.id === id));
+      .filter((id) => !ids.has(id) && !incoming.some((item) => item.id === id));
   return { values, result: { restored: incoming.length, skipped: data.items.length - incoming.length } };
   });
 }
