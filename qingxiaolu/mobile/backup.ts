@@ -97,21 +97,30 @@ export async function createSnapshotBackup(source: Record<string, string>): Prom
 }
 
 export function parseBackup(text: string): WritingBackup {
-  const data = clean(JSON.parse(text));
-  if (data.format !== "qingxiaolu-backup" || data.version !== 1 || !Array.isArray(data.items) ||
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch { throw new Error("完整备份不是有效的 JSON 文件，尚未写入任何数据。请检查文件是否完整。"); }
+  return validateBackup(clean(parsed));
+}
+
+function validateBackup(data: any): WritingBackup {
+  if (!data || typeof data !== "object" || Array.isArray(data) || data.format !== "qingxiaolu-backup" || data.version !== 1 || !Array.isArray(data.items) ||
     !data.workspaces || Array.isArray(data.workspaces) || typeof data.workspaces !== "object" ||
     !data.versions || Array.isArray(data.versions) || typeof data.versions !== "object" || !Array.isArray(data.trash) ||
     Object.values(data.versions).some((value) => !Array.isArray(value)) ||
     Object.values(data.workspaces).some((value) => !value || typeof value !== "object" || Array.isArray(value)) ||
-    data.trash.some((item: any) => typeof item.id !== "string") ||
+    data.trash.some((item: any) => !item || typeof item.id !== "string") ||
     (data.deletedIds && (!Array.isArray(data.deletedIds) || data.deletedIds.some((id: any) => typeof id !== "string"))) ||
-    data.items.some((item: any) => typeof item.id !== "string" || !["project", "article", "idea"].includes(item.payload?.itemType) || !item.payload?.content)) {
+    data.items.some((item: any) => !item || typeof item.id !== "string" || !["project", "article", "idea"].includes(item.payload?.itemType) || !item.payload?.content)) {
     throw new Error("这不是有效的情晓录完整备份文件，尚未写入任何数据。");
   }
+  if (new Set(data.items.map((item: any) => item.id)).size !== data.items.length)
+    throw new Error("备份中存在重复的稿件 ID，尚未写入任何数据。请核对原文件。");
   return data;
 }
 
 export function restoreBackup(data: WritingBackup) {
+  validateBackup(data);
   return changeJson(() => {
   // 相同 ID 的现有稿件优先保留；恢复不加入同步队列。
   const current = getLocalItems();

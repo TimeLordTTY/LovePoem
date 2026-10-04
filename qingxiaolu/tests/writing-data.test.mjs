@@ -17,6 +17,24 @@ const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, 
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
 
+test("无效备份和空记录给出可理解错误，解析失败不修改本机内容", async () => {
+  await queueItem("article", "当前稿件", {text:"当前正文"}, undefined, false, "current");
+  const backup = await createBackup(), before = new Map(localStorage.data);
+  for (const value of [null, [], {...backup,items:[null]}, {...backup,trash:[null]}])
+    assert.throws(()=>parseBackup(JSON.stringify(value)),/不是有效的情晓录完整备份/);
+  assert.throws(()=>parseBackup('{"format":'),/JSON.*尚未写入/);
+  assert.deepEqual(localStorage.data,before);
+});
+
+test("备份内重复稿件 ID 在写入前拒绝，不产生重复记录或错误数量", async () => {
+  await queueItem("article", "当前稿件", {text:"当前正文"}, undefined, false, "current");
+  const backup = await createBackup(), before = new Map(localStorage.data);
+  backup.items.push({id:"duplicate",payload:payload("duplicate","第一份正文")},{id:"duplicate",payload:payload("duplicate","另一份正文")});
+  assert.throws(()=>parseBackup(JSON.stringify(backup)),/重复的稿件 ID.*尚未写入/);
+  assert.throws(()=>restoreBackup(backup),/重复的稿件 ID.*尚未写入/);
+  assert.deepEqual(localStorage.data,before);
+});
+
 test("旧备份的删除标记不能隐藏当前已经恢复或修改的稿件", async () => {
   await queueItem("article", "旧稿", { text: "旧正文" }, "project", false, "kept");
   await deleteLocalItem(getLocalItems()[0]);
