@@ -57,6 +57,9 @@ export default function RealMobileApp() {
   const [showLogin, setShowLogin] = useState(!connected && !readStored("qx_local_mode"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const loginRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => loginRequest.current?.abort(), []);
   const [title, setTitle] = useState(String(initialEditorDraft.title || ""));
   const [body, setBody] = useState(String(initialEditorDraft.body || ""));
   const [images, setImages] = useState<string[]>(
@@ -256,14 +259,24 @@ export default function RealMobileApp() {
   }, [showImport, showDocumentImport]);
 
   async function connect() {
+    if (loginRequest.current) return;
+    const controller = new AbortController(); loginRequest.current = controller;
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; controller.abort(); }, 15000);
+    setLoginBusy(true);
     setMessage("正在连接服务器…");
     try {
-      await loginSync(username, password);
+      await loginSync(username, password, controller.signal);
+      if (controller.signal.aborted) return;
       setConnected(true);
       setShowLogin(false);
       setPassword("");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "连接失败");
+      if (timedOut && loginRequest.current === controller) setMessage("连接超时，请检查网络后重试，也可以先在本机写作");
+      else if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "连接失败");
+    } finally {
+      clearTimeout(timer);
+      if (loginRequest.current === controller) { loginRequest.current = null; setLoginBusy(false); }
     }
   }
 
@@ -496,8 +509,9 @@ export default function RealMobileApp() {
     <label>账户<input value={username} onChange={(event) => setUsername(event.target.value)} placeholder="账户" autoComplete="username" /></label>
     <label>密码<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="密码" autoComplete="current-password" /></label>
     {message && <small role="status">{message}</small>}
-    <div><button onClick={() => { localStorage.setItem("qx_local_mode", "1"); setShowLogin(false); }}>{connected ? "关闭" : "先在本机使用"}</button>
-      <button className="primary" onClick={() => void connect()}>登录并连接</button></div>
+    <div><button onClick={() => { loginRequest.current?.abort(); loginRequest.current = null; setLoginBusy(false);
+      localStorage.setItem("qx_local_mode", "1"); setShowLogin(false); setMessage(""); }}>{connected ? "关闭" : "先在本机使用"}</button>
+      <button className="primary" disabled={loginBusy} onClick={() => void connect()}>{loginBusy ? "正在连接…" : "登录并连接"}</button></div>
   </div></div>;
   const pageWithNavigation = (page: ReactNode) =>
     <div className="global-page-shell">{page}{fixedNavigation}</div>;

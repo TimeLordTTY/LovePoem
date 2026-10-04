@@ -1,7 +1,7 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { queueItem, getLocalItems, fetchServerItems, syncNow, getSyncConflicts, resolveSyncConflict,
-  deleteLocalItem, restoreLocalTrashItem, queueLocalBatch } from "../work/writing-tests/sync.mjs";
+  deleteLocalItem, restoreLocalTrashItem, queueLocalBatch, loginSync } from "../work/writing-tests/sync.mjs";
 import { createBackup, createSnapshotBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
 
 class MemoryStorage {
@@ -16,6 +16,28 @@ const read = (key) => JSON.parse(localStorage.getItem(key) || "[]");
 const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, projectId: "project", content: { text, chapterId: "chapter-stable", images: ["data:image/png;base64,AA=="] } });
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
+
+test("登录区分服务不可用、错误凭据和网络失败，不误报密码错误", async () => {
+  globalThis.fetch=async()=>({ok:false,status:503});
+  await assert.rejects(loginSync("fixture","fixture"),/云端暂时不可用/);
+  globalThis.fetch=async()=>({ok:false,status:401});
+  await assert.rejects(loginSync("fixture","fixture"),/用户名或密码错误/);
+  globalThis.fetch=async()=>{throw new TypeError("Failed to fetch")};
+  await assert.rejects(loginSync("fixture","fixture"),/网络暂时无法连接/);
+});
+
+test("异常登录响应不能写入伪会话或覆盖原会话，取消后不提交登录", async () => {
+  localStorage.setItem("qx_sync_token","previous-synthetic-session");
+  for(const data of [null,{}, {token:""}]) {
+    globalThis.fetch=async()=>response(data);
+    await assert.rejects(loginSync("fixture","fixture"),/登录服务返回了异常响应/);
+    assert.equal(localStorage.getItem("qx_sync_token"),"previous-synthetic-session");
+  }
+  const controller=new AbortController();
+  globalThis.fetch=async()=>({ok:true,status:200,json:async()=>{controller.abort();return {token:"cancelled-synthetic-session"}}});
+  await assert.rejects(loginSync("fixture","fixture",controller.signal),{name:"AbortError"});
+  assert.equal(localStorage.getItem("qx_sync_token"),"previous-synthetic-session");
+});
 
 test("无效备份和空记录给出可理解错误，解析失败不修改本机内容", async () => {
   await queueItem("article", "当前稿件", {text:"当前正文"}, undefined, false, "current");

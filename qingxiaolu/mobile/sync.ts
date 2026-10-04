@@ -15,15 +15,24 @@ export function hasSyncLogin() {
   return Boolean(readStored(TOKEN_KEY));
 }
 
-export async function loginSync(username: string, password: string) {
-  const response = await fetch(`${API}/v1/auth/login`, {
-    method: "POST",
+export async function loginSync(username: string, password: string, signal?: AbortSignal) {
+  const cancelled = () => { if (signal?.aborted) throw new DOMException("Connection cancelled", "AbortError"); };
+  cancelled();
+  let response: Response;
+  try { response = await fetch(`${API}/v1/auth/login`, {
+    method: "POST", signal,
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ username, password }),
-  });
-  if (!response.ok) throw new Error("用户名或密码错误");
-  const data = await response.json();
-  localStorage.setItem(TOKEN_KEY, data.token);
+  }); } catch { cancelled(); throw new Error("网络暂时无法连接，请检查网络，也可以先在本机写作"); }
+  if (response.status === 401) throw new Error("用户名或密码错误");
+  if (response.status === 429) throw new Error("登录请求过于频繁，请稍后重试");
+  if (response.status >= 500) throw new Error("创作云端暂时不可用，请稍后重试，也可以先在本机写作");
+  if (!response.ok) throw new Error("登录未完成，请稍后重试");
+  let data: any;
+  try { data = await response.json(); }
+  catch { cancelled(); throw new Error("登录服务返回了异常响应，请稍后重试"); }
+  if (!data || typeof data.token !== "string" || !data.token.trim()) throw new Error("登录服务返回了异常响应，请稍后重试");
+  cancelled();
   if (Capacitor.isNativePlatform()) {
     await BackgroundRunner.dispatchEvent({
       label: "com.qingxiaolu.sync",
@@ -31,6 +40,8 @@ export async function loginSync(username: string, password: string) {
       details: { token: data.token, api: API, enabled: false },
     });
   }
+  cancelled();
+  localStorage.setItem(TOKEN_KEY, data.token);
   return true;
 }
 
