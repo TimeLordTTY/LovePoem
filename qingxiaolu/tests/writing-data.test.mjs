@@ -17,6 +17,32 @@ const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, 
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
 
+test("云端稿件从回收站恢复沿用删除时已读取的版本，不冒领后续云端版本", async () => {
+  localStorage.setItem("qx_server_cache", JSON.stringify([cloud("restored-cloud", "删除前原稿", 6)]));
+  await deleteLocalItem(getLocalItems()[0]);
+  localStorage.setItem("qx_server_cache", JSON.stringify([cloud("restored-cloud", "另一设备后续修改", 7)]));
+  await restoreLocalTrashItem("restored-cloud");
+  const restored = getLocalItems().find(item => item.id === "restored-cloud");
+  assert.equal(restored.revision, 6);
+  assert.equal(restored.payload.content.text, "删除前原稿");
+  assert.equal(read("qx_web_outbox").length, 0);
+});
+
+test("项目完整备份包含回收站稿件的历史版本，恢复后仍可找回旧稿", async () => {
+  await queueItem("project", "小说", {}, undefined, false, "project");
+  await queueItem("article", "第一版", { text: "旧正文" }, "project", false, "deleted-chapter");
+  await queueItem("article", "第二版", { text: "新正文" }, "project", false, "deleted-chapter");
+  await deleteLocalItem(getLocalItems().find(item => item.id === "deleted-chapter"));
+  const backup = parseBackup(JSON.stringify(await createBackup("project")));
+  assert.equal(backup.trash[0].id, "deleted-chapter");
+  assert.equal(backup.versions["deleted-chapter"][0].content.text, "旧正文");
+  globalThis.localStorage = new MemoryStorage();
+  restoreBackup(backup);
+  await restoreLocalTrashItem("deleted-chapter");
+  assert.equal(getLocalItems().find(item => item.id === "deleted-chapter").payload.content.text, "新正文");
+  assert.equal(read("qx_item_versions")["deleted-chapter"][0].content.text, "旧正文");
+});
+
 test("云端稿件的展示时间使用实际改稿日期，保留原同步序号用于游标", () => {
   localStorage.setItem("qx_server_cache",JSON.stringify([{...cloud("dated"),changedAt:"2026-10-03T02:00:00.000Z"}]));
   const item=getLocalItems()[0];assert.equal(item.seq,Date.parse("2026-10-03T02:00:00.000Z"));assert.equal(item.cursorSeq,42);

@@ -180,7 +180,7 @@ export function restoreLocalTrashItem(id: string) {
   if (item) {
     const payload = item.payload || item;
     const drafts = JSON.parse(readStored("qx_drafts") || "[]");
-    return { values: { qx_drafts: [{ ...payload, syncState: "local", savedAt: new Date().toISOString() }, ...drafts.filter((entry: any) => entry.id !== id)],
+    return { values: { qx_drafts: [{ ...payload, baseRevision: Number(item.revision ?? payload.baseRevision ?? 0), syncState: "local", savedAt: new Date().toISOString() }, ...drafts.filter((entry: any) => entry.id !== id)],
       qx_local_trash: trash.filter((entry: any) => entry.id !== id), qx_deleted_ids: deleted.filter((entry: string) => entry !== id) }, result: item };
   }
   return { values: {}, result: item };

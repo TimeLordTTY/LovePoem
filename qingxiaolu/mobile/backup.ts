@@ -60,14 +60,15 @@ export async function createBackup(projectId?: string, currentDraft?: any): Prom
     (item.payload || item).projectId === projectId || (item.payload || item).content?.projectId === projectId;
   const savedItems = getLocalItems();
   const items = (currentDraft ? [currentDraft, ...savedItems.filter((item) => item.id !== currentDraft.id)] : savedItems).filter(belongs);
-  const ids = new Set(items.map((item) => item.id));
+  const trash = readJson<any[]>("qx_local_trash", []).filter(belongs);
+  const ids = new Set([...items, ...trash].map((item) => item.id));
   const workspaces = readJson<Record<string, any>>("qx_project_workspaces", {});
   if (currentDraft?.payload?.itemType === "project") workspaces[currentDraft.id] = currentDraft.payload.content;
   const versions = readJson<Record<string, any[]>>("qx_item_versions", {});
   return embed(clean({ format: "qingxiaolu-backup", version: 1, createdAt: new Date().toISOString(), items,
     workspaces: Object.fromEntries(Object.entries(workspaces).filter(([id]) => !projectId || id === projectId)),
     versions: Object.fromEntries(Object.entries(versions).filter(([id]) => !projectId || ids.has(id))),
-    trash: readJson<any[]>("qx_local_trash", []).filter(belongs),
+    trash,
     deletedIds: readJson<string[]>("qx_deleted_ids", []).filter((id) => !projectId || id === projectId ||
       readJson<any[]>("qx_local_trash", []).some((item) => item.id === id && belongs(item))),
     editor: (() => {
