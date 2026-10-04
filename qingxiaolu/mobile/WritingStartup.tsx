@@ -23,7 +23,7 @@ export default function WritingStartup() {
     setBusy(true);
     try {
       const source = fromRecovery ? await legacyWritingSnapshot(true) : null;
-      downloadBackup(source ? await createSnapshotBackup(source) : await createBackup(), fromRecovery ? "旧页面恢复" : "情晓录原资料");
+      await downloadBackup(source ? await createSnapshotBackup(source) : await createBackup(), fromRecovery ? "旧页面恢复" : "情晓录原资料");
     } catch { setError("原资料备份暂时无法生成。请保留当前浏览器的数据，不要清空本机存储。"); }
     finally { setBusy(false); }
   }

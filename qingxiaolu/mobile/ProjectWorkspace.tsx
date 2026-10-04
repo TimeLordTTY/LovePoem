@@ -361,8 +361,9 @@ export default function ProjectWorkspace({
 
   async function exportProjectBackup() {
     setBackupBusy(true);
-    try { downloadBackup(await createBackup(projectId, { id: projectId, revision: projectSessionRevision(projectId, editingSession, baseline.current),
-      payload: { id: projectId, itemType: "project", title, content: data } }), title); }
+    try { const saved = await downloadBackup(await createBackup(projectId, { id: projectId, revision: projectSessionRevision(projectId, editingSession, baseline.current),
+      payload: { id: projectId, itemType: "project", title, content: data } }), title);
+      setMessage(saved ? "完整项目备份已生成" : "已取消备份保存，项目内容仍保留"); }
     catch (error) { setMessage((error as Error).message); }
     finally { setBackupBusy(false); }
   }

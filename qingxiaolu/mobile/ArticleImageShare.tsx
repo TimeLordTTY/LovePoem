@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createArticleImages, createArticleImageArchive, downloadArticleImage } from "./longImage";
+import { nativeFileAvailable, saveNativeFile, shareNativeImages } from "./nativeFile";
 
 export default function ArticleImageShare({ title, text, images, close }: {
   title: string; text: string; images: string[]; close: () => void;
@@ -33,13 +34,14 @@ export default function ArticleImageShare({ title, text, images, close }: {
   }, [close]);
   const files = pages.map(page => page.file);
   let canShare = false;
-  try { canShare = Boolean(files.length && navigator.share && navigator.canShare?.({ files })); } catch { /* 浏览器不支持文件分享时仍可下载。 */ }
+  try { canShare = Boolean(files.length && (nativeFileAvailable() || navigator.share && navigator.canShare?.({ files }))); } catch { /* 浏览器不支持文件分享时仍可下载。 */ }
   async function share() {
     if (sharing.current || !files.length) return;
     sharing.current = true; setBusy(true);
     try {
       // 图片提前生成，系统分享直接由本次点击触发。
-      await navigator.share({ title, files });
+      if (nativeFileAvailable()) await shareNativeImages(files, title);
+      else await navigator.share({ title, files });
       if (mounted.current) setMessage("图片已交给系统分享，请在目标应用中确认发送。");
     } catch (error) {
       if (mounted.current) setMessage(error instanceof Error && error.name === "AbortError"
@@ -51,10 +53,24 @@ export default function ArticleImageShare({ title, text, images, close }: {
     sharing.current = true; setBusy(true);
     try {
       const archive = await createArticleImageArchive(files);
-      if (mounted.current) { downloadArticleImage(archive); setMessage("已开始下载图片压缩包，解压后可按页码发送全部图片。"); }
+      if (nativeFileAvailable()) {
+        const result = await saveNativeFile(archive);
+        if (mounted.current) setMessage(result.saved ? "图片压缩包已保存，解压后可按页码发送。" : "已取消保存，图片仍可预览或分享。");
+      } else if (mounted.current) { downloadArticleImage(archive); setMessage("已开始下载图片压缩包，解压后可按页码发送全部图片。"); }
     } catch {
       if (mounted.current) setMessage("图片打包失败，可以重试或逐张下载。");
     } finally { sharing.current = false; if (mounted.current) setBusy(false); }
+  }
+  async function savePage(file: File, index: number) {
+    if (sharing.current) return;
+    sharing.current = true; setBusy(true);
+    try {
+      if (nativeFileAvailable()) {
+        const result = await saveNativeFile(file);
+        if (mounted.current) setMessage(result.saved ? `第 ${index + 1} 张图片已保存。` : "已取消保存，图片仍可预览或分享。");
+      } else { downloadArticleImage(file); setMessage(`已开始下载第 ${index + 1} 张图片。`); }
+    } catch (error) { if (mounted.current) setMessage(error instanceof Error ? error.message : "图片保存失败，请重试"); }
+    finally { sharing.current = false; if (mounted.current) setBusy(false); }
   }
   return <main className="mobile-screen image-share-page">
     <header><button onClick={close} disabled={busy}>返回记录</button><h1>分享成图片</h1></header>
@@ -69,10 +85,8 @@ export default function ArticleImageShare({ title, text, images, close }: {
       </div>
       {!canShare && <p>当前浏览器不支持直接分享文件，请下载图片后发送。</p>}
       <div className="image-share-preview">{pages.map((page, index) => <figure key={page.url}>
-        <img src={page.url} alt={`分享图片，第 ${index + 1} 张，共 ${pages.length} 张`} />
-        <figcaption>第 {index + 1} / {pages.length} 张 <button disabled={busy} onClick={() => {
-          downloadArticleImage(page.file); setMessage(`已开始下载第 ${index + 1} 张图片。`);
-        }}>下载第 {index + 1} 张</button></figcaption>
+        <img src={page.url} alt={`分享图片，第 ${index + 1} 张，共 ${pages.length} 张`} loading="lazy" decoding="async" />
+        <figcaption>第 {index + 1} / {pages.length} 张 <button disabled={busy} onClick={() => void savePage(page.file, index)}>下载第 {index + 1} 张</button></figcaption>
       </figure>)}</div>
     </>}
   </main>;

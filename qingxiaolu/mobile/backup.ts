@@ -1,4 +1,5 @@
 import { getLocalItems } from "./sync";
+import { nativeFileAvailable, saveNativeFile } from "./nativeFile";
 import { readJson, readStored, changeJson } from "./storage";
 
 export type WritingBackup = {
@@ -146,11 +147,14 @@ export function backupDate(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-export function downloadBackup(data: WritingBackup, name: string) {
+export async function downloadBackup(data: WritingBackup, name: string) {
+  const fileName = `${name}-完整备份-${backupDate()}.json`;
+  if (nativeFileAvailable()) return (await saveNativeFile(new File([JSON.stringify(data)], fileName, { type: "application/json" }))).saved;
   const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${name}-完整备份-${backupDate()}.json`;
+  link.download = fileName;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
 }

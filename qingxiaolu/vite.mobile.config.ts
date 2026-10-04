@@ -9,7 +9,8 @@ const offlineVersion = randomUUID();
 export default defineConfig({
   root: resolve(__dirname, "mobile"),
   base: "./",
-  publicDir: resolve(__dirname, "public"),
+  // APK 只包含程序资源，不把本机私人的历史图片或网页下载工具打包分发。
+  publicDir: process.env.QX_NATIVE_BUILD === "1" ? false : resolve(__dirname, "public"),
   worker: { format: "es" },
   define: { __QX_BUILD_VERSION__: JSON.stringify(offlineVersion) },
   plugins: [

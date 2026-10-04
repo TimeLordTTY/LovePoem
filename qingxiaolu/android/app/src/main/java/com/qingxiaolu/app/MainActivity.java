@@ -14,6 +14,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(android.os.Bundle savedInstanceState) {
         registerPlugin(HistoryImportPlugin.class);
         registerPlugin(AppDraftPlugin.class);
+        registerPlugin(WritingFilesPlugin.class);
         bridgeBuilder.addWebViewListener(new WebViewListener() {
             @Override
             public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {

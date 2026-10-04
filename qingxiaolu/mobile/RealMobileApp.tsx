@@ -352,7 +352,8 @@ export default function RealMobileApp() {
       const draft = title || body || images.length ? { id: editingId || crypto.randomUUID(), revision: editingMetadata._baseRevision || 0, position: editorPosition.current,
         payload: { id: editingId, itemType: creationType, title: title.trim(), projectId: editingMetadata.projectId ?? activeProjectId,
           content: { ...editingMetadata, text: body, images } } } : undefined;
-      downloadBackup(await createBackup(undefined, draft), "情晓录"); setMessage("完整备份已生成，包含稿件、资料、图片和版本记录。");
+      const saved = await downloadBackup(await createBackup(undefined, draft), "情晓录");
+      setMessage(saved ? "完整备份已生成，包含稿件、资料、图片和版本记录。" : "已取消备份文件保存，原稿仍保留在本机。");
     }
     catch (error) { setMessage((error as Error).message); }
     finally { setBackupBusy(false); }

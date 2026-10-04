@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 
 await mkdir("work/writing-tests", { recursive: true });
-for (const name of ["storageDatabase", "storage", "searchExcerpt", "itemSnapshot", "sync-request", "sync-content", "sync", "backup", "website-client", "folderSync", "writingDate", "forwardResult", "projectSession", "importers/types", "importers/documentParsing", "importers/xmindImages", "importers/pdfParsing", "importers/pdfCompatibility", "importers/importCommit"]) {
+for (const name of ["storageDatabase", "storage", "nativeFile", "searchExcerpt", "itemSnapshot", "sync-request", "sync-content", "sync", "backup", "website-client", "folderSync", "writingDate", "forwardResult", "projectSession", "importers/types", "importers/documentParsing", "importers/xmindImages", "importers/pdfParsing", "importers/pdfCompatibility", "importers/importCommit"]) {
   const source = await readFile(`mobile/${name}.ts`, "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText
     .replace(/from "(\.{1,2}\/[^".]+)"/g, 'from "$1.mjs"');
