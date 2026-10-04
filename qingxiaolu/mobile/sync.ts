@@ -183,6 +183,11 @@ export function getLocalTrash() {
   return JSON.parse(readStored("qx_local_trash") || "[]");
 }
 
+async function readSyncJson(response: Response) {
+  try { return await response.json(); }
+  catch { throw new Error("创作云端返回了异常响应，本机数据尚未更新，请稍后重试"); }
+}
+
 export function restoreLocalTrashItem(id: string) {
   return changeJson(() => {
   const trash = getLocalTrash();
@@ -227,10 +232,17 @@ export async function fetchServerItems() {
       throw new Error("登录状态已失效，请重新登录");
     }
     if (!response.ok) throw new Error("读取服务器数据失败");
-    const page = await response.json();
+    const page = await readSyncJson(response);
+    if (!page || !Array.isArray(page.changes) || page.changes.some((change: any) => !change || typeof change.id !== "string" ||
+      (change.operation !== "delete" && (!change.payload || !["project", "article", "idea"].includes(change.payload.itemType) || !change.payload.content))))
+      throw new Error("创作云端返回了异常响应，本机数据尚未更新，请稍后重试");
+    const nextCursor = Number(page.nextCursor ?? cursor);
+    if (!Number.isSafeInteger(nextCursor) || nextCursor < cursor ||
+      (page.hasMore != null && typeof page.hasMore !== "boolean") || (page.hasMore && nextCursor <= cursor))
+      throw new Error("创作云端的翻页信息异常，已停止读取，本机数据保持不变，请稍后重试");
     watermark = Number(page.watermark || watermark);
     for (const change of page.changes) latest.set(change.id, change);
-    cursor = page.nextCursor;
+    cursor = nextCursor;
     hasMore = page.hasMore;
   }
   const result = [...latest.values()]
@@ -385,7 +397,16 @@ async function pushPending(force: boolean, memo: ContentMemo) {
     });
     if (response.status === 401) { localStorage.removeItem(TOKEN_KEY); throw new Error("登录状态已失效，请重新登录"); }
     if (!response.ok) throw new Error("同步失败");
-    const result = await response.json();
+    const result = await readSyncJson(response);
+    const sentIds = new Set(changes.map(item => item.id));
+    const applied = result?.applied ?? [], conflicts = result?.conflicts ?? [];
+    const known = (item: any) => item && typeof item.id === "string" && sentIds.has(item.id);
+    if (!result || !Array.isArray(applied) || !Array.isArray(conflicts) ||
+      applied.some((item: any) => !known(item) || !Number.isSafeInteger(item.revision) || item.revision <= 0) ||
+      conflicts.some((item: any) => !known(item) || !item.server || !Number.isSafeInteger(Number(item.server.revision)) || Number(item.server.revision) <= 0 ||
+        (typeof item.server.content_json !== "string" && (!item.server.content_json || typeof item.server.content_json !== "object"))) ||
+      new Set([...applied, ...conflicts].map((item: any) => item.id)).size !== applied.length + conflicts.length)
+      throw new Error("创作云端返回了异常保存确认，待同步内容仍保留在本机，请稍后重试");
     const appliedIds = new Set<string>((result.applied || []).map((item: any) => String(item.id)));
     const conflictIds = new Set<string>((result.conflicts || []).map((item: any) => String(item.id)));
     const remaining = await changeJson(() => {

@@ -17,6 +17,27 @@ const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, 
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
 
+test("异常同步 JSON 明确提示且原有云端副本保持", async () => {
+  localStorage.setItem("qx_sync_token","synthetic");localStorage.setItem("qx_server_cache",JSON.stringify([cloud("a")]));
+  const before=new Map(localStorage.data);
+  globalThis.fetch=async()=>({ok:true,status:200,json:async()=>{throw new SyntaxError("Unexpected token");}});
+  await assert.rejects(fetchServerItems(),/云端返回了异常响应/);
+  assert.deepEqual(localStorage.data,before);
+});
+
+test("云端分页游标不前进时停止读取，不重复请求或替换已有数据", async () => {
+  localStorage.setItem("qx_sync_token","synthetic");localStorage.setItem("qx_server_cache",JSON.stringify([cloud("a")]));
+  const before=new Map(localStorage.data);let calls=0;
+  globalThis.fetch=async()=>{if(++calls>1)throw Error("test loop stop");return response({changes:[],nextCursor:0,hasMore:true,watermark:1});};
+  await assert.rejects(fetchServerItems(),/翻页信息异常/);assert.equal(calls,1);assert.deepEqual(localStorage.data,before);
+});
+
+test("保存确认缺少版本号时不移除队列或标记云端成功", async () => {
+  localStorage.setItem("qx_sync_token","synthetic");await queueItem("article","原稿",{text:"必须保留"},undefined,true,"a");
+  const before=new Map(localStorage.data);globalThis.fetch=async()=>response({applied:[{id:"a"}],conflicts:[]});
+  await assert.rejects(syncNow(),/异常保存确认/);assert.deepEqual(localStorage.data,before);
+});
+
 test("登录区分服务不可用、错误凭据和网络失败，不误报密码错误", async () => {
   globalThis.fetch=async()=>({ok:false,status:503});
   await assert.rejects(loginSync("fixture","fixture"),/云端暂时不可用/);
