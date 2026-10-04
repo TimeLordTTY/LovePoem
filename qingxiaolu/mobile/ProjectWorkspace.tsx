@@ -939,6 +939,7 @@ export default function ProjectWorkspace({
           </article>) : <div className="discussion-empty">
             <b>尚未导入 ChatGPT 讨论</b>
             <p>ChatGPT 里的原有讨论不会自动出现在这里。请在具体对话页面使用扩展并点击“确认同步”。</p>
+            <a href="https://poem.timelordtty.cn/qingxiaolu/tools/discussion-sync/guide.html" target="_blank" rel="noreferrer">查看同步助手安装与使用方法</a>
           </div>}
       </div>}
       {section === "导出" && <div className="project-ai-panel">

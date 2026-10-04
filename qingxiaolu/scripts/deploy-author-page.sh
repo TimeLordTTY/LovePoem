@@ -24,9 +24,31 @@ if [[ -f "$dest/offline-sw.js" ]]; then cp -a "$dest/offline-sw.js" "$backup/"; 
 rollback() {
   cp -a "$backup/index.html" "$dest/index.html"
   if [[ -f "$backup/offline-sw.js" ]]; then cp -a "$backup/offline-sw.js" "$dest/offline-sw.js"; else rm -f "$dest/offline-sw.js"; fi
+  if [[ "${tool_updated:-0}" = 1 ]]; then
+    for file in guide.html chatgpt-qingxiaolu-sync.zip; do
+      if [[ -f "$backup/tools/discussion-sync/$file.absent" ]]; then rm -f "$dest/tools/discussion-sync/$file";
+      else cp -a "$backup/tools/discussion-sync/$file" "$dest/tools/discussion-sync/$file"; fi
+    done
+  fi
   echo "Author page restored from backup" >&2
 }
 trap rollback ERR
+if [[ -d "$stage/tools/discussion-sync" ]]; then
+  mkdir -p "$dest/tools/discussion-sync"
+  test "$(readlink -f "$dest/tools/discussion-sync")" = "$dest/tools/discussion-sync"
+  mkdir -p "$backup/tools/discussion-sync"
+  for file in guide.html chatgpt-qingxiaolu-sync.zip; do
+    test -f "$stage/tools/discussion-sync/$file"
+    if [[ -f "$dest/tools/discussion-sync/$file" ]]; then cp -a "$dest/tools/discussion-sync/$file" "$backup/tools/discussion-sync/";
+    else touch "$backup/tools/discussion-sync/$file.absent"; fi
+  done
+  tool_updated=1
+  for file in guide.html chatgpt-qingxiaolu-sync.zip; do
+    cp "$stage/tools/discussion-sync/$file" "$dest/tools/discussion-sync/.tool-$release-$file"
+    chmod 644 "$dest/tools/discussion-sync/.tool-$release-$file"
+    mv "$dest/tools/discussion-sync/.tool-$release-$file" "$dest/tools/discussion-sync/$file"
+  done
+fi
 # 保留旧资源，避免已打开页面在更新时失去引用的文件。
 cp -a "$stage/assets/." "$dest/assets/"
 mkdir -p "$dest/runners"

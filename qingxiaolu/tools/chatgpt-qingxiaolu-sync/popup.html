@@ -10,7 +10,7 @@
   <main>
     <header><span>晓</span><div><b>同步到情晓录</b><small>当前 ChatGPT 讨论</small></div></header>
     <section id="login">
-      <label>Poem 账户<input id="username" value="littlehou" autocomplete="username"></label>
+      <label>情晓录账户<input id="username" autocomplete="username"></label>
       <label>密码<input id="password" type="password" autocomplete="current-password"></label>
       <button id="loginButton">登录</button>
     </section>
@@ -23,11 +23,13 @@
       <label>记录标题<input id="title" placeholder="自动读取当前讨论标题"></label>
       <label class="check"><input id="includeUser" type="checkbox" checked>包含我的提问</label>
       <p id="preview">点击预览，读取当前页面已经加载的讨论。</p>
+      <section id="pending" hidden><b id="pendingInfo"></b><textarea id="pendingText" readonly aria-label="本机未完成的讨论正文"></textarea><button id="cancelButton">取消未完成同步</button></section>
       <div class="actions"><button id="previewButton">预览</button><button id="syncButton" class="primary">确认同步</button></div>
+      <button id="refreshButton" class="link">刷新项目</button>
       <button id="logoutButton" class="link">更换账户</button>
     </section>
     <output id="message"></output>
   </main>
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

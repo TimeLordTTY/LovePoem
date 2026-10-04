@@ -1,0 +1,7 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>电脑讨论同步助手 · 情晓录</title>
+<style>body{margin:0;background:#faf8f4;color:#342d3b;font:16px/1.8 system-ui,sans-serif}main{max-width:680px;margin:32px auto;padding:24px}h1{font-size:28px}a{color:#704db0}li{margin:12px 0}.download{display:inline-block;background:#704db0;color:white;padding:10px 18px;border-radius:10px;text-decoration:none}code{background:#eee7f5;padding:3px 5px}section{margin-top:24px;padding:20px;border:1px solid #ded5ea;border-radius:12px;background:white}</style>
+<main><a href="../../">返回情晓录</a><h1>电脑讨论同步助手</h1><p>把当前已加载的 ChatGPT 文字讨论保存到情晓录项目。每次先预览，再由你确认保存位置和是否包含自己的提问。</p>
+<a class="download" href="chatgpt-qingxiaolu-sync.zip" download>下载扩展 0.2.0</a>
+<section><h2>安装</h2><ol><li>在电脑下载并解压扩展包。</li><li>Chrome 打开 <code>chrome://extensions</code>；Edge 打开 <code>edge://extensions</code>。</li><li>开启开发者模式，选择“加载已解压的扩展程序”，选中解压后含 manifest.json 的文件夹。</li><li>把“情晓录 · ChatGPT 讨论同步”固定到工具栏。更新时替换解压文件，并在扩展管理页点击重新加载。</li></ol></section>
+<section><h2>使用</h2><ol><li>在浏览器打开需要整理的 ChatGPT 讨论。</li><li>点击工具栏中的同步助手，使用情晓录对应账户登录。</li><li>先点“预览”，选择项目、保存位置和标题，再检查“包含我的提问”。</li><li>点“确认同步”。若讨论已保存但资料冲突，先刷新项目，再确认重试。</li><li>回到情晓录点“同步”，在项目的 AI 讨论或资料中查看。</li></ol></section>
+<section><h2>未完成时</h2><p>未确认的文字暂存在本机扩展，重新打开可继续。已保存讨论不会在重试时重复创建。取消本机未完成操作不会撤回已经保存的云端内容；退出登录也不删除原登录状态的待处理内容。</p><p>扩展只在点击时读取当前已加载的文字。图片、附件、未加载消息、分支和项目记忆不在采集范围内。它不会代你向 ChatGPT 发送消息，也不是 OpenAI 官方双向同步接口。手机请在电脑浏览器使用这个助手。</p></section></main></html>

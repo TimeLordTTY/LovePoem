@@ -42,6 +42,7 @@ next-env.d.ts
 /work/
 /.local-tools/
 /mobile-dist/
+/discussion-extension-dist/
 /android/.gradle/
 /android/app/build/
 /integration/runtime/

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "情晓录 · ChatGPT 讨论同步",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "由用户确认后，将当前 ChatGPT 讨论同步到情晓录项目。",
   "permissions": ["activeTab", "scripting", "storage"],
   "host_permissions": [

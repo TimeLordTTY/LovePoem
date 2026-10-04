@@ -763,6 +763,9 @@ export default function RealMobileApp() {
           <button className="tool-entry" onClick={() => setShowImport(true)}>
             <span><b>历史导入</b><small>微博、QQ 空间、朋友圈、一言</small></span><i>›</i>
           </button>
+          <a className="tool-entry" href="https://poem.timelordtty.cn/qingxiaolu/tools/discussion-sync/guide.html" target="_blank" rel="noreferrer">
+            <span><b>电脑讨论同步助手</b><small>浏览器扩展：预览并确认后保存到所选项目</small></span><i>›</i>
+          </a>
           <div className="setting-row"><span>同步服务器</span><b>poem.timelordtty.cn</b></div>
           <button className="tool-entry" onClick={() => setShowWebsiteSettings(true)}>
             <span><b>上传网站</b><small>沿用当前账户，上传所选稿件为网站草稿</small></span><i>›</i>

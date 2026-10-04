@@ -6,3 +6,7 @@ button{color:#67469a;cursor:pointer}.primary,#loginButton{color:#fff;border-colo
 .check{display:flex;align-items:center;gap:8px}.check input{width:18px;min-height:18px}.link{min-height:auto;border:0;background:transparent}
 #preview{max-height:105px;overflow:auto;margin:0;padding:11px;border-radius:9px;color:#665e69;background:#f0eaf5;font-size:12px;line-height:1.55}
 output{display:block;min-height:18px;margin-top:12px;color:#7652a8;font-size:12px}
+textarea { width: 100%; min-height: 100px; box-sizing: border-box; resize: vertical; padding: 8px; font: inherit; }
+[hidden] { display: none !important; }
+button:disabled { opacity: .6; cursor: wait; }
+#pending { padding: 10px; border: 1px solid #ded5ea; border-radius: 8px; }
