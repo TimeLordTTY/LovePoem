@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { queueItem, getLocalItems, fetchServerItems, syncNow, getSyncConflicts, resolveSyncConflict,
   deleteLocalItem, restoreLocalTrashItem, queueLocalBatch, loginSync } from "../work/writing-tests/sync.mjs";
 import { createBackup, createSnapshotBackup, parseBackup, restoreBackup, backupDate } from "../work/writing-tests/backup.mjs";
+import { withSyncTimeout } from "../work/writing-tests/sync-request.mjs";
+import { createServer } from "node:http";
+const nativeFetch = globalThis.fetch;
 
 class MemoryStorage {
   data = new Map();
@@ -16,6 +19,23 @@ const read = (key) => JSON.parse(localStorage.getItem(key) || "[]");
 const payload = (id, text = "正文") => ({ id, itemType: "article", title: id, projectId: "project", content: { text, chapterId: "chapter-stable", images: ["data:image/png;base64,AA=="] } });
 const cloud = (id, text = "云端正文", revision = 2) => ({ id, revision, seq: 42, operation: "upsert", payload: { ...payload(id, text), revision } });
 const response = (data) => ({ ok: true, status: 200, json: async () => data });
+
+test("请求超时会结束等待并取消连接，忽略超时后才完成的结果", async () => {
+  let complete, signal;
+  const pending=withSyncTimeout(value=>{signal=value;return new Promise(resolve=>complete=resolve);},20);
+  await assert.rejects(pending,/同步等待超时/);assert.equal(signal.aborted,true);
+  complete("late result");
+  assert.equal(await withSyncTimeout(async()=>"retry succeeds",100),"retry succeeds");
+});
+
+test("响应头已收到但正文停住时也会超时，不只限制建立连接", async t => {
+  const server=createServer((req,res)=>{res.writeHead(200,{"content-type":"application/json"});res.write('{"changes":');});
+  await new Promise(resolve=>server.listen(0,"127.0.0.1",resolve));
+  t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+  let headersReceived=false;
+  await assert.rejects(withSyncTimeout(async signal=>{const res=await nativeFetch(`http://127.0.0.1:${server.address().port}/`,{signal});headersReceived=true;return res.json();},250),/同步等待超时/);
+  assert.equal(headersReceived,true);
+});
 
 test("异常同步 JSON 明确提示且原有云端副本保持", async () => {
   localStorage.setItem("qx_sync_token","synthetic");localStorage.setItem("qx_server_cache",JSON.stringify([cloud("a")]));

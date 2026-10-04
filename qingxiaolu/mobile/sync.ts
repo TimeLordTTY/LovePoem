@@ -3,6 +3,7 @@ import { BackgroundRunner } from "@capacitor/background-runner";
 import { readStored, changeJson } from "./storage";
 import { confirmProjectSessions, projectSessionRevision, projectPayloadFingerprint, projectSessionEntries, PROJECT_SESSION_FIELD, projectDataWithoutSession, projectSnapshotSignature } from "./projectSession";
 import { prepareSyncBatch, type ContentMemo } from "./sync-content";
+import { withSyncTimeout } from "./sync-request";
 
 const API = "https://poem.timelordtty.cn/qingxiaolu-api";
 const TOKEN_KEY = "qx_sync_token";
@@ -224,15 +225,17 @@ export async function fetchServerItems() {
   let hasMore = true;
   let watermark = 0;
   while (hasMore) {
-    const response = await fetch(`${API}/v1/sync/pull?cursor=${cursor}&limit=500&snapshot=1${watermark ? `&watermark=${watermark}` : ""}`, {
-      headers: { authorization: `Bearer ${token}` },
+    const page = await withSyncTimeout(async signal => {
+      const response = await fetch(`${API}/v1/sync/pull?cursor=${cursor}&limit=500&snapshot=1${watermark ? `&watermark=${watermark}` : ""}`, {
+        signal, headers: { authorization: `Bearer ${token}` },
+      });
+      if (response.status === 401) throw new Error("登录状态已失效，请重新登录");
+      if (!response.ok) throw new Error("读取服务器数据失败");
+      return readSyncJson(response);
+    }).catch(error => {
+      if (error.message.includes("登录状态已失效") && readStored(TOKEN_KEY) === token) localStorage.removeItem(TOKEN_KEY);
+      throw error;
     });
-    if (response.status === 401) {
-      localStorage.removeItem(TOKEN_KEY);
-      throw new Error("登录状态已失效，请重新登录");
-    }
-    if (!response.ok) throw new Error("读取服务器数据失败");
-    const page = await readSyncJson(response);
     if (!page || !Array.isArray(page.changes) || page.changes.some((change: any) => !change || typeof change.id !== "string" ||
       (change.operation !== "delete" && (!change.payload || !["project", "article", "idea"].includes(change.payload.itemType) || !change.payload.content))))
       throw new Error("创作云端返回了异常响应，本机数据尚未更新，请稍后重试");
@@ -384,20 +387,24 @@ async function pushPending(force: boolean, memo: ContentMemo) {
     }));
     let batch;
     try { batch = await prepareSyncBatch(pending, API, token, memo); }
-    catch (error) { if ((error as Error).message.includes("登录状态已失效")) localStorage.removeItem(TOKEN_KEY); throw error; }
+    catch (error) { if ((error as Error).message.includes("登录状态已失效") && readStored(TOKEN_KEY) === token) localStorage.removeItem(TOKEN_KEY); throw error; }
     const changes = batch.changes;
     if (!changes.length) return;
     const projectChanges = changes.filter(item => item.itemType === "project");
     const projectFingerprints = new Map<string, string>(projectChanges.length ? await Promise.all(projectChanges
       .map(async item => [item.id, await projectPayloadFingerprint(item.title || "", item.content)] as [string, string])) : []);
-    const response = await fetch(`${API}/v1/sync/push`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: batch.body,
+    const result = await withSyncTimeout(async signal => {
+      const response = await fetch(`${API}/v1/sync/push`, {
+        signal, method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: batch.body,
+      });
+      if (response.status === 401) throw new Error("登录状态已失效，请重新登录");
+      if (!response.ok) throw new Error("同步失败");
+      return readSyncJson(response);
+    }).catch(error => {
+      if (error.message.includes("登录状态已失效") && readStored(TOKEN_KEY) === token) localStorage.removeItem(TOKEN_KEY);
+      throw error;
     });
-    if (response.status === 401) { localStorage.removeItem(TOKEN_KEY); throw new Error("登录状态已失效，请重新登录"); }
-    if (!response.ok) throw new Error("同步失败");
-    const result = await readSyncJson(response);
     const sentIds = new Set(changes.map(item => item.id));
     const applied = result?.applied ?? [], conflicts = result?.conflicts ?? [];
     const known = (item: any) => item && typeof item.id === "string" && sentIds.has(item.id);

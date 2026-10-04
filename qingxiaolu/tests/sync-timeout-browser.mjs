@@ -1,0 +1,32 @@
+// 真实等待每个请求的 30 秒期限；API 全部为合成夹具，原稿和队列必须保持。
+import {chromium} from 'playwright-core';import {strict as assert} from 'node:assert';
+const url=process.argv[2]||'http://127.0.0.1:3004/qingxiaolu/';const browser=await chromium.launch({channel:'msedge',headless:true});
+const read=async(page,key)=>page.evaluate(key=>new Promise(resolve=>{const r=indexedDB.open('qingxiaolu-writing',1);r.onsuccess=()=>{const d=r.result,q=d.transaction('values').objectStore('values').get(key);q.onsuccess=()=>{d.close();resolve(JSON.parse(q.result||'null'));};};}),key);
+try {
+ const context=await browser.newContext(),page=await context.newPage();let mode='valid',release,handled,markStarted,stored,pushCalls=0;
+ const cloud={id:'timeout-cloud',revision:1,seq:1,operation:'upsert',payload:{id:'timeout-cloud',itemType:'article',title:'已有云端副本',content:{text:'不可被超时读取清空'}}};
+ const cors={'access-control-allow-origin':'*','access-control-allow-headers':'authorization,content-type','access-control-allow-methods':'GET,POST,PUT,OPTIONS'};
+ await context.addInitScript(()=>localStorage.setItem('qx_sync_token','synthetic-session-only'));
+ await context.route('**/qingxiaolu-api/**',async route=>{
+  if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:cors});
+  const path=new URL(route.request().url()).pathname,json=data=>route.fulfill({headers:cors,json:data});
+  const hold=async data=>{let done;handled=new Promise(resolve=>done=resolve);await new Promise(resolve=>{release=resolve;markStarted();});try{await json(data);}catch{/* 取消后的请求不输出包含请求头的诊断。 */}finally{done();}};
+  if(path.endsWith('/pull')){const data={changes:[cloud,...(stored?[stored]:[])],nextCursor:stored?2:1,watermark:stored?2:1,hasMore:false};return mode==='pull-hold'?hold(data):json(data);}
+  if(path.endsWith('/push')){pushCalls++;const change=route.request().postDataJSON().changes[0];stored={id:change.id,revision:1,seq:2,operation:'upsert',payload:{...change}};const data={applied:[{id:change.id,revision:1,unchanged:true}],conflicts:[]};return mode==='push-hold'?hold(data):json(data);}
+  if(path.includes('/content/'))return mode==='content-hold'?hold({present:false}):json({present:false});
+  return route.abort();
+ });
+ await page.goto(url);await page.getByText('已读取情晓录云端数据',{exact:true}).waitFor();const cache=await read(page,'qx_server_cache');
+ let requestStarted=new Promise(resolve=>markStarted=resolve);mode='pull-hold';await page.getByRole('button',{name:'同步',exact:true}).click();await requestStarted;
+ if(process.argv.includes('--observe')){await new Promise(resolve=>setTimeout(resolve,31000));const stillWaiting=await page.getByRole('button',{name:'同步中…',exact:true}).count();release();await handled;console.log(JSON.stringify({stillWaitingAfter31Seconds:Boolean(stillWaiting),simulatedRequest:true}));}
+ else {
+  const timeoutMessage=()=>page.getByText(/同步等待超时/).first().waitFor({timeout:35000});
+  let started=Date.now();await timeoutMessage();assert.ok(Date.now()-started>=28000);assert.deepEqual(await read(page,'qx_server_cache'),cache);release();await handled;await page.getByRole('button',{name:'同步',exact:true}).waitFor();
+  await page.getByRole('button',{name:'创作',exact:true}).click();await page.getByPlaceholder('稿件标题（可选）').fill('超时仍保留的原稿');await page.getByPlaceholder('这一刻，想写点什么……').fill('服务器可能已收到，原稿必须保留📝');await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByText('已保存到本机，可以继续写作',{exact:true}).waitFor();const original=(await read(page,'qx_drafts')).find(v=>v.title==='超时仍保留的原稿');
+  await page.getByRole('button',{name:'稿件库',exact:true}).click();let card=page.locator('article[data-blog-month]').filter({has:page.getByRole('heading',{name:original.title,exact:true})});await card.waitFor();await page.getByRole('button',{name:'批量同步',exact:true}).click();await card.getByRole('checkbox').check();mode='push-hold';requestStarted=new Promise(resolve=>markStarted=resolve);await page.getByRole('button',{name:'同步已选',exact:true}).click();await requestStarted;started=Date.now();await timeoutMessage();assert.ok(Date.now()-started>=28000);release();await handled;assert.equal((await read(page,'qx_web_outbox')).find(v=>v.id===original.id).content.text,original.content.text);assert.equal((await read(page,'qx_drafts')).find(v=>v.id===original.id).syncState,'pending');assert.deepEqual(await read(page,'qx_server_cache'),cache);
+  mode='valid';await page.getByRole('button',{name:'同步已选',exact:true}).click();await page.getByText('已同步所选 1 篇稿件',{exact:true}).waitFor();assert.equal((await read(page,'qx_web_outbox')).length,0);await card.getByRole('button',{name:'继续编辑',exact:true}).click();assert.equal(await page.getByPlaceholder('这一刻，想写点什么……').inputValue(),original.content.text);
+  await page.getByRole('button',{name:'新稿件',exact:true}).click();const longText='长文原稿📝'.repeat(10000);await page.getByPlaceholder('稿件标题（可选）').fill('内容块等待验收');await page.getByPlaceholder('这一刻，想写点什么……').fill(longText);await page.getByRole('button',{name:'保存',exact:true}).click();await page.getByText('已保存到本机，可以继续写作',{exact:true}).waitFor();const long=(await read(page,'qx_drafts')).find(v=>v.title==='内容块等待验收');await page.getByRole('button',{name:'稿件库',exact:true}).click();card=page.locator('article[data-blog-month]').filter({has:page.getByRole('heading',{name:long.title,exact:true})});await card.waitFor();await page.getByRole('button',{name:'批量同步',exact:true}).click();await card.getByRole('checkbox').check();mode='content-hold';requestStarted=new Promise(resolve=>markStarted=resolve);const pushesBefore=pushCalls;await page.getByRole('button',{name:'同步已选',exact:true}).click();await requestStarted;started=Date.now();await timeoutMessage();assert.ok(Date.now()-started>=28000);release();await handled;assert.equal(pushCalls,pushesBefore);assert.equal((await read(page,'qx_web_outbox')).find(v=>v.id===long.id).content.text,longText);assert.equal((await read(page,'qx_drafts')).find(v=>v.id===long.id).content.text,longText);
+  console.log(JSON.stringify({pullTimeoutKeepsCache:true,pushTimeoutKeepsQueue:true,lateAckIgnored:true,manualRetryAfterPossibleServerCommit:true,bodyExact:true,contentTransferTimeoutKeepsLongText:true,noPrematureMetadataPush:true,threeRealThirtySecondWaits:true,simulatedServiceOnly:true}));
+ }
+ await context.unrouteAll({behavior:'wait'});
+}finally{await browser.close();}

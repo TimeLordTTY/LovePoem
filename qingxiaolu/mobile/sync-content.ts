@@ -1,3 +1,5 @@
+import { withSyncTimeout } from "./sync-request";
+
 export const CONTENT_FORMAT = "qingxiaolu-content-v2";
 const CHUNK_BYTES = 256 * 1024;
 const LARGE_STRING_BYTES = 64 * 1024;
@@ -12,7 +14,12 @@ async function apiResponse(response: Response) {
     try { const value = await response.json(); if (typeof value?.error === "string") message = value.error; } catch { /* 不解析异常的 HTML 响应 */ }
     throw new Error(message);
   }
-  return response.json();
+  try { return await response.json(); }
+  catch { throw new Error("内容上传服务返回了异常响应，待同步内容仍保留在本机，请稍后重试"); }
+}
+
+async function contentRequest(address: string, options: RequestInit = {}) {
+  return withSyncTimeout(async signal => apiResponse(await fetch(address, { ...options, signal })));
 }
 
 async function upload(bytes: Uint8Array<ArrayBuffer>, kind: "image" | "string", prefix: string, api: string, token: string): Promise<Tree> {
@@ -21,16 +28,16 @@ async function upload(bytes: Uint8Array<ArrayBuffer>, kind: "image" | "string", 
   const hash = Array.from(new Uint8Array(digest)).map(value => value.toString(16).padStart(2, "0")).join("");
   const address = `${api}/v1/sync/content/${hash}?kind=${kind}`;
   const headers = { authorization: `Bearer ${token}` };
-  const status = await apiResponse(await fetch(address, { headers }));
+  const status = await contentRequest(address, { headers });
   if (!status.present) {
     const total = Math.ceil(bytes.length / CHUNK_BYTES);
     for (let index = 0; index < total; index++) {
-      await apiResponse(await fetch(`${api}/v1/sync/content/${hash}/chunks/${index}?kind=${kind}&bytes=${bytes.length}&total=${total}`, {
+      await contentRequest(`${api}/v1/sync/content/${hash}/chunks/${index}?kind=${kind}&bytes=${bytes.length}&total=${total}`, {
         method: "PUT", headers: { ...headers, "content-type": "application/octet-stream" },
         body: new Blob([bytes.subarray(index * CHUNK_BYTES, (index + 1) * CHUNK_BYTES)]),
-      }));
+      });
     }
-    await apiResponse(await fetch(`${api}/v1/sync/content/${hash}/complete?kind=${kind}&bytes=${bytes.length}`, { method: "POST", headers }));
+    await contentRequest(`${api}/v1/sync/content/${hash}/complete?kind=${kind}&bytes=${bytes.length}`, { method: "POST", headers });
   } else if (status.bytes !== bytes.length) throw new Error("已上传内容的大小不一致，原稿仍保留在本机。");
   return ["b", hash, kind, prefix, bytes.length];
 }
