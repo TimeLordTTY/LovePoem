@@ -12,8 +12,10 @@ for (const name of Object.keys(release.files)) assert.ok(!/assets\/public\/(impo
 for (const name of resources) assert.ok((await release.file(name).async('nodebuffer')).equals(await acceptance.file(name).async('nodebuffer')), '验收与正式包程序资源必须相同');
 const aapt = path.join(process.env.LOCALAPPDATA, 'Android/Sdk/build-tools/34.0.0/aapt2.exe');
 const metadata = execFileSync(aapt, ['dump', 'badging', apk], { encoding: 'utf8', windowsHide: true });
-assert.ok(metadata.includes("name='com.qingxiaolu.app' versionCode='8' versionName='1.7'"));
+const gradle = await readFile('android/app/build.gradle', 'utf8');
+const version = gradle.match(/versionName "([^"]+)"/)[1], versionCode = Number(gradle.match(/versionCode (\d+)/)[1]);
+assert.ok(metadata.includes(`name='com.qingxiaolu.app' versionCode='${versionCode}' versionName='${version}'`));
 assert.ok(!metadata.includes('application-debuggable'), '正式包不能开启调试');
-console.log(JSON.stringify({ version: '1.7', versionCode: 8, packageIdPreserved: true, releaseNotDebuggable: true,
+console.log(JSON.stringify({ version, versionCode, packageIdPreserved: true, releaseNotDebuggable: true,
   testedAndReleaseResourcesExact: true, privateMaterialAndSecretsExcluded: true, bytes: releaseBytes.length,
   sha256: createHash('sha256').update(releaseBytes).digest('hex') }));

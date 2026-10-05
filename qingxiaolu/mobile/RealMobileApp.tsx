@@ -20,6 +20,7 @@ import { openTargetDraft, copyNativeDraftText } from "./nativeDraft";
 import { forwardResultMessage } from "./forwardResult";
 import ArticleImageShare from "./ArticleImageShare";
 import DesktopWriting from "./DesktopWriting";
+import { exportTextFile } from "./fileExport";
 import { writingDateInfo } from "./writingDate";
 import { searchExcerpt } from "./searchExcerpt";
 
@@ -667,6 +668,7 @@ export default function RealMobileApp() {
                   if (!window.confirm(`从当前设备删除项目《${itemTitle(item)}》吗？`)) return;
                   try { await deleteLocalItem(item);
                   setItems((current) => current.filter((entry) => entry.id !== item.id));
+                  setMessage("项目已移到本机回收站，关联记录和云端内容保持不变");
                   } catch (error) { setMessage((error as Error).message); }
                 }}>本地删除</button></div></article>)}
           </div>
@@ -961,6 +963,7 @@ function ArticleEditor({
   const [showReference, setShowReference] = useState(false);
   const [selectedWriting, setSelectedWriting] = useState("");
   const [selectionMessage, setSelectionMessage] = useState("");
+  const [selectionExportBusy, setSelectionExportBusy] = useState(false);
   const [findText, setFindText] = useState("");
   const [imageMessage, setImageMessage] = useState("");
   const [readingImages, setReadingImages] = useState(false);
@@ -1079,10 +1082,13 @@ function ArticleEditor({
       {message && <div className="real-message" role="status">{message}</div>}
       {!!selectedWriting && <div className="writing-selection-tools"><span>已选 {selectedWriting.length} 字</span>
         <button onClick={() => void copySelection()}>复制选段</button>
-        <button onClick={() => {
-          const url = URL.createObjectURL(new Blob([selectedWriting], { type: "text/plain;charset=utf-8" }));
-          const link = document.createElement("a"); link.href = url; link.download = "情晓录-选段.txt"; link.click();
-          setTimeout(() => URL.revokeObjectURL(url), 1500);
+        <button disabled={selectionExportBusy} onClick={async () => {
+          if (selectionExportBusy) return;
+          setSelectionExportBusy(true);
+          try { const saved = await exportTextFile("情晓录-选段.txt", selectedWriting, "text/plain;charset=utf-8");
+            setSelectionMessage(saved ? "选段已导出" : "已取消选段保存，正文保持不变"); }
+          catch (error) { setSelectionMessage(error instanceof Error ? error.message : "选段导出失败，请重试"); }
+          finally { setSelectionExportBusy(false); }
         }}>导出选段</button><button onClick={() => void copySelection(true)}>复制并打开 ChatGPT</button></div>}
       {selectionMessage && <p role="status">{selectionMessage}</p>}
       <div className="writing-tools">

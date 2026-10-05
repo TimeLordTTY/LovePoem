@@ -242,6 +242,8 @@ textarea {
 .project-import-entry small { color: #7c7580; }
 .project-import-entry i { font-size: 23px; color: #7253a4; }
 .project-card { cursor: pointer; }
+/* 原型页的装饰层会遮住窄屏/大字号下的删除按钮，不能继承到实际项目卡片。 */
+.real-list .project-card::after { content: none; pointer-events: none; }
 .project-card h2 {
   display: block; min-height: 24px; color: #29242f; opacity: 1;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -841,6 +843,7 @@ textarea {
 }
 .story-timeline-list { position: relative; }
 .story-timeline-list::before {
+  pointer-events: none;
   content: ""; position: absolute; top: 20px; bottom: 20px; left: 19px; width: 2px; background: #ddd1e8;
 }
 .story-timeline-list article { position: relative; display: grid; grid-template-columns: 40px 1fr; gap: 18px; padding-bottom: 22px; }

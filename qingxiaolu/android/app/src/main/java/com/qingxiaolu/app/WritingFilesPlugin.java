@@ -37,8 +37,18 @@ public class WritingFilesPlugin extends Plugin {
         try {
             String name = call.getString("name", "情晓录导出");
             String mime = call.getString("mime", "");
-            if (!mime.equals("image/png") && !mime.equals("application/zip") && !mime.equals("application/json"))
-                throw new IllegalArgumentException("不支持此导出文件类型");
+            String extension;
+            switch (mime) {
+                case "image/png": extension = ".png"; break;
+                case "application/zip": extension = ".zip"; break;
+                case "application/json": extension = ".json"; break;
+                case "text/plain": extension = ".txt"; break;
+                case "text/markdown": extension = ".md"; break;
+                case "application/msword": extension = ".doc"; break;
+                case "text/x-opml": extension = ".opml"; break;
+                case "text/xml": extension = ".xml"; break;
+                default: throw new IllegalArgumentException("不支持此导出文件类型");
+            }
             String encoded = call.getString("base64", "");
             if (encoded.length() > 128 * 1024 * 1024) throw new IllegalArgumentException("导出文件过大，请分项目备份或分批分享");
             byte[] bytes = Base64.decode(encoded, Base64.DEFAULT);
@@ -50,7 +60,6 @@ public class WritingFilesPlugin extends Plugin {
             // 只清理本插件一天前的临时文件，不处理原稿或已保存的系统文件。
             File[] old = folder.listFiles();
             if (old != null) for (File file : old) if (file.isFile() && file.lastModified() < System.currentTimeMillis() - 86400000L) file.delete();
-            String extension = mime.equals("image/png") ? ".png" : mime.equals("application/zip") ? ".zip" : ".json";
             output = File.createTempFile("export-", extension, folder);
             try (FileOutputStream stream = new FileOutputStream(output)) { stream.write(bytes); }
             String token = UUID.randomUUID().toString();

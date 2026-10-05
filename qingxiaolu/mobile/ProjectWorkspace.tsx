@@ -4,6 +4,7 @@ import { queueItem, queueLocalBatch, getLocalItems, getItemVersions } from "./sy
 import { writeProjectFolder, planProjectFolder, projectFolder, folderTextSnapshot, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile, type FolderChange } from "./folderSync";
 import FolderSyncPreview, { type FolderPreview } from "./FolderSyncPreview";
 import { desktopRootDirectory } from "./desktopClient";
+import { exportTextFile } from "./fileExport";
 import { storeJson, readStored, changeJson } from "./storage";
 import { PROJECT_SESSION_FIELD, projectDataWithoutSession, projectSessionRevision, projectSnapshotSignature, projectPayloadFingerprint, bindProjectSession } from "./projectSession";
 import { createBackup, downloadBackup, parseBackup } from "./backup";
@@ -127,12 +128,7 @@ async function copyText(text: string) {
 }
 
 function download(name: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return exportTextFile(name, content, type);
 }
 
 function xmlEscape(text: string) {
@@ -201,6 +197,8 @@ export default function ProjectWorkspace({
   const [syncProject, setSyncProject] = useState(false);
   const [message, setMessage] = useState("");
   const [backupBusy, setBackupBusy] = useState(false);
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportBusyRef = useRef(false);
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
   const projectBackAction = useRef<() => void>(() => {});
@@ -294,6 +292,7 @@ export default function ProjectWorkspace({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, []);
   async function saveBeforeNavigation() {
+    if (exportBusyRef.current) { setMessage("请先完成或取消文件保存窗口，再返回"); return false; }
     if (retainedSignature.current === projectSnapshotSignature(latest.current.title, latest.current.data)) return true;
     if (folderBusyRef.current) { setMessage("文件夹同步正在进行，请完成后再返回"); return false; }
     setClosing(true);
@@ -366,6 +365,17 @@ export default function ProjectWorkspace({
       setMessage(saved ? "完整项目备份已生成" : "已取消备份保存，项目内容仍保留"); }
     catch (error) { setMessage((error as Error).message); }
     finally { setBackupBusy(false); }
+  }
+
+  async function exportDocument(name: string, content: string, type: string) {
+    if (exportBusyRef.current) return;
+    exportBusyRef.current = true; setExportBusy(true);
+    try {
+      const saved = await download(name, content, type);
+      setMessage(saved ? `已导出“${name}”` : "已取消文件保存，项目内容保持不变");
+      if (saved) setSelectionMenu(null);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "导出未完成，项目内容仍保留"); }
+    finally { exportBusyRef.current = false; setExportBusy(false); }
   }
 
   function safeFileName(name: string, fallback: string) {
@@ -1039,18 +1049,18 @@ export default function ProjectWorkspace({
         <label><input type="checkbox" checked={includePrivateNotesForAi}
           onChange={event => setIncludePrivateNotesForAi(event.target.checked)} />发送设定包时包含私密备注</label>
         <div className="project-export-actions">
-          <button onClick={() => download(`${title}-设定包.md`, markdown, "text/markdown")}>Markdown</button>
-          <button onClick={() => download(`${title}-设定包.json`,
+          <button disabled={exportBusy} onClick={() => void exportDocument(`${title}-设定包.md`, markdown, "text/markdown")}>Markdown</button>
+          <button disabled={exportBusy} onClick={() => void exportDocument(`${title}-设定包.json`,
             JSON.stringify({ project: title, ...data, aiKey: undefined }, null, 2), "application/json")}>JSON</button>
-          <button onClick={() => download(`${title}-全文.doc`, wordHtml, "application/msword")}>全文 Word（文字版）</button>
-          <button onClick={() => download(`${title}-全文.md`, fullText, "text/markdown")}>全文 Markdown</button>
-          <button onClick={() => download(`${title}-大纲.opml`,
+          <button disabled={exportBusy} onClick={() => void exportDocument(`${title}-全文.doc`, wordHtml, "application/msword")}>全文 Word（文字版）</button>
+          <button disabled={exportBusy} onClick={() => void exportDocument(`${title}-全文.md`, fullText, "text/markdown")}>全文 Markdown</button>
+          <button disabled={exportBusy} onClick={() => void exportDocument(`${title}-大纲.opml`,
             `<?xml version="1.0" encoding="UTF-8"?><opml version="2.0"><head><title>${xmlEscape(title)}</title></head><body>` +
             `<outline text="${xmlEscape(title)}">${data.chapters.map((chapter) =>
               `<outline text="${xmlEscape(chapter.title || "未命名章节")}" _note="${xmlEscape(chapter.summary)}"/>`).join("")}` +
             `<outline text="时间轴">${data.timelineEvents.map((event) =>
               `<outline text="${xmlEscape(`${event.time} ${event.title}`.trim())}" _note="${xmlEscape(event.detail)}"/>`).join("")}</outline>` +
-            `</outline></body></opml>`, "text/xml")}>OPML</button>
+            `</outline></body></opml>`, "text/x-opml")}>OPML</button>
           <button onClick={() => void sharePackage("ChatGPT")}>发送到 ChatGPT</button>
           <button onClick={() => void sharePackage("Grok / 其他 AI")}>发送到 Grok</button>
         </div>
@@ -1072,8 +1082,8 @@ export default function ProjectWorkspace({
       <p>{selectedText.slice(0, 90)}{selectedText.length > 90 ? "…" : ""}</p>
       <div>
         <button onClick={() => void copySelection()}>复制</button>
-        <button onClick={() => { download(`${title}-选段.txt`, selectedText, "text/plain"); setSelectionMenu(null); }}>导出 TXT</button>
-        <button onClick={() => { download(`${title}-选段.md`, `> ${selectedText.replace(/\n/g, "\n> ")}`, "text/markdown"); setSelectionMenu(null); }}>导出 Markdown</button>
+        <button disabled={exportBusy} onClick={() => void exportDocument(`${title}-选段.txt`, selectedText, "text/plain")}>导出 TXT</button>
+        <button disabled={exportBusy} onClick={() => void exportDocument(`${title}-选段.md`, `> ${selectedText.replace(/\n/g, "\n> ")}`, "text/markdown")}>导出 Markdown</button>
         <button onClick={() => void sendSelectionToChatGpt()}>打开 ChatGPT</button>
         <button disabled={selectionBusy} onClick={() => void saveSelectionAsIdea()}>{selectionBusy ? "正在保存…" : "保存为灵感"}</button>
       </div>
