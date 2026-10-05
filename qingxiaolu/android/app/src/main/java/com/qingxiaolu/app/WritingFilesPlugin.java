@@ -42,6 +42,8 @@ public class WritingFilesPlugin extends Plugin {
                 case "image/png": extension = ".png"; break;
                 case "application/zip": extension = ".zip"; break;
                 case "application/json": extension = ".json"; break;
+                case "application/pdf": extension = ".pdf"; break;
+                case "application/x-xmind": extension = ".xmind"; break;
                 case "text/plain": extension = ".txt"; break;
                 case "text/markdown": extension = ".md"; break;
                 case "application/msword": extension = ".doc"; break;

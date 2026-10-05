@@ -21,6 +21,7 @@ import { forwardResultMessage } from "./forwardResult";
 import ArticleImageShare from "./ArticleImageShare";
 import DesktopWriting from "./DesktopWriting";
 import { exportTextFile } from "./fileExport";
+import OriginalDownloadLink from "./OriginalDownloadLink";
 import { writingDateInfo } from "./writingDate";
 import { searchExcerpt } from "./searchExcerpt";
 
@@ -751,9 +752,9 @@ export default function RealMobileApp() {
                 <div className="article-actions"><button onClick={() => editItem(item)}>继续编辑</button>
                   {item.payload.content?.importSource === "pdf" && typeof item.payload.content?.importRaw?.originalPdf === "string" &&
                     item.payload.content.importRaw.originalPdf.startsWith("data:application/pdf;base64,") &&
-                    <a href={item.payload.content.importRaw.originalPdf} download={item.payload.content.importRaw.fileName || "原始文档.pdf"}>下载原始 PDF</a>}
+                    <OriginalDownloadLink source={item.payload.content.importRaw.originalPdf} name={item.payload.content.importRaw.fileName || "原始文档.pdf"}>下载原始 PDF</OriginalDownloadLink>}
                   {typeof item.payload.content?.importRaw?.originalXmind === "string" && item.payload.content.importRaw.originalXmind.startsWith("data:application/x-xmind;base64,") &&
-                    <a href={item.payload.content.importRaw.originalXmind} download={item.payload.content.importRaw.fileName || "原始导图.xmind"}>下载原始 XMind</a>}
+                    <OriginalDownloadLink source={item.payload.content.importRaw.originalXmind} name={item.payload.content.importRaw.fileName || "原始导图.xmind"}>下载原始 XMind</OriginalDownloadLink>}
                   {item.payload.content?.publicationState === "ready" &&
                     item.payload.content?.visibility === "public" &&
                     <button onClick={() => setWebsiteItem(item)}>上传网站</button>}

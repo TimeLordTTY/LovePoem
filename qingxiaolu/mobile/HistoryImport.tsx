@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { importAdapters, type ImportCandidate, type ImportMode } from "./importers";
 import { candidate } from "./importers/types";
+import OriginalDownloadLink from "./OriginalDownloadLink";
 import { commitImport, filterPreviouslyImported } from "./importers/importCommit";
 import { nativeCaptureAvailable, openNativeCaptureSettings } from "./nativeHistory";
 import { loadImportPreview, saveImportPreview, removeImportPreview, listImportPreviews, claimImportPreview,
@@ -340,9 +341,9 @@ export default function HistoryImport({
             <small>{item.sourceLabel}{item.publishedAt ? ` · ${item.publishedAt}` : ""}</small>
             {item.warnings?.map((warning, index) => <p key={index} role="note">{warning}</p>)}
             {item.source === "pdf" && typeof (item.raw as any)?.originalPdf === "string" && (item.raw as any).originalPdf.startsWith("data:application/pdf;base64,") &&
-              <a href={(item.raw as any).originalPdf} download={(item.raw as any).fileName || `${item.title}.pdf`}>下载原始 PDF 核对</a>}
+              <OriginalDownloadLink source={(item.raw as any).originalPdf} name={(item.raw as any).fileName || `${item.title}.pdf`}>下载原始 PDF 核对</OriginalDownloadLink>}
             {typeof (item.raw as any)?.originalXmind === "string" && (item.raw as any).originalXmind.startsWith("data:application/x-xmind;base64,") &&
-              <a href={(item.raw as any).originalXmind} download={(item.raw as any).fileName || `${item.title}.xmind`}>下载原始 XMind 核对</a>}
+              <OriginalDownloadLink source={(item.raw as any).originalXmind} name={(item.raw as any).fileName || `${item.title}.xmind`}>下载原始 XMind 核对</OriginalDownloadLink>}
             {Array.isArray((item.raw as any)?.outlineEntries) && <button onClick={() => splitOutline(item)}>按导图节点拆分</button>}
             {item.source !== "qqzone" && <input value={item.title}
               onChange={(event) => update(item.id, { title: event.target.value })} />}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEve
 import { Share } from "@capacitor/share";
 import { Capacitor } from "@capacitor/core";
 import { copyNativeDraftText } from "./nativeDraft";
+import OriginalDownloadLink from "./OriginalDownloadLink";
 import { queueItem, queueLocalBatch, getLocalItems, getItemVersions } from "./sync";
 import { writeProjectFolder, planProjectFolder, projectFolder, folderTextSnapshot, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile, type FolderChange } from "./folderSync";
 import FolderSyncPreview, { type FolderPreview } from "./FolderSyncPreview";
@@ -1035,7 +1036,7 @@ export default function ProjectWorkspace({
         <p>完整备份可在“设置 → 从完整备份恢复”中恢复。文字导出适合阅读和排版，不能替代完整备份。</p>
         {!!data.importDocuments?.length && <details><summary>导入原文件（{data.importDocuments.length}）</summary>
           {data.importDocuments.filter(document => document.dataUrl.startsWith("data:application/x-xmind;base64,")).map((document, index) =>
-            <p key={index}><a href={document.dataUrl} download={document.fileName}>下载原始 XMind：{document.fileName}</a></p>)}
+            <p key={index}><OriginalDownloadLink source={document.dataUrl} name={document.fileName}>{`下载原始 XMind：${document.fileName}`}</OriginalDownloadLink></p>)}
         </details>}
         <p>阅读时选中文字，电脑右键或手机长按即可复制、导出或发送；这里用于导出整个项目。</p>
         <div className="local-word-sync">
