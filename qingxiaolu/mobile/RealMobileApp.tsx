@@ -965,6 +965,9 @@ function ArticleEditor({
   const [selectionMessage, setSelectionMessage] = useState("");
   const [selectionExportBusy, setSelectionExportBusy] = useState(false);
   const [findText, setFindText] = useState("");
+  const [findStatus, setFindStatus] = useState("");
+  const searchPosition = useRef(position.end);
+  useEffect(() => setFindStatus(""), [body, findText]);
   const [imageMessage, setImageMessage] = useState("");
   const [readingImages, setReadingImages] = useState(false);
   const blocked = busy || readingImages;
@@ -988,11 +991,23 @@ function ArticleEditor({
   }, []);
 
   function findNext() {
-    if (!findText || !editor.current) return;
-    const start = editor.current.selectionEnd;
-    const next = body.indexOf(findText, start);
-    const at = next >= 0 ? next : body.indexOf(findText);
-    if (at >= 0) { editor.current.focus(); editor.current.setSelectionRange(at, at + findText.length); }
+    if (!findText) { setFindStatus("请先输入要查找的文字"); return; }
+    const matches: number[] = [];
+    for (let at = body.indexOf(findText); at >= 0; at = body.indexOf(findText, at + findText.length)) matches.push(at);
+    if (!matches.length) { setFindStatus("正文中未找到这段文字"); return; }
+    const start = editor.current?.selectionEnd ?? searchPosition.current;
+    const next = matches.findIndex(at => at >= start);
+    const index = next >= 0 ? next : 0, at = matches[index];
+    searchPosition.current = at + findText.length;
+    setFindStatus(`${preview ? "已返回编辑。" : ""}${next < 0 ? "已循环到开头。" : ""}第 ${index + 1} / ${matches.length} 处`);
+    if (preview) setPreview(false);
+    requestAnimationFrame(() => {
+      const field = editor.current;
+      if (!field) return;
+      field.focus(); field.setSelectionRange(at, at + findText.length);
+      setSelectedWriting(body.slice(at, at + findText.length));
+      onPosition({ start: at, end: at + findText.length, scroll: field.scrollTop });
+    });
   }
   const dirty = Boolean(title.trim() || body.trim() || images.length);
   const selectedProject = projects.find((project) => String(project.id) === String(projectId));
@@ -1035,7 +1050,9 @@ function ArticleEditor({
   async function copySelection(openDiscussion = false) {
     if (!selectedWriting) return;
     try {
-      const copying = navigator.clipboard?.writeText(selectedWriting);
+      const copying = Capacitor.isNativePlatform()
+        ? copyNativeDraftText("", selectedWriting).then(result => { if (!result.copied) throw new Error("复制未完成"); })
+        : navigator.clipboard?.writeText(selectedWriting);
       if (openDiscussion) window.open("https://chatgpt.com/", "_blank", "noopener,noreferrer");
       if (!copying) throw new Error(); await copying; setSelectionMessage(openDiscussion ? "选段已复制，已请求打开 ChatGPT，请自行粘贴。" : "选段已复制"); }
     catch { setSelectionMessage("选段未能复制，请允许剪贴板访问，或下载选段后手动粘贴。"); }
@@ -1097,9 +1114,10 @@ function ArticleEditor({
         <button onClick={onBackup}>完整备份</button>
         <button className="focus-toggle" onClick={() => { if (!focused) setShowReference(false); setFocused(!focused); }}>{focused ? "退出专注" : "专注写作"}</button>
         <button onClick={() => setShowReference(!showReference)}>{showReference ? "收起资料" : "查看项目资料"}</button>
-        <button onClick={() => setPreview(!preview)}>{preview ? "返回编辑" : "排版预览"}</button>
+        <button onClick={() => { if (editor.current) searchPosition.current = editor.current.selectionEnd; setPreview(!preview); }}>{preview ? "返回编辑" : "排版预览"}</button>
         <input aria-label="正文查找" placeholder="查找正文" value={findText} onChange={(event) => setFindText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") findNext(); }} />
-        <button onClick={findNext}>下一处</button>
+        <button disabled={!findText} onClick={findNext}>下一处</button>
+        {findStatus && <span role="status" className="writing-find-status">{findStatus}</span>}
       </div>
       {showReference && <aside className="writing-reference"><b>当前项目资料</b>
         {!selectedProject ? <p>先在下方选择所属项目，即可边写边查资料。</p> : <>
@@ -1136,7 +1154,7 @@ function ArticleEditor({
           </div>
         </>}
         {preview ? <WritingPreview text={body} /> : <textarea disabled={blocked} ref={editor} value={body} onChange={(event) => onBody(event.target.value)}
-          onSelect={(event) => { const field = event.currentTarget; setSelectedWriting(field.value.slice(field.selectionStart, field.selectionEnd)); onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
+          onSelect={(event) => { const field = event.currentTarget; searchPosition.current = field.selectionEnd; setSelectedWriting(field.value.slice(field.selectionStart, field.selectionEnd)); onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
           onScroll={(event) => { const field = event.currentTarget; onPosition({ start: field.selectionStart, end: field.selectionEnd, scroll: field.scrollTop }); }}
           placeholder={documentMode ? "开始编辑文档正文……" : "这一刻，想写点什么……"} autoFocus />}
         {!!images.length && <div className="qzone-images compact">{images.map((image, index) =>

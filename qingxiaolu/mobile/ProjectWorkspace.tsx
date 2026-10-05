@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Share } from "@capacitor/share";
+import { Capacitor } from "@capacitor/core";
+import { copyNativeDraftText } from "./nativeDraft";
 import { queueItem, queueLocalBatch, getLocalItems, getItemVersions } from "./sync";
 import { writeProjectFolder, planProjectFolder, projectFolder, folderTextSnapshot, uniqueFolderFiles, filterRetiredFiles, acknowledgeFolderChanges, type FolderFile, type FolderInputFile, type FolderChange } from "./folderSync";
 import FolderSyncPreview, { type FolderPreview } from "./FolderSyncPreview";
@@ -121,6 +123,7 @@ ${includePrivateNotes ? `## 私密创作备注\n${data.privateNotes || "未填�
 
 async function copyText(text: string) {
   try {
+    if (Capacitor.isNativePlatform()) return (await copyNativeDraftText("", text)).copied;
     if (!navigator.clipboard?.writeText) return false;
     await navigator.clipboard.writeText(text);
     return true;
@@ -693,8 +696,8 @@ export default function ProjectWorkspace({
 
   useEffect(() => {
     const updateSelection = () => {
-      const text = window.getSelection()?.toString().trim() || "";
-      if (!text) return;
+      const text = window.getSelection()?.toString() || "";
+      if (!text.trim()) return;
       setSelectedText(text);
       if (window.matchMedia("(max-width: 700px)").matches) {
         setSelectionMenu({ x: 0, y: 0, mobile: true });
@@ -705,8 +708,8 @@ export default function ProjectWorkspace({
   }, []);
 
   function openSelectionMenu(event: MouseEvent<HTMLElement>) {
-    const text = window.getSelection()?.toString().trim() || "";
-    if (!text) return;
+    const text = window.getSelection()?.toString() || "";
+    if (!text.trim()) return;
     event.preventDefault();
     setSelectedText(text);
     setSelectionMenu({ x: event.clientX, y: event.clientY, mobile: false });
