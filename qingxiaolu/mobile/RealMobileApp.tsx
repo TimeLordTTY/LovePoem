@@ -22,7 +22,8 @@ import ArticleImageShare from "./ArticleImageShare";
 import DesktopWriting from "./DesktopWriting";
 import { exportTextFile } from "./fileExport";
 import OriginalDownloadLink from "./OriginalDownloadLink";
-import { writingDateInfo } from "./writingDate";
+import { draftIdForSession } from "./draftIdentity";
+import { writingDateInfo, parseWritingDate } from "./writingDate";
 import { searchExcerpt } from "./searchExcerpt";
 
 type Tab = "项目" | "创作" | "记录" | "设置";
@@ -58,6 +59,7 @@ export default function RealMobileApp() {
   const [editorSession, setEditorSession] = useState(0);
   const [editorPageId] = useState(() => crypto.randomUUID());
   const editorSessionId = `${editorPageId}:${editorSession}`;
+  const draftSessionIds = useRef(new Map<string, string>());
   const [changingDraft, setChangingDraft] = useState(false);
   const changingDraftRef = useRef(false);
   const nativeBackAction = useRef<() => void>(() => {});
@@ -195,7 +197,7 @@ export default function RealMobileApp() {
 
   async function saveLocalDraft() {
     if (!title.trim() && !body.trim() && !images.length) return;
-    const id = editingId || crypto.randomUUID();
+    const id = draftIdForSession(draftSessionIds.current, editorSessionId, editingId);
     const savedAt = new Date().toISOString();
     const projectId = editingMetadata.projectId ?? activeProjectId;
     const content: Record<string, any> = { ...editingMetadata, text: body, images, status: "draft" };
@@ -319,7 +321,7 @@ export default function RealMobileApp() {
     const savedContent = {
       ...cleanMetadata, text: body, status: "draft", images,
     };
-    const requestedId = editingId || crypto.randomUUID();
+    const requestedId = draftIdForSession(draftSessionIds.current, editorSessionId, editingId);
     const savedAt = new Date().toISOString();
     const savedId = await queueItem(
       type, savedTitle, savedContent, metadata.projectId || undefined, Boolean(metadata.syncToServer),
@@ -620,7 +622,7 @@ export default function RealMobileApp() {
     autoSavedAt={autoSavedAt}
     message={message}
     onMetadata={(value) => {
-      const fields = ["visibility", "publicationState", "tags", "projectId", "chapterId", "syncToServer", "shareTargets"];
+      const fields = ["visibility", "publicationState", "tags", "projectId", "chapterId", "syncToServer", "shareTargets", "publishedAt"];
       if (fields.every(key => JSON.stringify(editingMetadata[key]) === JSON.stringify(value[key]))) return;
       setEditingMetadata(value); setAutoSavedAt("");
     }}
@@ -952,6 +954,7 @@ function ArticleEditor({
       ? initialMetadata.tags.join("，")
       : String(initialMetadata.tags || ""),
   );
+  const [publishedAt, setPublishedAt] = useState(String(initialMetadata.publishedAt || ""));
   const [projectId, setProjectId] = useState(initialProjectId);
   const [chapterId, setChapterId] = useState(String(initialMetadata.chapterId || ""));
   const [documentMode, setDocumentMode] = useState(false);
@@ -984,8 +987,8 @@ function ArticleEditor({
   }, []);
   useEffect(() => {
     onMetadata({ ...initialMetadata, visibility, publicationState, tags: tags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean),
-      projectId, chapterId: chapterId || undefined, syncToServer, shareTargets });
-  }, [visibility, publicationState, tags, projectId, chapterId, syncToServer, shareTargets]);
+      projectId, chapterId: chapterId || undefined, syncToServer, shareTargets, publishedAt });
+  }, [visibility, publicationState, tags, projectId, chapterId, syncToServer, shareTargets, publishedAt]);
   useEffect(() => {
     const field = editor.current;
     if (field) { field.setSelectionRange(position.start, position.end); field.scrollTop = position.scroll; }
@@ -1019,12 +1022,12 @@ function ArticleEditor({
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
         onSave({ visibility, publicationState, tags: tags.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean),
-          projectId, chapterId: chapterId || undefined, syncToServer, shareTargets, _baseRevision: initialMetadata._baseRevision });
+          projectId, chapterId: chapterId || undefined, syncToServer, shareTargets, publishedAt, _baseRevision: initialMetadata._baseRevision });
       }
     };
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
-  }, [onSave, visibility, publicationState, tags, projectId, chapterId, syncToServer, shareTargets, initialMetadata._baseRevision]);
+  }, [onSave, visibility, publicationState, tags, projectId, chapterId, syncToServer, shareTargets, publishedAt, initialMetadata._baseRevision]);
 
   function insert(before: string, after = "") {
     const field = editor.current;
@@ -1094,6 +1097,7 @@ function ArticleEditor({
             syncToServer,
             shareTargets,
             publicationState,
+            publishedAt,
             _baseRevision: initialMetadata._baseRevision,
           })}>保存</button>
       </header>
@@ -1191,6 +1195,10 @@ function ArticleEditor({
         </select></label>}
         <label><span>标签</span><input value={tags} onChange={(event) => setTags(event.target.value)}
           placeholder="添加标签" /></label>
+        <label><span>创作/原发布时间</span><input aria-label="创作/原发布时间" value={publishedAt}
+          onChange={event => setPublishedAt(event.target.value)} placeholder="例如 2020-01-02，可保留原平台日期格式" /></label>
+        <p>用于记录的时间排序，不代表对外发布。留空时按本机最近保存时间浏览。</p>
+        {publishedAt.trim() && !parseWritingDate(publishedAt) && <p role="status">日期暂无法识别，将保留原值；记录页会标记“待核对”。</p>}
         <button onClick={() => setPublicationState(publicationState === "editing" ? "ready" : "editing")}>
           <span>稿件状态</span><em>{publicationState === "ready" ? "已定稿" : "待修改"}　›</em>
         </button>

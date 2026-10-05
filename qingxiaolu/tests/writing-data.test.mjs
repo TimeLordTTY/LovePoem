@@ -7,7 +7,16 @@ import { withSyncTimeout } from "../work/writing-tests/sync-request.mjs";
 import { readItemSnapshot } from "../work/writing-tests/itemSnapshot.mjs";
 import { searchExcerpt } from "../work/writing-tests/searchExcerpt.mjs";
 import { createServer } from "node:http";
+import { draftIdForSession } from "../work/writing-tests/draftIdentity.mjs";
 const nativeFetch = globalThis.fetch;
+test("同一写作会话交错保存只分配一个 ID，新会话不复用旧草稿，恢复会话沿用已有记录", () => {
+  const ids = new Map(); let created = 0; const create = () => `generated-${++created}`;
+  assert.equal(draftIdForSession(ids, "page:1", "", create), "generated-1");
+  assert.equal(draftIdForSession(ids, "page:1", "", create), "generated-1");
+  assert.equal(draftIdForSession(ids, "page:2", "", create), "generated-2");
+  assert.equal(draftIdForSession(ids, "reload:0", "generated-1", create), "generated-1");
+  assert.equal(created, 2);
+});
 
 class MemoryStorage {
   data = new Map();
