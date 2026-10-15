@@ -12,6 +12,8 @@ import { storeJson, readStored, changeJson } from "./storage";
 import { PROJECT_SESSION_FIELD, projectDataWithoutSession, projectSessionRevision, projectSnapshotSignature, projectPayloadFingerprint, bindProjectSession } from "./projectSession";
 import { createBackup, downloadBackup, parseBackup } from "./backup";
 import { pendingWritingTransactions } from "./storageDatabase";
+import MindTreeEditor, { type MindTarget } from "./MindTreeEditor";
+import { validateMindTrees, type MindTree } from "./mindTree";
 
 export type ProjectWorkspaceData = {
   type: string;
@@ -32,6 +34,7 @@ export type ProjectWorkspaceData = {
   aiEndpoint: string;
   aiModel: string;
   aiKey: string;
+  mindTrees?: MindTree[];
 };
 
 const emptyData: ProjectWorkspaceData = {
@@ -144,6 +147,7 @@ function xmlEscape(text: string) {
 export default function ProjectWorkspace({
   project,
   articles = [],
+  mindRecords = articles,
   discussions = [],
   initialSection = "项目",
   onEditArticle,
@@ -156,6 +160,7 @@ export default function ProjectWorkspace({
 }: {
   project: any;
   articles?: any[];
+  mindRecords?: any[];
   discussions?: any[];
   initialSection?: string;
   onEditArticle?: (article: any) => void;
@@ -193,6 +198,14 @@ export default function ProjectWorkspace({
   const [versionPanel, setVersionPanel] = useState(false);
   const [projectVersions, setProjectVersions] = useState<any[]>([]);
   const [section, setSection] = useState(initialSection);
+  const [mindView, updateMindView] = useState(() => {
+    try { const value = JSON.parse(sessionStorage.getItem(`qx_mind_view:${projectId}`) || 'null');
+      if (typeof value?.treeId === 'string' && typeof value?.nodeId === 'string') return value; } catch { /* 视图缓存失败不影响作品保存 */ }
+    return { treeId: '', nodeId: '' };
+  });
+  const setMindView = (value: { treeId: string; nodeId: string }) => {
+    updateMindView(value); try { sessionStorage.setItem(`qx_mind_view:${projectId}`, JSON.stringify(value)); } catch { /* 无缓存时仍能编辑 */ }
+  };
   const [editingMaterial, setEditingMaterial] = useState<Record<string, boolean>>({});
   const [readerChapter, setReaderChapter] = useState(0);
   const [readerPanel, setReaderPanel] = useState<"目录" | "设置" | null>(null);
@@ -206,6 +219,7 @@ export default function ProjectWorkspace({
   const [closing, setClosing] = useState(false);
   const closingRef = useRef(false);
   const projectBackAction = useRef<() => void>(() => {});
+  const mindBackAction = useRef<(() => boolean) | null>(null);
   const [includePrivateNotesForAi, setIncludePrivateNotesForAi] = useState(false);
   const [selectionBusy, setSelectionBusy] = useState(false);
   const [selectedText, setSelectedText] = useState("");
@@ -264,6 +278,7 @@ export default function ProjectWorkspace({
     if (folderBusyRef.current) return true;
     try {
     const value = snapshot || latest.current;
+    validateMindTrees(value.data.mindTrees);
     const { aiKey, ...syncData } = value.data;
     const fingerprint = await projectPayloadFingerprint(value.title, syncData);
     const parent = await parentFingerprint.current;
@@ -313,14 +328,16 @@ export default function ProjectWorkspace({
     try { if (await saveBeforeNavigation()) close(); }
     finally { closingRef.current = false; setClosing(false); }
   }
-  projectBackAction.current = () => { if (folderPreview && !folderBusyRef.current) setFolderPreview(null); else if (versionPanel) setVersionPanel(false); else void closeWithSave(); };
+  projectBackAction.current = () => { if (mindBackAction.current?.()) return; if (folderPreview && !folderBusyRef.current) setFolderPreview(null); else if (versionPanel) setVersionPanel(false); else void closeWithSave(); };
   useEffect(() => {
     const back = () => projectBackAction.current();
     window.addEventListener("qx-project-back", back);
     return () => window.removeEventListener("qx-project-back", back);
   }, []);
   useEffect(() => {
-    const timer = window.setTimeout(() => void persist(false), 800);
+    const timer = window.setTimeout(() => {
+      if (needsReview.current || projectSnapshotSignature(latest.current.title, latest.current.data) !== savedViewSignature.current) void persist(false);
+    }, 800);
     return () => window.clearTimeout(timer);
   }, [title, data]);
   async function retainAndReadLatest() {
@@ -361,6 +378,42 @@ export default function ProjectWorkspace({
       setMessage("已恢复这版项目资料，恢复前资料仍保留在版本中；尚未上传云端。");
     }
   }
+
+  async function checkpointMindTrees() {
+    if (!await persist(false)) return false;
+    try {
+      await changeJson(() => {
+        assertUnchanged();
+        const { aiKey, ...content } = latest.current.data;
+        const versions = JSON.parse(readStored('qx_item_versions') || '{}');
+        versions[projectId] = [{ id: projectId, itemType: 'project', title: latest.current.title, content,
+          baseRevision: baseline.current, versionSavedAt: new Date().toISOString() }, ...(versions[projectId] || [])].slice(0, 30);
+        return { values: { qx_item_versions: versions }, result: true };
+      });
+      return true;
+    } catch (error) { setMessage((error as Error).message); return false; }
+  }
+  async function openMindMaterial(nextSection: string, id?: string) {
+    if (!await persist(false)) throw new Error('项目未能保存，仍停留在导图中，请重试或导出备份。');
+    setSection(nextSection);
+    if (nextSection === '大纲') setReaderChapter(Math.max(0, latest.current.data.chapters.findIndex(chapter => chapter.id === id)));
+    if (nextSection === '情节') setEditingMaterial(previous => ({ ...previous, 情节: true }));
+    if (id && nextSection !== '大纲') window.setTimeout(() => document.getElementById(`material-${id}`)?.scrollIntoView({ block: 'center' }), 0);
+  }
+  const mindTargets: MindTarget[] = [
+    ...mindRecords.map(article => ({ key: `record:${article.id}`, label: `记录 · ${article.payload?.title || '无标题记录'}`,
+      ref: { kind: 'record' as const, id: String(article.id) }, open: async () => {
+        if (!await persist(false)) throw new Error('项目未能保存，尚未离开导图。'); onEditArticle?.(article);
+      } })),
+    ...data.characterCards.map(card => ({ key: `character:${card.id}`, label: `人物 · ${card.name || '未命名人物'}`,
+      ref: { kind: 'character' as const, id: card.id }, open: () => openMindMaterial('人物', card.id) })),
+    ...data.chapters.map(chapter => ({ key: `chapter:${chapter.id}`, label: `章节 · ${chapter.title || '未命名章节'}`,
+      ref: { kind: 'chapter' as const, id: chapter.id }, open: () => openMindMaterial('大纲', chapter.id) })),
+    ...data.timelineEvents.map(event => ({ key: `event:${event.id}`, label: `事件 · ${event.title || '未命名事件'}`,
+      ref: { kind: 'event' as const, id: event.id }, open: () => openMindMaterial('时间轴', event.id) })),
+    ...([['world', data.type === '小说' ? '世界观' : '资料'], ['plot', '情节'], ['privateNotes', '私密'], ['characters', '人物'], ['outline', '大纲'], ['timeline', '时间轴']] as const).map(([field, sectionName]) => ({
+      key: `section:${field}`, label: `项目资料 · ${sectionName}`, ref: { kind: 'projectSection' as const, section: field }, open: () => openMindMaterial(sectionName) })),
+  ];
 
   async function exportProjectBackup() {
     setBackupBusy(true);
@@ -584,6 +637,7 @@ export default function ProjectWorkspace({
         detail: stripHeading(file.text).replace(/^(?:事件ID|顺序|时间)：[^\n\r]*\r?\n*/gm, "").trim(),
       }; }) : data.timelineEvents,
     };
+    validateMindTrees(next.mindTrees);
     const { aiKey, ...syncData } = next;
     const folderFingerprint = await projectPayloadFingerprint(incomingTitle, syncData);
     const folderParent = await parentFingerprint.current;
@@ -697,6 +751,11 @@ export default function ProjectWorkspace({
 
   useEffect(() => {
     const updateSelection = () => {
+      // 导图输入和节点操作使用自己的面板，避免原资料选段菜单遮挡触摸按钮。
+      const selectionElement = window.getSelection()?.anchorNode?.parentElement;
+      if (selectionElement?.closest('.mind-editor') || document.activeElement?.closest('.mind-editor')) {
+        setSelectionMenu(null); return;
+      }
       const text = window.getSelection()?.toString() || "";
       if (!text.trim()) return;
       setSelectedText(text);
@@ -709,6 +768,7 @@ export default function ProjectWorkspace({
   }, []);
 
   function openSelectionMenu(event: MouseEvent<HTMLElement>) {
+    if ((event.target as HTMLElement).closest('.mind-editor')) return;
     const text = window.getSelection()?.toString() || "";
     if (!text.trim()) return;
     event.preventDefault();
@@ -771,11 +831,15 @@ export default function ProjectWorkspace({
       <button disabled={backupBusy} onClick={() => void exportProjectBackup()}>下载当前项目完整备份</button>
     </aside>}
     <nav className="project-section-tabs">
-      {(data.type === "小说" ? ["项目", "正文", "人物", "世界观", "大纲", "情节", "时间轴", "AI 讨论", "私密", "导出"] :
-        ["项目", "正文", "资料", "AI 讨论", "私密", "导出"]).map((name) =>
-        <button className={section === name ? "active" : ""} key={name} onClick={() => setSection(name)}>{name}</button>)}
+      {(data.type === "小说" ? ["项目", "正文", "思维树", "人物", "世界观", "大纲", "情节", "时间轴", "AI 讨论", "私密", "导出"] :
+        ["项目", "正文", "思维树", "资料", "AI 讨论", "私密", "导出"]).map((name) =>
+        <button disabled={exportBusy} className={section === name ? "active" : ""} key={name} onClick={() => setSection(name)}>{name}</button>)}
     </nav>
     <section className="project-workspace-body">
+      {section === '思维树' && <MindTreeEditor projectId={projectId} trees={data.mindTrees || []} targets={mindTargets}
+        backAction={mindBackAction}
+        view={mindView} onView={setMindView} onChange={mindTrees => patch({ mindTrees })} checkpoint={checkpointMindTrees}
+        onBusy={value => { exportBusyRef.current = value; setExportBusy(value); }} />}
       {section === "项目" && <div className="project-home">
         <div className="project-overview-summary">
           <article><b>{articleWordCount.toLocaleString()}</b><span>正文总字数</span></article>
@@ -788,6 +852,7 @@ export default function ProjectWorkspace({
           <button onClick={() => { setProjectVersions(getItemVersions(projectId)); setVersionPanel(true); }}>项目版本</button>
           <button onClick={onWrite}>继续写作</button>
           <button onClick={() => setSection("正文")}>查看正文</button>
+          <button onClick={() => setSection('思维树')}>整理思维树</button>
           <button onClick={() => setSection("大纲")}>阅读大纲</button>
           <button onClick={() => setSection("AI 讨论")}>AI讨论</button>
         </div>
@@ -874,7 +939,7 @@ export default function ProjectWorkspace({
         addLabel="新增人物" onAdd={() => patch({ characterCards: [...data.characterCards, {
           id: crypto.randomUUID(), name: "", role: "", description: "",
         }] })}>
-        {data.characterCards.map((card, index) => <article className="structured-card" key={card.id}>
+        {data.characterCards.map((card, index) => <article className="structured-card" key={card.id} id={`material-${card.id}`}>
           <input value={card.name} placeholder="人物姓名" onChange={(event) => {
             const next = [...data.characterCards]; next[index] = { ...card, name: event.target.value };
             patch({ characterCards: next });
@@ -974,7 +1039,7 @@ export default function ProjectWorkspace({
           }] })}>＋ 新增事件</button>
         </div>
         <div className="story-timeline-list">
-          {data.timelineEvents.map((event, index) => <article key={event.id}>
+          {data.timelineEvents.map((event, index) => <article key={event.id} id={`material-${event.id}`}>
             <div className="timeline-marker"><span>{index + 1}</span></div>
             <div className="timeline-event-content">
               <input className="timeline-time" value={event.time} placeholder="时间，如：星历42年 / 主角18岁"

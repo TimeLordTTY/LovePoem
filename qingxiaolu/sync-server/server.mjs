@@ -4,6 +4,7 @@ import mysql from "mysql2/promise";
 import { createWebsiteBridge, WebsiteError } from "./website-bridge.mjs";
 import { fileURLToPath } from "node:url";
 import { createContentStore, ContentError, CONTENT_FORMAT, CHUNK_BYTES, StreamContent, streamJson } from "./content-store.mjs";
+import { projectMindTrees, validateMindTrees } from './mind-tree-schema.mjs';
 
 const port = Number(process.env.PORT || 8082);
 const host = process.env.HOST || "127.0.0.1";
@@ -117,6 +118,17 @@ async function pushChanges(payload) {
       const baseRevision = Number(change.baseRevision || 0);
       const encoded = change.contentEncoding === CONTENT_FORMAT;
       if (encoded) await contents.validate(change.content);
+      if (change.itemType === 'project' && !change.deleted) {
+        let trees;
+        try { trees = await projectMindTrees(change.content, encoded, contents); validateMindTrees(trees); }
+        catch (error) { throw new ContentError(400, error.message); }
+        if (current && trees === undefined) {
+          const previousEncoded = current.content_json.startsWith(contentPrefix);
+          const previous = JSON.parse(previousEncoded ? current.content_json.slice(contentPrefix.length) : current.content_json);
+          if (await projectMindTrees(previous, previousEncoded, contents) !== undefined)
+            throw new ContentError(409, '当前项目已有思维树，此设备内容缺少导图字段。请更新客户端并读取最新项目，尚未覆盖服务器资料。');
+        }
+      }
       const content = encoded ? contentPrefix + JSON.stringify(change.content) : JSON.stringify(change.content ?? {});
       if (current && Number(current.revision) !== baseRevision) {
         if (current.content_json === content && current.title === String(change.title || "").slice(0, 500) &&

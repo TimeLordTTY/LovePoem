@@ -1,6 +1,7 @@
 import { getLocalItems } from "./sync";
 import { nativeFileAvailable, saveNativeFile } from "./nativeFile";
 import { readJson, readStored, changeJson } from "./storage";
+import { validateMindTrees } from '../sync-server/mind-tree-schema.mjs';
 
 export type WritingBackup = {
   format: "qingxiaolu-backup";
@@ -117,6 +118,8 @@ function validateBackup(data: any): WritingBackup {
   }
   if (new Set(data.items.map((item: any) => item.id)).size !== data.items.length)
     throw new Error("备份中存在重复的稿件 ID，尚未写入任何数据。请核对原文件。");
+  for (const workspace of Object.values(data.workspaces) as any[]) validateMindTrees(workspace.mindTrees);
+  for (const item of [...data.items, ...data.trash]) if (item.payload?.itemType === 'project') validateMindTrees(item.payload.content?.mindTrees);
   return data;
 }
 

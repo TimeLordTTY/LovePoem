@@ -549,6 +549,8 @@ export default function RealMobileApp() {
     close={() => { setShowDocumentImport(false); void refresh(false); }} />);
   if (openProject) return pageWithNavigation(<ProjectWorkspace project={openProject}
     navigationSaveRef={projectNavigationSave}
+    mindRecords={[...articles, ...ideas].filter(item =>
+      String(item.payload?.projectId || item.payload?.content?.projectId || '') === String(openProject.id))}
     initialSection={openProjectSection}
     articles={articles.filter((item) =>
       String(item.payload?.projectId || item.payload?.content?.projectId || "") === String(openProject.id))}
